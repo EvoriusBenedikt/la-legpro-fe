@@ -1,0 +1,420 @@
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Send, ChevronDown, Bot, User, Search, Plus, Trash2, MoreHorizontal, Pencil } from 'lucide-react';
+
+interface Source {
+  id: string;
+  jenis: string;
+  nomor: string;
+  sektor: string;
+  judul: string;
+  snippet: string;
+}
+
+interface Message {
+  id: number;
+  role: 'user' | 'ai';
+  content: string;
+  sources?: Source[];
+}
+
+interface Conversation {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: Message[];
+}
+
+const STORAGE_KEY = 'legal_analyzer_conversations';
+const ACTIVE_STORAGE_KEY = 'legal_analyzer_active_conversation';
+const INITIAL_AI_MESSAGE: Message = {
+  id: 1,
+  role: 'ai',
+  content: 'Halo! Saya adalah OJK Legal Analyzer. Anda dapat bertanya mengenai Peraturan Otoritas Jasa Keuangan (Perbankan, IKNB, atau Pasar Modal), dan saya akan merangkum sanksi atau ketentuannya dari database kami.'
+};
+
+function createConversation(title = 'Percakapan Baru'): Conversation {
+  const now = Date.now();
+  return {
+    id: `conv_${now}_${Math.random().toString(36).slice(2, 7)}`,
+    title,
+    createdAt: now,
+    updatedAt: now,
+    messages: [{ ...INITIAL_AI_MESSAGE, id: now }],
+  };
+}
+
+import { useAuth } from '../context/AuthContext';
+
+export default function LegalOpinion() {
+  const { token } = useAuth();
+  const [conversations, setConversations] = useState<Conversation[]>(() => {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [createConversation()];
+    try {
+      const parsed = JSON.parse(raw) as Conversation[];
+      if (!Array.isArray(parsed) || parsed.length === 0) return [createConversation()];
+      return parsed;
+    } catch {
+      return [createConversation()];
+    }
+  });
+  const [activeConversationId, setActiveConversationId] = useState<string>(() => {
+    const raw = localStorage.getItem(ACTIVE_STORAGE_KEY);
+    return raw || '';
+  });
+  const [conversationSearch, setConversationSearch] = useState('');
+  const [menuConversationId, setMenuConversationId] = useState<string | null>(null);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!activeConversationId || !conversations.some(c => c.id === activeConversationId)) {
+      setActiveConversationId(conversations[0]?.id ?? '');
+    }
+  }, [activeConversationId, conversations]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+  }, [conversations]);
+
+  useEffect(() => {
+    if (activeConversationId) {
+      localStorage.setItem(ACTIVE_STORAGE_KEY, activeConversationId);
+    }
+  }, [activeConversationId]);
+
+  const activeConversation = useMemo(
+    () => conversations.find(c => c.id === activeConversationId) ?? conversations[0],
+    [conversations, activeConversationId]
+  );
+  const messages = activeConversation?.messages ?? [];
+
+  const filteredConversations = useMemo(() => {
+    const query = conversationSearch.trim().toLowerCase();
+    if (!query) return conversations;
+    return conversations.filter((c) => {
+      const inTitle = c.title.toLowerCase().includes(query);
+      const inMessages = c.messages.some(m => m.content.toLowerCase().includes(query));
+      return inTitle || inMessages;
+    });
+  }, [conversationSearch, conversations]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const updateConversation = (conversationId: string, updater: (c: Conversation) => Conversation) => {
+    setConversations(prev => prev.map(c => (c.id === conversationId ? updater(c) : c)));
+  };
+
+  const handleCreateConversation = () => {
+    const convo = createConversation(`Percakapan ${conversations.length + 1}`);
+    setConversations(prev => [convo, ...prev]);
+    setActiveConversationId(convo.id);
+    setInput('');
+  };
+
+  const handleClearChat = () => {
+    if (!activeConversation) return;
+    updateConversation(activeConversation.id, (c) => ({
+      ...c,
+      updatedAt: Date.now(),
+      messages: [{ ...INITIAL_AI_MESSAGE, id: Date.now() }],
+    }));
+  };
+
+  const handleRenameConversation = (conversationId: string) => {
+    const target = conversations.find((c) => c.id === conversationId);
+    if (!target) return;
+    const renamed = window.prompt('Nama percakapan baru:', target.title);
+    if (!renamed) return;
+    const cleanTitle = renamed.trim();
+    if (!cleanTitle) return;
+    updateConversation(conversationId, (c) => ({
+      ...c,
+      title: cleanTitle,
+      updatedAt: Date.now(),
+    }));
+  };
+
+  const handleDeleteConversation = (conversationId: string) => {
+    if (conversations.length <= 1) {
+      window.alert('Minimal harus ada satu percakapan.');
+      return;
+    }
+
+    const target = conversations.find((c) => c.id === conversationId);
+    if (!target) return;
+    const confirmed = window.confirm(`Hapus percakapan "${target.title}"?`);
+    if (!confirmed) return;
+
+    const remaining = conversations.filter((c) => c.id !== conversationId);
+    setConversations(remaining);
+    if (activeConversationId === conversationId) {
+      setActiveConversationId(remaining[0]?.id ?? '');
+    }
+  };
+
+  const handleSend = async () => {
+    if (!input.trim() || !activeConversation) return;
+
+    const now = Date.now();
+    const userContent = input.trim();
+    const userMessage: Message = {
+      id: now,
+      role: 'user',
+      content: userContent
+    };
+
+    const existingMessages = activeConversation.messages;
+    const shouldSetTitle = activeConversation.title.startsWith('Percakapan');
+    const newTitle = shouldSetTitle ? userContent.slice(0, 42) || activeConversation.title : activeConversation.title;
+
+    updateConversation(activeConversation.id, (c) => ({
+      ...c,
+      title: newTitle,
+      updatedAt: now,
+      messages: [...c.messages, userMessage],
+    }));
+    setInput('');
+    setIsLoading(true);
+
+    try {
+      const apiMessages = [...existingMessages, userMessage].map(msg => ({
+        role: msg.role === 'ai' ? 'assistant' : 'user',
+        content: msg.content
+      }));
+
+      const response = await fetch('http://localhost:8000/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ messages: apiMessages }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Gagal menghubungi server API.');
+      }
+
+      const data = await response.json();
+
+      updateConversation(activeConversation.id, (c) => ({
+        ...c,
+        updatedAt: Date.now(),
+        messages: [
+          ...c.messages,
+          {
+            id: Date.now() + 1,
+            role: 'ai',
+            content: data.answer,
+            sources: data.sources
+          }
+        ]
+      }));
+
+    } catch (error) {
+      console.error(error);
+      updateConversation(activeConversation.id, (c) => ({
+        ...c,
+        updatedAt: Date.now(),
+        messages: [
+          ...c.messages,
+          {
+            id: Date.now() + 1,
+            role: 'ai',
+            content: 'Maaf, terjadi kesalahan saat menghubungi server. Pastikan FastAPI sedang berjalan dan kredensial GLM API sudah diatur dengan benar.'
+          }
+        ]
+      }));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  return (
+    <div className="view-container no-scroll">
+      <div className="view-header">
+        <div>
+          <h2>Legal Opinion Chatbot</h2>
+          <p>Tanya AI mengenai regulasi keuangan dan perbankan</p>
+        </div>
+        <div className="legal-opinion-actions">
+          <button className="secondary-action-btn" onClick={handleCreateConversation}>
+            <Plus size={16} />
+            Percakapan Baru
+          </button>
+          <button className="secondary-action-btn danger" onClick={handleClearChat} disabled={isLoading}>
+            <Trash2 size={16} />
+            Clear Chat
+          </button>
+        </div>
+      </div>
+
+      <div className="legal-opinion-body">
+        <aside className="conversation-panel">
+          <div className="conversation-search">
+            <Search size={16} />
+            <input
+              type="text"
+              placeholder="Cari percakapan..."
+              value={conversationSearch}
+              onChange={(e) => setConversationSearch(e.target.value)}
+            />
+          </div>
+          <div className="conversation-list">
+            {filteredConversations.map((conv) => (
+              <div
+                key={conv.id}
+                className={`conversation-item ${conv.id === activeConversation?.id ? 'active' : ''}`}
+              >
+                <button
+                  className="conversation-main-btn"
+                  onClick={() => {
+                    setActiveConversationId(conv.id);
+                    setMenuConversationId(null);
+                  }}
+                >
+                  <div className="conversation-title">{conv.title}</div>
+                  <div className="conversation-preview">
+                    {conv.messages[conv.messages.length - 1]?.content || 'Belum ada percakapan'}
+                  </div>
+                </button>
+
+                <div className="conversation-menu-wrap">
+                  <button
+                    className="conversation-menu-btn"
+                    onClick={() => setMenuConversationId((prev) => (prev === conv.id ? null : conv.id))}
+                    aria-label="Buka menu percakapan"
+                  >
+                    <MoreHorizontal size={16} />
+                  </button>
+
+                  {menuConversationId === conv.id && (
+                    <div className="conversation-menu">
+                      <button
+                        onClick={() => {
+                          handleRenameConversation(conv.id);
+                          setMenuConversationId(null);
+                        }}
+                      >
+                        <Pencil size={14} /> Rename
+                      </button>
+                      <button
+                        className="danger"
+                        onClick={() => {
+                          handleDeleteConversation(conv.id);
+                          setMenuConversationId(null);
+                        }}
+                      >
+                        <Trash2 size={14} /> Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {filteredConversations.length === 0 && (
+              <div className="conversation-empty">Tidak ada percakapan yang cocok.</div>
+            )}
+          </div>
+        </aside>
+
+        <div className="chat-main">
+          <div className="chat-box">
+            {messages.map((msg) => (
+              <div key={msg.id} className={`message-item ${msg.role}`}>
+                <div className="bubble">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', opacity: 0.7, fontSize: '0.8rem', fontWeight: 600 }}>
+                    {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
+                    {msg.role === 'user' ? 'Anda' : 'Legal Analyzer'}
+                  </div>
+
+                  {msg.content.split('\n').map((line, i) => (
+                    <p key={i}>{line}</p>
+                  ))}
+
+                  {msg.sources && msg.sources.length > 0 && (
+                    <div className="sources-container">
+                      <div style={{ fontSize: '0.75rem', marginTop: '16px', color: '#94a3b8', fontWeight: 600 }}>SUMBER DOKUMEN YANG DITEMUKAN:</div>
+                      {msg.sources.map((source, index) => (
+                        <SourceAccordion key={source.id + index} source={source} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {isLoading && (
+              <div className="message-item ai">
+                <div className="bubble">
+                  <div className="typing-indicator">
+                    <span>Memproses dokumen legal</span>
+                    <div className="dot"></div>
+                    <div className="dot"></div>
+                    <div className="dot"></div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="input-area">
+            <div className="input-container">
+              <input
+                type="text"
+                className="chat-input"
+                placeholder="Tanyakan hukum OJK disini..."
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={isLoading}
+              />
+              <button
+                className="send-button"
+                onClick={handleSend}
+                disabled={!input.trim() || isLoading}
+              >
+                <Send size={20} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SourceAccordion({ source }: { source: Source }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <div className={`source-item ${isOpen ? 'open' : ''}`}>
+      <button className="source-header" onClick={() => setIsOpen(!isOpen)}>
+        <div className="source-title">
+          <span className="source-tag">{source.sektor}</span>
+          {source.jenis} {source.nomor}
+        </div>
+        <ChevronDown size={16} className="source-icon" />
+      </button>
+      <div className="source-content">
+        {source.snippet}
+      </div>
+    </div>
+  );
+}
