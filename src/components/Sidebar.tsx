@@ -1,4 +1,5 @@
-import { Database, Scale, FileText, User, BarChart2 } from 'lucide-react';
+import { Database, Scale, FileText, User, BarChart2, ShieldCheck } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
   activeTab: string;
@@ -6,23 +7,36 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
-  const tabs = [
+  const { user } = useAuth();
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
+
+  const adminTabs = [
+    { id: 'admin_dashboard', name: 'Admin Dashboard', icon: <ShieldCheck size={20} /> },
+    { id: 'account', name: 'Account Settings', icon: <User size={20} /> },
+  ];
+
+  const regularTabs = [
     { id: 'legal_repository', name: 'Legal Repository', icon: <Database size={20} /> },
     { id: 'legal_opinion', name: 'Legal Opinion', icon: <Scale size={20} /> },
     { id: 'document_maker', name: 'Compliance Checker', icon: <FileText size={20} /> },
     { id: 'contract_monitor', name: 'Contract Monitor', icon: <BarChart2 size={20} /> },
     { id: 'account', name: 'Account Settings', icon: <User size={20} /> },
   ];
+
+  const tabs = isAdmin ? adminTabs : regularTabs;
+
   return (
     <div className="sidebar">
       <div className="sidebar-header">
         <div style={{
           width: '40px', height: '40px', borderRadius: '50%',
-          background: 'linear-gradient(135deg, #A855F7, #38BDF8)',
+          background: isAdmin
+            ? 'linear-gradient(135deg, #F59E0B, #F43F5E)'
+            : 'linear-gradient(135deg, #A855F7, #38BDF8)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 4px 15px rgba(168, 85, 247, 0.4)'
+          boxShadow: `0 4px 15px ${isAdmin ? 'rgba(245,158,11,0.4)' : 'rgba(168, 85, 247, 0.4)'}`,
         }}>
-          <Scale size={22} color="white" />
+          {isAdmin ? <ShieldCheck size={22} color="white" /> : <Scale size={22} color="white" />}
         </div>
       </div>
       <div className="sidebar-menu">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Database, File, Upload, CheckCircle2, BookOpen, FolderOpen, Zap, FileCheck, X } from 'lucide-react';
+import { Search, Database, File, Upload, CheckCircle2, BookOpen, FolderOpen, Zap, FileCheck, X, Trash2 } from 'lucide-react';
 import DocumentDrawer from './DocumentDrawer';
 import { useAuth } from '../context/AuthContext';
 import ComplianceResultsViewer from './ComplianceResultsViewer';
@@ -260,51 +260,75 @@ export default function LegalRepository() {
     URL.revokeObjectURL(url);
   };
 
+  const handleClearFailedDocuments = async () => {
+    if (!confirm('Apakah Anda yakin ingin menghapus semua dokumen yang gagal diproses (termasuk duplikat)?')) return;
+    try {
+      const response = await fetch('http://localhost:8000/api/repository/failed', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        alert(data.message);
+        fetchDocs();
+      } else {
+        const err = await response.json();
+        alert(err.detail || 'Gagal menghapus dokumen.');
+      }
+    } catch (e) {
+      alert('Terjadi kesalahan koneksi.');
+    }
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (file.type !== "application/pdf") {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    // Filter PDFs only
+    const validFiles = Array.from(files).filter(f => f.type === "application/pdf");
+    if (validFiles.length === 0) {
       alert("Hanya format PDF yang didukung.");
       return;
     }
 
     setIsUploading(true);
-    setUploadStatus("Mengunggah dan mengekstrak teks PDF...");
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("doc_type", activeTab);
-    formData.append("klasifikasi", uploadKlasifikasi);
-
     const endpoint = activeTab === 'internal' ? 'http://localhost:8000/api/upload-internal' : 'http://localhost:8000/api/upload';
 
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData,
-      });
+    let successCount = 0;
+    
+    // Process files sequentially to avoid overloading browser
+    for (let i = 0; i < validFiles.length; i++) {
+      const file = validFiles[i];
+      setUploadStatus(`Mengunggah dokumen ${i + 1} dari ${validFiles.length}...`);
 
-      if (response.ok) {
-        setUploadStatus("Proses chunking & embedding AI berhasil!");
-        setTimeout(() => {
-          setUploadStatus(null);
-          setIsUploading(false);
-          fetchDocs();
-        }, 2000);
-      } else {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Upload gagal');
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("doc_type", activeTab);
+      formData.append("klasifikasi", uploadKlasifikasi);
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData,
+        });
+
+        if (response.ok) {
+          successCount++;
+        }
+      } catch (error) {
+        console.error("Gagal mengunggah:", file.name, error);
       }
-    } catch (error: any) {
-      console.error(error);
-      setUploadStatus(error.message || "Gagal memproses dokumen.");
-      setTimeout(() => {
-        setUploadStatus(null);
-        setIsUploading(false);
-      }, error.message?.includes('Duplikat') ? 6000 : 3000);
     }
 
+    setUploadStatus(`Selesai! Berhasil mengantrekan ${successCount} dari ${validFiles.length} dokumen.`);
+    setTimeout(() => {
+      setUploadStatus(null);
+      setIsUploading(false);
+      fetchDocs();
+    }, 2500);
+    
+    // Clear the input so the same files can be selected again if needed
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -408,6 +432,14 @@ export default function LegalRepository() {
         </div>
         <ProtectedRoute minRole="manajer">
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button 
+              className="upload-btn" 
+              onClick={handleClearFailedDocuments} 
+              style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}
+              title="Hapus semua dokumen yang gagal diproses"
+            >
+              <Trash2 size={16} /> Bersihkan Duplikat
+            </button>
             <select 
               value={uploadKlasifikasi} 
               onChange={e => setUploadKlasifikasi(e.target.value)}
@@ -425,6 +457,7 @@ export default function LegalRepository() {
           </div>
           <input
             type="file"
+            multiple
             ref={fileInputRef}
             style={{ display: 'none' }}
             accept="application/pdf"
