@@ -15,6 +15,7 @@ export default function DocumentMaker() {
   const [summary, setSummary] = useState<ComplianceSummary | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [useOCR, setUseOCR] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -34,6 +35,7 @@ export default function DocumentMaker() {
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('use_ocr', useOCR.toString());
 
     try {
       const response = await fetch('http://localhost:8000/api/check-compliance', {
@@ -120,6 +122,16 @@ export default function DocumentMaker() {
                   <span>{file.name}</span>
                 </div>
               )}
+            </div>
+
+            <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }} onClick={() => setUseOCR(!useOCR)}>
+              <input 
+                type="checkbox" 
+                checked={useOCR} 
+                onChange={() => {}} 
+                style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#f59e0b' }} 
+              />
+              <span style={{ fontSize: '0.85rem', color: useOCR ? '#f8fafc' : '#94a3b8', fontWeight: useOCR ? 600 : 400 }}>Gunakan OCR Tradisional (Sesuai FR-2)</span>
             </div>
 
             <button 

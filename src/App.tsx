@@ -8,35 +8,55 @@ import Account from './components/Account';
 import TopBar from './components/TopBar';
 import ContractMonitor from './components/ContractMonitor';
 import AdminDashboard from './components/AdminDashboard';
+import KnowledgeGraph from './components/KnowledgeGraph';
 import { useAuth } from './context/AuthContext';
+import SystemMonitoring from './components/SystemMonitoring';
+import TaxonomyManager from './components/TaxonomyManager';
+
 import './index.css';
 
-type MainTab = 'legal_repository' | 'legal_opinion' | 'document_maker' | 'contract_monitor' | 'account' | 'admin_dashboard';
+type MainTab = 'legal_repository' | 'legal_opinion' | 'document_maker' | 'contract_monitor' | 'account' | 'admin_dashboard' | 'knowledge_graph' | 'monitoring' | 'taxonomy_manager';
 const TAB_STORAGE_KEY = 'legal_analyzer_active_tab';
 
 function App() {
   const { isAuthenticated, user } = useAuth();
-  const isAdmin = user?.role?.toLowerCase() === 'admin';
+  const role = user?.role?.toLowerCase() || '';
+  const isITAdmin = role === 'admin';
+  const isSekretaris = role === 'sekretaris perusahaan';
+  const isEngineer = role === 'insinyur ti';
 
-  const [activeTab, setActiveTab] = useState<MainTab>(() => {
-    const savedTab = localStorage.getItem(TAB_STORAGE_KEY) as MainTab | null;
-    const validAdmin: MainTab[] = ['admin_dashboard', 'account'];
-    const validRegular: MainTab[] = ['legal_repository', 'legal_opinion', 'document_maker', 'contract_monitor', 'account'];
+  const [activeTab, setActiveTab] = useState<MainTab | 'monitoring'>(() => {
+    const savedTab = localStorage.getItem(TAB_STORAGE_KEY) as any;
+    const validAdmin: string[] = ['admin_dashboard', 'account'];
+    const validRegular: string[] = ['legal_repository', 'legal_opinion', 'document_maker', 'contract_monitor', 'account', 'knowledge_graph'];
+    const validSekretaris: string[] = [...validRegular, 'admin_dashboard', 'taxonomy_manager'];
+    const validEngineer: string[] = ['monitoring', 'account'];
     
-    if (isAdmin) {
+    if (isEngineer) {
+      if (savedTab && validEngineer.includes(savedTab)) return savedTab;
+      return 'monitoring';
+    }
+    if (isITAdmin) {
       if (savedTab && validAdmin.includes(savedTab)) return savedTab;
+      return 'admin_dashboard';
+    }
+    if (isSekretaris) {
+      if (savedTab && validSekretaris.includes(savedTab)) return savedTab;
       return 'admin_dashboard';
     }
     if (savedTab && validRegular.includes(savedTab)) return savedTab;
     return 'legal_opinion';
   });
 
-  // Redirect admin to their dashboard if they somehow end up on a restricted tab
+  // Redirect strict admin to their dashboard if they somehow end up on a restricted tab
   useEffect(() => {
-    if (isAdmin && activeTab !== 'account' && activeTab !== 'admin_dashboard') {
+    if (isITAdmin && activeTab !== 'account' && activeTab !== 'admin_dashboard') {
       setActiveTab('admin_dashboard');
     }
-  }, [isAdmin, activeTab]);
+    if (isEngineer && activeTab !== 'account' && activeTab !== 'monitoring') {
+      setActiveTab('monitoring');
+    }
+  }, [isITAdmin, isEngineer, activeTab]);
 
   useEffect(() => {
     localStorage.setItem(TAB_STORAGE_KEY, activeTab);
@@ -55,8 +75,17 @@ function App() {
           <TopBar />
 
           <div className="main-content" style={{ padding: 0, marginTop: '24px' }}>
-            {/* Admin-only view */}
-            {isAdmin ? (
+            {/* Engineer-only view */}
+            {isEngineer ? (
+              <>
+                <div className={`tab-panel ${activeTab === 'monitoring' ? 'tab-panel--active' : ''}`}>
+                  <SystemMonitoring />
+                </div>
+                <div className={`tab-panel ${activeTab === 'account' ? 'tab-panel--active' : ''}`}>
+                  <Account />
+                </div>
+              </>
+            ) : isITAdmin ? (
               <>
                 <div className={`tab-panel ${activeTab === 'admin_dashboard' ? 'tab-panel--active' : ''}`}>
                   <AdminDashboard />
@@ -67,6 +96,11 @@ function App() {
               </>
             ) : (
               <>
+                {(isSekretaris) && (
+                  <div className={`tab-panel ${activeTab === 'admin_dashboard' ? 'tab-panel--active' : ''}`}>
+                    <AdminDashboard />
+                  </div>
+                )}
                 <div className={`tab-panel ${activeTab === 'legal_repository' ? 'tab-panel--active' : ''}`}>
                   <LegalRepository />
                 </div>
@@ -78,6 +112,15 @@ function App() {
                 </div>
                 <div className={`tab-panel ${activeTab === 'contract_monitor' ? 'tab-panel--active' : ''}`}>
                   <ContractMonitor />
+                </div>
+                <div className={`tab-panel ${activeTab === 'knowledge_graph' ? 'tab-panel--active' : ''}`}
+                  style={{ padding: 0 }}>
+                  <KnowledgeGraph
+                    onOpenDocument={(docId) => {
+                      // Switch to repository tab so user can see the drawer open
+                      setActiveTab('legal_repository');
+                    }}
+                  />
                 </div>
                 <div className={`tab-panel ${activeTab === 'account' ? 'tab-panel--active' : ''}`}>
                   <Account />

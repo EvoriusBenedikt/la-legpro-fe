@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Database, File, Upload, CheckCircle2, BookOpen, FolderOpen, Zap, FileCheck, X, Trash2 } from 'lucide-react';
+import { Search, Database, File, Upload, CheckCircle2, BookOpen, FolderOpen, Zap, FileCheck, X, Trash2, Clock, Bot } from 'lucide-react';
 import DocumentDrawer from './DocumentDrawer';
 import { useAuth } from '../context/AuthContext';
 import ComplianceResultsViewer from './ComplianceResultsViewer';
@@ -36,25 +36,33 @@ interface DocumentTemplate {
   category: string;
 }
 
-type ActiveTab = 'regulations' | 'internal' | 'analyzed' | 'templates';
+type ActiveTab = 'regulations' | 'internal' | 'analyzed' | 'templates' | 'pending';
 
 export default function LegalRepository() {
   const [documents, setDocuments] = useState<OJKDocument[]>([]);
   const [historyDocs, setHistoryDocs] = useState<AnalyzedDocument[]>([]);
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
+  const [pendingDocs, setPendingDocs] = useState<OJKDocument[]>([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [taxonomyList, setTaxonomyList] = useState<{id: number, name: string}[]>([]);
+  const [selectedTaxonomy, setSelectedTaxonomy] = useState<string>('');
+
   const [activeTab, setActiveTab] = useState<ActiveTab>('regulations');
+  const [revealedAi, setRevealedAi] = useState<Record<string, boolean>>({});
   const [selectedDoc, setSelectedDoc] = useState<OJKDocument | null>(null);
+  const [viewPdfDoc, setViewPdfDoc] = useState<OJKDocument | null>(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [selectedHistoryDoc, setSelectedHistoryDoc] = useState<AnalyzedDocument | null>(null);
   const [loadingReportId, setLoadingReportId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedDoc, setGeneratedDoc] = useState<string | null>(null);
   const [showPromptModal, setShowPromptModal] = useState<string | null>(null);
   const [promptInput, setPromptInput] = useState('');
-  const [uploadKlasifikasi, setUploadKlasifikasi] = useState('Publik');
+  const [viewKlasifikasi, setViewKlasifikasi] = useState('Semua');
   const [showShareModal, setShowShareModal] = useState<OJKDocument | null>(null);
   const [usersList, setUsersList] = useState<UserListItem[]>([]);
   const [shareUser, setShareUser] = useState('');
@@ -63,6 +71,67 @@ export default function LegalRepository() {
   const [isSharing, setIsSharing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user, token } = useAuth();
+
+  const fetchPendingDocs = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/repository/pending', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPendingDocs(data.documents || []);
+      }
+    } catch (error) {
+      console.error("Error fetching pending docs", error);
+    }
+  };
+
+  const handleDeleteDocument = async (docId: string) => {
+    if (!window.confirm("Apakah Anda yakin ingin menghapus dokumen ini? Semua relasi dan akses akan dihapus.")) return;
+    
+    try {
+      const response = await fetch(`http://localhost:8000/api/repository/document/${docId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Failed to delete document');
+      }
+      
+      alert("Dokumen berhasil dihapus!");
+      fetchDocs();
+      fetchPendingDocs();
+    } catch (err: any) {
+      alert(`Gagal menghapus dokumen: ${err.message}`);
+    }
+  };
+
+  const handleConfirmPending = async (docId: string, klasifikasi: string) => {
+    try {
+      const res = await fetch(`http://localhost:8000/api/repository/pending/${docId}/confirm`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ klasifikasi })
+      });
+      if (res.ok) {
+        alert('Dokumen berhasil dikonfirmasi dan dimasukkan ke repositori!');
+        fetchPendingDocs();
+        fetchDocs();
+      } else {
+        alert('Gagal mengkonfirmasi dokumen.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Terjadi kesalahan koneksi.');
+    }
+  };
 
   const fetchDocs = async () => {
     setIsLoading(true);
@@ -181,11 +250,60 @@ export default function LegalRepository() {
     }
   };
 
+  // Fetch PDF blob for centered viewer
+  
+  useEffect(() => {
+    const fetchTaxonomy = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/api/taxonomy', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // only active
+          setTaxonomyList(data.taxonomy.filter((t: any) => t.is_active));
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    if (token) fetchTaxonomy();
+  }, [token]);
+
+  useEffect(() => {
+    if (!viewPdfDoc || !viewPdfDoc.filename) return;
+    
+    const pdfUrl = `http://localhost:8000/api/pdf/${encodeURIComponent(viewPdfDoc.filename)}`;
+    setIsPdfLoading(true);
+    setPdfBlobUrl(null);
+    
+    fetch(pdfUrl)
+      .then(res => res.json())
+      .then(data => {
+        const binary = atob(data.data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        setPdfBlobUrl(URL.createObjectURL(blob));
+      })
+      .catch(err => console.error('PDF load error:', err))
+      .finally(() => setIsPdfLoading(false));
+      
+    return () => {
+      if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
+    };
+  }, [viewPdfDoc]);
+
   useEffect(() => {
     fetchDocs();
     fetchHistoryDocs();
     fetchTemplates();
-  }, []);
+    if (user?.role?.toLowerCase() === 'sekretaris perusahaan') {
+      fetchPendingDocs();
+    }
+  }, [user]);
 
   const handleGenerateTemplate = async (templateId: string) => {
     if (!promptInput.trim()) return;
@@ -292,7 +410,7 @@ export default function LegalRepository() {
     }
 
     setIsUploading(true);
-    const endpoint = activeTab === 'internal' ? 'http://localhost:8000/api/upload-internal' : 'http://localhost:8000/api/upload';
+    const endpoint = 'http://localhost:8000/api/upload';
 
     let successCount = 0;
     
@@ -304,7 +422,8 @@ export default function LegalRepository() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("doc_type", activeTab);
-      formData.append("klasifikasi", uploadKlasifikasi);
+      if (selectedTaxonomy) formData.append("jenis_dokumen", selectedTaxonomy);
+      formData.append("klasifikasi", viewKlasifikasi === 'Semua' ? 'Umum' : viewKlasifikasi);
 
       try {
         const response = await fetch(endpoint, {
@@ -341,11 +460,21 @@ export default function LegalRepository() {
     doc => doc.sektor === "Upload Manual" || doc.sektor === "Dokumen Internal"
   );
   const activeDocuments = activeTab === 'regulations' ? regulationDocs : internalDocs;
-  const filteredDocs = activeDocuments.filter(doc =>
-    doc.judul.toLowerCase().includes(search.toLowerCase()) ||
-    doc.nomor.toLowerCase().includes(search.toLowerCase()) ||
-    doc.sektor.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredDocs = activeDocuments.filter(doc => {
+    const matchesSearch = doc.judul.toLowerCase().includes(search.toLowerCase()) ||
+                          doc.nomor.toLowerCase().includes(search.toLowerCase()) ||
+                          doc.sektor.toLowerCase().includes(search.toLowerCase());
+                          
+    if (viewKlasifikasi === 'Duplikat') {
+      return matchesSearch && (doc.status === 'Gagal - Duplikat' || doc.status.includes('Duplikat'));
+    }
+    
+    const docKlas = (doc as any).klasifikasi || 'Umum';
+    const matchesKlasifikasi = viewKlasifikasi === 'Semua' || docKlas === viewKlasifikasi;
+    
+    // Sembunyikan dokumen duplikat dari tampilan biasa
+    return matchesSearch && matchesKlasifikasi && !doc.status.includes('Duplikat');
+  });
 
   const filteredHistoryDocs = historyDocs.filter(doc => 
     doc.filename.toLowerCase().includes(search.toLowerCase())
@@ -357,6 +486,9 @@ export default function LegalRepository() {
     { id: 'analyzed' as ActiveTab, label: 'Analyzed Documents', icon: <FileCheck size={16} />, count: historyDocs.length },
     { id: 'templates' as ActiveTab, label: 'Document Templates', icon: <File size={16} />, count: templates.length },
   ];
+  if (user?.role?.toLowerCase() === 'sekretaris perusahaan') {
+    tabs.push({ id: 'pending' as ActiveTab, label: 'Pending Documents', icon: <Clock size={16} />, count: pendingDocs.length });
+  }
 
   return (
     <div className="view-container repository-view" style={{ padding: '24px 32px', boxSizing: 'border-box' }}>
@@ -423,6 +555,15 @@ export default function LegalRepository() {
             <p>Your private documents</p>
           </div>
         </div>
+        <div className="stat-card">
+          <div className="stat-icon orange" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '32px', height: '32px' }}>
+            <Clock size={16} />
+          </div>
+          <div className="stat-info">
+            <h4>{pendingDocs.length} Pending</h4>
+            <p>Awaiting confirmation</p>
+          </div>
+        </div>
       </div>
 
       {/* Header / Actions */}
@@ -441,15 +582,19 @@ export default function LegalRepository() {
               <Trash2 size={16} /> Bersihkan Duplikat
             </button>
             <select 
-              value={uploadKlasifikasi} 
-              onChange={e => setUploadKlasifikasi(e.target.value)}
+              value={viewKlasifikasi} 
+              onChange={e => setViewKlasifikasi(e.target.value)}
               style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem' }}
             >
-              <option value="Publik">Klasifikasi: Publik</option>
-              <option value="Rahasia">Klasifikasi: Rahasia</option>
+              <option value="Semua">Tampilkan: Semua</option>
+              <option value="Umum">Klasifikasi: Umum</option>
+              {['manajer', 'direktur', 'admin', 'sekretaris perusahaan'].includes(user?.role?.toLowerCase() || '') && (
+                <option value="Rahasia">Klasifikasi: Rahasia</option>
+              )}
               {['direktur', 'admin', 'sekretaris perusahaan'].includes(user?.role?.toLowerCase() || '') && (
                 <option value="Terbatas">Klasifikasi: Terbatas</option>
               )}
+              <option value="Duplikat">Status: Duplikat</option>
             </select>
             <button className="upload-btn" onClick={() => fileInputRef.current?.click()} style={{ background: 'var(--accent-color)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Upload size={18} /> Tambah PDF
@@ -550,6 +695,63 @@ export default function LegalRepository() {
           </div>
         ) : (
           <div className="document-grid">
+            {activeTab === 'pending' && pendingDocs.map((doc, idx) => (
+              <div key={idx} className="document-card" style={{ borderColor: '#f59e0b', background: 'rgba(245, 158, 11, 0.05)' }}>
+                <div className="doc-type-badge" style={{ background: '#f59e0b', color: 'white' }}>
+                  Menunggu Konfirmasi
+                </div>
+                <h3 className="doc-title">{doc.judul}</h3>
+                <div className="doc-meta">
+                  <span>Nomor: {doc.nomor}</span>
+                </div>
+                <button
+                  className="analyze-btn"
+                  onClick={() => setViewPdfDoc(doc)}
+                  style={{ background: 'transparent', border: '1px solid #f59e0b', color: '#f59e0b', marginTop: '12px' }}
+                >
+                  <BookOpen size={14} /> Lihat Dokumen
+                </button>
+                <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                  
+                  {revealedAi[doc.id] ? (
+                    <div style={{ padding: '8px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', borderRadius: '6px', marginBottom: '12px', fontSize: '0.85rem', color: '#60a5fa' }}>
+                      <Bot size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                      AI merekomendasikan: <strong>{(doc as any).klasifikasi || 'Umum'}</strong>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setRevealedAi(prev => ({ ...prev, [doc.id]: true }))}
+                      style={{ width: '100%', background: 'transparent', border: '1px solid #3b82f6', color: '#3b82f6', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '12px' }}
+                    >
+                      <Bot size={14} /> Tampilkan Rekomendasi AI
+                    </button>
+                  )}
+
+                  <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: '#94a3b8' }}>Klasifikasi Akhir:</p>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => { (doc as any).selectedKlasifikasi = e.target.value; }}
+                    style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '8px', color: '#f8fafc', marginBottom: '12px' }}
+                  >
+                    <option value="" disabled>Pilih Klasifikasi...</option>
+                    <option value="Umum">Umum</option>
+                    <option value="Rahasia">Rahasia</option>
+                    <option value="Terbatas">Terbatas</option>
+                  </select>
+                  <button
+                    onClick={() => {
+                      const finalClass = (doc as any).selectedKlasifikasi;
+                      if (!finalClass) return alert("Pilih klasifikasi terlebih dahulu!");
+                      handleConfirmPending(doc.id, finalClass);
+                    }}
+                    style={{ width: '100%', background: '#f59e0b', color: 'white', border: 'none', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    Konfirmasi & Ingest
+                  </button>
+                </div>
+              </div>
+            ))}
+            
             {activeTab === 'templates' && templates.map((tpl) => (
               <div key={tpl.id} className="document-card internal-card" style={{ borderTopColor: '#a855f7' }}>
                 <div className="doc-type-badge internal-badge" style={{ color: '#a855f7', background: 'rgba(168, 85, 247, 0.1)' }}>
@@ -580,8 +782,8 @@ export default function LegalRepository() {
                   <span className="doc-sektor">{doc.sektor}</span>
                 </div>
                 <div className="doc-status" style={{ display: 'flex', gap: '8px' }}>
-                  <span>Status: {doc.status}</span>
-                  {(doc as any).klasifikasi && (doc as any).klasifikasi !== 'Publik' && (
+                  <span style={{ color: doc.status === 'Tidak Berlaku' ? '#ef4444' : undefined }}>Status: {doc.status}</span>
+                  {(doc as any).klasifikasi && (doc as any).klasifikasi !== 'Umum' && (
                     <span style={{ color: (doc as any).klasifikasi === 'Rahasia' ? '#ef4444' : '#f59e0b', fontWeight: 600 }}>
                       [{(doc as any).klasifikasi}]
                     </span>
@@ -590,13 +792,27 @@ export default function LegalRepository() {
                 <div className="doc-footer">
                   <File size={16} /> Disimpan dalam Database
                 </div>
-                <button
-                  className="analyze-btn"
-                  onClick={() => setSelectedDoc(doc)}
-                >
-                  <Zap size={14} /> Analyze
-                </button>
-                {(doc as any).klasifikasi && (doc as any).klasifikasi !== 'Publik' && ['direktur', 'manajer', 'admin', 'sekretaris perusahaan'].includes(user?.role?.toLowerCase() || '') && (
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="analyze-btn"
+                    onClick={() => setSelectedDoc(doc)}
+                    style={{ flex: 1 }}
+                  >
+                    <Zap size={14} /> Analyze
+                  </button>
+                  {user?.role?.toLowerCase() === 'sekretaris perusahaan' && (
+                    <button
+                      onClick={() => handleDeleteDocument(doc.id)}
+                      style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '0 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+                      title="Hapus Dokumen"
+                      onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
+                      onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </div>
+                {(doc as any).klasifikasi && (doc as any).klasifikasi !== 'Umum' && ['direktur', 'manajer', 'admin', 'sekretaris perusahaan'].includes(user?.role?.toLowerCase() || '') && (
                   <button
                     className="analyze-btn"
                     style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', marginTop: '8px', border: '1px solid #3b82f6' }}
@@ -634,6 +850,37 @@ export default function LegalRepository() {
       )}
 
       {/* Document Drawer */}
+      {/* Centered PDF Modal for Pending Documents */}
+      {viewPdfDoc && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyItems: 'center', padding: '24px', justifyContent: 'center' }}>
+          <div className="modal-content" style={{ background: '#1e293b', width: '100%', maxWidth: '900px', height: '90vh', borderRadius: '12px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', background: '#0f172a', borderBottom: '1px solid #334155' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ background: '#f59e0b', color: '#fff', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>Menunggu Konfirmasi</div>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#f8fafc' }}>{viewPdfDoc.judul}</h3>
+              </div>
+              <button onClick={() => { setViewPdfDoc(null); setPdfBlobUrl(null); }} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#f8fafc', cursor: 'pointer', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ flex: 1, position: 'relative', background: '#0f172a' }}>
+              {isPdfLoading ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}>
+                  <File size={48} style={{ opacity: 0.5, marginBottom: '16px' }} />
+                  <p>Memuat PDF...</p>
+                </div>
+              ) : pdfBlobUrl ? (
+                <iframe src={pdfBlobUrl} title="PDF Viewer" style={{ width: '100%', height: '100%', border: 'none' }} />
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#ef4444' }}>
+                  <p>Gagal memuat PDF.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <DocumentDrawer
         doc={selectedDoc}
         onClose={() => setSelectedDoc(null)}

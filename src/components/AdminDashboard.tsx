@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -22,6 +23,7 @@ interface DashboardData {
     sqlite: boolean;
     chromadb: boolean;
   };
+  doc_details?: Record<string, any[]>;
 }
 
 const ACTION_COLORS: Record<string, string> = {
@@ -33,9 +35,56 @@ const ACTION_COLORS: Record<string, string> = {
 };
 
 const KLASIFIKASI_COLORS: Record<string, string> = {
-  Publik: '#22D3EE',
+  Umum: '#22D3EE',
   Rahasia: '#F59E0B',
   Terbatas: '#F43F5E',
+};
+
+
+const StatusCard = ({ label, value, icon, color, totalDocs, docs = [] }: any) => {
+  const [search, setSearch] = React.useState("");
+
+  const filteredDocs = docs.filter((d: any) => 
+    d.judul.toLowerCase().includes(search.toLowerCase()) || 
+    (d.nomor && d.nomor.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-card)', borderRadius: '14px', border: `1px solid ${color}33`, overflow: 'hidden', height: '100%' }}>
+      <div style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color }}>
+            {icon}
+            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{label}</span>
+          </div>
+        </div>
+        <div style={{ fontSize: '2rem', fontWeight: 800, color, marginTop: '12px' }}>{value}</div>
+        <div style={{ height: '4px', background: `${color}22`, borderRadius: '2px', marginTop: '12px' }}>
+          <div style={{ height: '100%', borderRadius: '2px', background: color, width: totalDocs > 0 ? `${Math.min(100, (value / totalDocs) * 100)}%` : '0%' }}></div>
+        </div>
+      </div>
+      
+      <div style={{ padding: '0 24px 24px', borderTop: `1px solid ${color}22`, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+        <input 
+          type="text" 
+          placeholder={`Cari regulasi ${label.toLowerCase()}...`}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ width: '100%', padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: `1px solid ${color}55`, borderRadius: '6px', color: '#fff', marginTop: '16px', marginBottom: '12px', fontSize: '0.85rem' }}
+        />
+        <div className="custom-scrollbar" style={{ maxHeight: '200px', flexGrow: 1, overflowY: 'auto' }}>
+          {filteredDocs.length > 0 ? filteredDocs.map((d: any, i: number) => (
+            <div key={i} style={{ padding: '8px 0', borderBottom: i < filteredDocs.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+              <div style={{ fontSize: '0.85rem', color: '#e2e8f0', fontWeight: 500, lineHeight: '1.4' }}>{d.judul}</div>
+              {d.nomor && <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>{d.nomor}</div>}
+            </div>
+          )) : (
+            <div style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'center', padding: '10px 0' }}>Tidak ada dokumen ditemukan</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default function AdminDashboard() {
@@ -43,17 +92,31 @@ export default function AdminDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
+  
+  const [exclusions, setExclusions] = useState<{id: number; entity_name: string; created_at: string}[]>([]);
+  const [newExclusion, setNewExclusion] = useState('');
+  const [addingExclusion, setAddingExclusion] = useState(false);
 
   const fetchDashboard = async () => {
     setLoading(true);
     try {
       const res = await fetch('http://localhost:8000/api/admin/dashboard', {
         headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store'
       });
       if (res.ok) {
         const json = await res.json();
         setData(json);
         setLastRefresh(new Date());
+      }
+      
+      const excRes = await fetch('http://localhost:8000/api/admin/kg-exclusions', {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store'
+      });
+      if (excRes.ok) {
+        const excJson = await excRes.json();
+        setExclusions(excJson.exclusions);
       }
     } catch (e) {
       console.error('Admin dashboard fetch error:', e);
@@ -66,12 +129,51 @@ export default function AdminDashboard() {
     fetchDashboard();
   }, []);
 
-  const totalDocs = data ? Object.values(data.doc_status).reduce((a, b) => a + b, 0) : 0;
+  const handleAddExclusion = async () => {
+    if (!newExclusion.trim()) return;
+    setAddingExclusion(true);
+    try {
+      const res = await fetch('http://localhost:8000/api/admin/kg-exclusions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ entity_name: newExclusion })
+      });
+      if (res.ok) {
+        setNewExclusion('');
+        fetchDashboard();
+      } else {
+        const err = await res.json();
+        alert(err.detail || 'Gagal menambahkan pengecualian');
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAddingExclusion(false);
+    }
+  };
+
+  const handleDeleteExclusion = async (id: number) => {
+    if (!confirm('Hapus pengecualian ini?')) return;
+    try {
+      const res = await fetch(`http://localhost:8000/api/admin/kg-exclusions/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) fetchDashboard();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const totalDocs = data ? Object.values(data.doc_status).reduce((a: any, b: any) => a + b, 0) : 0;
   const berlakuDocs = data?.doc_status['Berlaku'] ?? 0;
+  const tidakBerlakuDocs = data?.doc_status['Tidak Berlaku'] ?? 0;
   const memproseDocs = data?.doc_status['Memproses'] ?? 0;
-  const failedDocs = Object.entries(data?.doc_status ?? {})
-    .filter(([k]) => k.startsWith('Gagal'))
-    .reduce((a, [, v]) => a + v, 0);
+  const failedDocs = data?.doc_status['Gagal'] ?? 0;
+  
+  const docDetails = data?.doc_details || {};
+    
+  const maxJenisCount = data?.doc_by_jenis?.length ? Math.max(...data.doc_by_jenis.map(d => d.count)) : 1;
 
   return (
     <div style={{ padding: '0 0 48px', maxWidth: '1200px', margin: '0 auto' }}>
@@ -177,30 +279,14 @@ export default function AdminDashboard() {
           </div>
 
           {/* Doc Status Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '24px', alignItems: 'stretch' }}>
             {[
-              { label: 'Berlaku', value: berlakuDocs, icon: <CheckCircle2 size={20} />, color: '#22D3EE' },
-              { label: 'Memproses', value: memproseDocs, icon: <Clock size={20} />, color: '#F59E0B' },
-              { label: 'Gagal', value: failedDocs, icon: <XCircle size={20} />, color: '#F43F5E' },
+              { label: 'Berlaku', value: berlakuDocs, icon: <CheckCircle2 size={20} />, color: '#22D3EE', docs: docDetails['Berlaku'] || [] },
+              { label: 'Tidak Berlaku', value: tidakBerlakuDocs, icon: <XCircle size={20} />, color: '#94A3B8', docs: docDetails['Tidak Berlaku'] || [] },
+              { label: 'Memproses', value: memproseDocs, icon: <Clock size={20} />, color: '#F59E0B', docs: docDetails['Memproses'] || [] },
+              { label: 'Gagal', value: failedDocs, icon: <AlertTriangle size={20} />, color: '#F43F5E', docs: docDetails['Gagal'] || [] },
             ].map(card => (
-              <div key={card.label} style={{
-                background: 'var(--bg-card)', borderRadius: '14px', padding: '24px',
-                border: `1px solid ${card.color}33`,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', color: card.color }}>
-                  {card.icon}
-                  <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{card.label}</span>
-                </div>
-                <div style={{ fontSize: '2rem', fontWeight: 800, color: card.color }}>{card.value}</div>
-                <div style={{ height: '4px', background: `${card.color}22`, borderRadius: '2px', marginTop: '12px' }}>
-                  <div style={{
-                    height: '100%', borderRadius: '2px',
-                    background: card.color,
-                    width: totalDocs > 0 ? `${Math.min(100, (card.value / totalDocs) * 100)}%` : '0%',
-                    transition: 'width 0.8s ease',
-                  }} />
-                </div>
-              </div>
+              <StatusCard key={card.label} {...card} totalDocs={totalDocs} />
             ))}
           </div>
 
@@ -246,18 +332,83 @@ export default function AdminDashboard() {
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Tidak ada data</p>
               ) : (
                 data.doc_by_jenis.map(item => (
-                  <div key={item.jenis} style={{ marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', flex: 1, marginRight: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {item.jenis || 'Tidak Diketahui'}
-                    </span>
-                    <span style={{
-                      background: 'rgba(56,189,248,0.15)', color: '#38BDF8',
-                      borderRadius: '20px', padding: '2px 10px', fontSize: '0.8rem', fontWeight: 600,
-                      whiteSpace: 'nowrap',
-                    }}>{item.count}</span>
+                  <div key={item.jenis} style={{ marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', flex: 1, marginRight: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.jenis || 'Tidak Diketahui'}
+                      </span>
+                      <span style={{
+                        color: '#38BDF8', fontSize: '0.85rem', fontWeight: 600,
+                      }}>{item.count}</span>
+                    </div>
+                    <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px' }}>
+                      <div style={{
+                        height: '100%', borderRadius: '3px',
+                        background: '#38BDF8',
+                        width: maxJenisCount > 0 ? `${(item.count / maxJenisCount) * 100}%` : '0%',
+                        transition: 'width 0.8s ease',
+                      }} />
+                    </div>
                   </div>
                 ))
               )}
+            </div>
+          </div>
+
+          {/* FR-30: KG Exclusions */}
+          <div style={{ background: 'var(--bg-card)', borderRadius: '16px', padding: '24px', border: '1px solid var(--border-color)', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+              <Shield size={18} color="#F43F5E" />
+              <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)' }}>Pengecualian Entitas Knowledge Graph (FR-30)</h3>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+              <input
+                type="text"
+                placeholder="Nama entitas untuk dikecualikan (misal: 'Menteri Hukum', 'Kementerian X')..."
+                value={newExclusion}
+                onChange={(e) => setNewExclusion(e.target.value)}
+                style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.05)', color: 'white' }}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddExclusion()}
+              />
+              <button
+                onClick={handleAddExclusion}
+                disabled={addingExclusion}
+                style={{ background: '#F43F5E', color: 'white', border: 'none', padding: '0 20px', borderRadius: '8px', cursor: addingExclusion ? 'wait' : 'pointer', fontWeight: 600 }}
+              >
+                {addingExclusion ? 'Menambahkan...' : 'Tambah Pengecualian'}
+              </button>
+            </div>
+            
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>ID</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>Nama Entitas</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>Ditambahkan Pada</th>
+                    <th style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exclusions.map(exc => (
+                    <tr key={exc.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>{exc.id}</td>
+                      <td style={{ padding: '10px 12px', color: 'var(--text-primary)', fontWeight: 500 }}>{exc.entity_name}</td>
+                      <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>{new Date(exc.created_at).toLocaleString('id-ID')}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                        <button onClick={() => handleDeleteExclusion(exc.id)} title="Hapus pengecualian" style={{ background: 'transparent', border: 'none', color: '#F43F5E', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>
+                          <XCircle size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {exclusions.length === 0 && (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>Belum ada entitas yang dikecualikan.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 
