@@ -1,12 +1,13 @@
-import { Database, Scale, FileText, User, BarChart2, ShieldCheck, Network } from 'lucide-react';
+import { Database, Scale, FileText, User, BarChart2, ShieldCheck, Network, FolderTree } from 'lucide-react';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
+  activeTab?: string;
+  setActiveTab?: (tab: string) => void;
 }
 
-export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
+export default function Sidebar({}: SidebarProps) {
   const { user } = useAuth();
   const role = user?.role?.toLowerCase() || '';
   const isITAdmin = role === 'admin';
@@ -23,22 +24,22 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
   }
 
   const adminTabs = [
-    { id: 'admin_dashboard', name: 'Admin Dashboard', icon: <ShieldCheck size={20} /> },
-    { id: 'account', name: 'Account Settings', icon: <User size={20} /> },
+    { path: '/admin', name: 'Admin Dashboard', icon: <ShieldCheck size={20} /> },
+    { path: '/account', name: 'Account Settings', icon: <User size={20} /> },
   ];
 
   const regularTabs = [
-    { id: 'legal_repository', name: 'Legal Repository', icon: <Database size={20} /> },
-    { id: 'legal_opinion', name: 'Legal Opinion', icon: <Scale size={20} /> },
-    { id: 'document_maker', name: 'Compliance Checker', icon: <FileText size={20} /> },
-    { id: 'contract_monitor', name: 'Contract Monitor', icon: <BarChart2 size={20} /> },
-    ...(userLevel >= 2 ? [{ id: 'knowledge_graph', name: 'Knowledge Graph', icon: <Network size={20} /> }] : []),
-    { id: 'account', name: 'Account Settings', icon: <User size={20} /> },
+    { path: '/repository', name: 'Legal Repository', icon: <Database size={20} /> },
+    { path: '/opinion', name: 'Legal Opinion', icon: <Scale size={20} /> },
+    { path: '/maker', name: 'Compliance Checker', icon: <FileText size={20} /> },
+    { path: '/contracts', name: 'Contract Monitor', icon: <BarChart2 size={20} /> },
+    ...(userLevel >= 2 ? [{ path: '/graph', name: 'Knowledge Graph', icon: <Network size={20} /> }] : []),
+    { path: '/account', name: 'Account Settings', icon: <User size={20} /> },
   ];
 
   const engineerTabs = [
-    { id: 'monitoring', name: 'System Monitoring', icon: <BarChart2 size={20} /> },
-    { id: 'account', name: 'Account Settings', icon: <User size={20} /> },
+    { path: '/monitoring', name: 'System Monitoring', icon: <BarChart2 size={20} /> },
+    { path: '/account', name: 'Account Settings', icon: <User size={20} /> },
   ];
 
   let tabs = regularTabs;
@@ -48,7 +49,8 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
     tabs = adminTabs;
   } else if (isSekretaris) {
     tabs = [
-      { id: 'admin_dashboard', name: 'Admin Dashboard', icon: <ShieldCheck size={20} /> },
+      { path: '/admin', name: 'Admin Dashboard', icon: <ShieldCheck size={20} /> },
+      { path: '/taxonomy', name: 'Taxonomy Manager', icon: <FolderTree size={20} /> },
       ...regularTabs
     ];
   }
@@ -71,14 +73,14 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
       </div>
       <div className="sidebar-menu">
         {tabs.map(tab => (
-          <button
-            key={tab.id}
+          <NavLink
+            key={tab.path}
+            to={tab.path}
             title={tab.name}
-            className={`sidebar-item ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
+            className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
           >
             {tab.icon}
-          </button>
+          </NavLink>
         ))}
       </div>
     </div>
