@@ -17,4 +17,4 @@ services:
     environment:
       # Vite requires CHOKIDAR_USEPOLLING=true in some Docker Windows environments for HMR
       - CHOKIDAR_USEPOLLING=true
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=http://0.0.0.0:8080
