@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: legpro-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      # Mount source for Vite HMR (Hot Module Replacement)
+      - ./src:/app/src
+      - ./public:/app/public
+      - ./index.html:/app/index.html
+      - ./vite.config.ts:/app/vite.config.ts
+    environment:
+      # Vite requires CHOKIDAR_USEPOLLING=true in some Docker Windows environments for HMR
+      - CHOKIDAR_USEPOLLING=true
+      - VITE_API_URL=http://localhost:8000
