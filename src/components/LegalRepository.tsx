@@ -47,8 +47,8 @@ export default function LegalRepository() {
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
-  const [taxonomyList, setTaxonomyList] = useState<{id: number, name: string}[]>([]);
-  const [selectedTaxonomy, setSelectedTaxonomy] = useState<string>('');
+  const [, setTaxonomyList] = useState<{id: number, name: string}[]>([]);
+  const [selectedTaxonomy] = useState<string>('');
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('regulations');
   const [revealedAi, setRevealedAi] = useState<Record<string, boolean>>({});
@@ -74,7 +74,7 @@ export default function LegalRepository() {
 
   const fetchPendingDocs = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/repository/pending', {
+      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/repository/pending', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -90,7 +90,7 @@ export default function LegalRepository() {
     if (!window.confirm("Apakah Anda yakin ingin menghapus dokumen ini? Semua relasi dan akses akan dihapus.")) return;
     
     try {
-      const response = await fetch(`http://localhost:8000/api/repository/document/${docId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/repository/document/${docId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -112,7 +112,7 @@ export default function LegalRepository() {
 
   const handleConfirmPending = async (docId: string, klasifikasi: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/repository/pending/${docId}/confirm`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/repository/pending/${docId}/confirm`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -136,7 +136,7 @@ export default function LegalRepository() {
   const fetchDocs = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/repository', {
+      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/repository', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -152,7 +152,7 @@ export default function LegalRepository() {
 
   const fetchHistoryDocs = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/compliance-history', {
+      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/compliance-history', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -167,7 +167,7 @@ export default function LegalRepository() {
   const handleViewHistoryDoc = async (doc: AnalyzedDocument) => {
     setLoadingReportId(doc.id);
     try {
-      const response = await fetch(`http://localhost:8000/api/compliance-history/${doc.id}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/compliance-history/${doc.id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -186,7 +186,7 @@ export default function LegalRepository() {
 
   const fetchUsersList = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/auth/users', {
+      const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/auth/users', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -207,7 +207,7 @@ export default function LegalRepository() {
     setIsSharing(true);
     
     try {
-      const res = await fetch(`http://localhost:8000/api/documents/${showShareModal.id}/grant-access`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/documents/${showShareModal.id}/grant-access`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -238,7 +238,7 @@ export default function LegalRepository() {
 
   const fetchTemplates = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/templates', {
+      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/templates', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -255,7 +255,7 @@ export default function LegalRepository() {
   useEffect(() => {
     const fetchTaxonomy = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/taxonomy', {
+        const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/taxonomy', {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
@@ -273,7 +273,7 @@ export default function LegalRepository() {
   useEffect(() => {
     if (!viewPdfDoc || !viewPdfDoc.filename) return;
     
-    const pdfUrl = `http://localhost:8000/api/pdf/${encodeURIComponent(viewPdfDoc.filename)}`;
+    const pdfUrl = `${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/pdf/${encodeURIComponent(viewPdfDoc.filename)}`;
     setIsPdfLoading(true);
     setPdfBlobUrl(null);
     
@@ -310,7 +310,7 @@ export default function LegalRepository() {
     setIsGenerating(true);
     setGeneratedDoc(null);
     try {
-      const response = await fetch('http://localhost:8000/api/templates/generate', {
+      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/templates/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -381,7 +381,7 @@ export default function LegalRepository() {
   const handleClearFailedDocuments = async () => {
     if (!confirm('Apakah Anda yakin ingin menghapus semua dokumen yang gagal diproses (termasuk duplikat)?')) return;
     try {
-      const response = await fetch('http://localhost:8000/api/repository/failed', {
+      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/repository/failed', {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -410,7 +410,7 @@ export default function LegalRepository() {
     }
 
     setIsUploading(true);
-    const endpoint = 'http://localhost:8000/api/upload';
+    const endpoint = (import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/upload';
 
     let successCount = 0;
     

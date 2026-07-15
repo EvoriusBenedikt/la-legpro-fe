@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -26,7 +26,7 @@ export default function TaxonomyManager() {
   const fetchTaxonomy = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/api/taxonomy', {
+      const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/taxonomy', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -49,7 +49,7 @@ export default function TaxonomyManager() {
   const handleAdd = async () => {
     if (!newName.trim()) return;
     try {
-      const res = await fetch('http://localhost:8000/api/taxonomy', {
+      const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/taxonomy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ name: newName })
@@ -73,7 +73,7 @@ export default function TaxonomyManager() {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:8000/api/taxonomy/${id}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/taxonomy/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ name: editName })
@@ -92,7 +92,7 @@ export default function TaxonomyManager() {
 
   const handleToggleActive = async (id: number, currentStatus: boolean) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/taxonomy/${id}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/taxonomy/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ is_active: !currentStatus })
@@ -108,7 +108,7 @@ export default function TaxonomyManager() {
   const handleDelete = async (id: number) => {
     if (!confirm('Apakah Anda yakin ingin menghapus atau menonaktifkan taksonomi ini?')) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/taxonomy/${id}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/taxonomy/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });

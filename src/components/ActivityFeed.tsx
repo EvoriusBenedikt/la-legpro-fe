@@ -18,10 +18,10 @@ export default function ActivityFeed() {
     // Fetch real data from backend to populate this list
     const fetchHistory = async () => {
       try {
-        const chatRes = await fetch('http://localhost:8000/api/chat-sessions', {
+        const chatRes = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/chat-sessions', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        const compRes = await fetch('http://localhost:8000/api/compliance-history', {
+        const compRes = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/compliance-history', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 

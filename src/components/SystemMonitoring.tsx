@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Activity, HardDrive, Cpu, Server, Play, Clock, CheckCircle, Save, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import './SystemMonitoring.css';
@@ -38,9 +38,9 @@ export default function SystemMonitoring() {
       const headers = { Authorization: `Bearer ${token}` };
       
       const [healthRes, queueRes, backupRes] = await Promise.all([
-        fetch('http://localhost:8000/api/engineer/health', { headers }),
-        fetch('http://localhost:8000/api/engineer/queue', { headers }),
-        fetch('http://localhost:8000/api/engineer/backups', { headers })
+        fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/engineer/health', { headers }),
+        fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/engineer/queue', { headers }),
+        fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/engineer/backups', { headers })
       ]);
 
       if (healthRes.ok) setHealth(await healthRes.json());
@@ -66,7 +66,7 @@ export default function SystemMonitoring() {
   const triggerBackup = async () => {
     setLoadingBackup(true);
     try {
-      const res = await fetch('http://localhost:8000/api/engineer/backup', {
+      const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/engineer/backup', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });

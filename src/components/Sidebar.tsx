@@ -1,14 +1,10 @@
-import { Database, Scale, FileText, User, BarChart2, ShieldCheck, Network, FolderTree } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { Database, Scale, FileText, User, BarChart2, ShieldCheck, Network, FolderTree, LogOut } from 'lucide-react';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-interface SidebarProps {
-  activeTab?: string;
-  setActiveTab?: (tab: string) => void;
-}
-
-export default function Sidebar({}: SidebarProps) {
-  const { user } = useAuth();
+export default function Sidebar() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const role = user?.role?.toLowerCase() || '';
   const isITAdmin = role === 'admin';
   const isSekretaris = role === 'sekretaris perusahaan';
@@ -23,6 +19,11 @@ export default function Sidebar({}: SidebarProps) {
     return levels[role.toLowerCase()] ?? 1;
   }
 
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
   const adminTabs = [
     { path: '/admin', name: 'Admin Dashboard', icon: <ShieldCheck size={20} /> },
     { path: '/account', name: 'Account Settings', icon: <User size={20} /> },
@@ -34,7 +35,6 @@ export default function Sidebar({}: SidebarProps) {
     { path: '/maker', name: 'Compliance Checker', icon: <FileText size={20} /> },
     { path: '/contracts', name: 'Contract Monitor', icon: <BarChart2 size={20} /> },
     ...(userLevel >= 2 ? [{ path: '/graph', name: 'Knowledge Graph', icon: <Network size={20} /> }] : []),
-    { path: '/account', name: 'Account Settings', icon: <User size={20} /> },
   ];
 
   const engineerTabs = [
@@ -58,8 +58,8 @@ export default function Sidebar({}: SidebarProps) {
   return (
     <div className="sidebar">
       <div className="sidebar-header">
-        <div style={{
-          width: '40px', height: '40px', borderRadius: '50%',
+        <div className="logo-icon" style={{
+          width: '40px', height: '40px', borderRadius: '12px',
           background: isEngineer ? 'linear-gradient(135deg, #10B981, #059669)' 
             : (isITAdmin || isSekretaris) ? 'linear-gradient(135deg, #F59E0B, #F43F5E)'
             : 'linear-gradient(135deg, #A855F7, #38BDF8)',
@@ -70,7 +70,9 @@ export default function Sidebar({}: SidebarProps) {
             : (isITAdmin || isSekretaris) ? <ShieldCheck size={22} color="white" /> 
             : <Scale size={22} color="white" />}
         </div>
+        <h2>LA LegPro</h2>
       </div>
+      
       <div className="sidebar-menu">
         {tabs.map(tab => (
           <NavLink
@@ -79,9 +81,27 @@ export default function Sidebar({}: SidebarProps) {
             title={tab.name}
             className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
           >
-            {tab.icon}
+            <div className="item-icon">{tab.icon}</div>
+            <span className="item-label">{tab.name}</span>
           </NavLink>
         ))}
+      </div>
+
+      <div className="sidebar-footer">
+        <div className="sidebar-user">
+          <div className="avatar-small">
+            {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
+          </div>
+          <div className="user-info">
+            <span className="user-name">{user?.username || 'User'}</span>
+            <span className="user-role">{user?.role || 'Pengguna'}</span>
+          </div>
+        </div>
+        
+        <button className="logout-btn" onClick={handleLogout}>
+          <LogOut size={20} className="item-icon" />
+          <span className="item-label">Logout</span>
+        </button>
       </div>
     </div>
   );

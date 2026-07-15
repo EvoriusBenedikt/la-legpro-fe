@@ -140,7 +140,7 @@ export default function AnalyzedDocumentsDashboard() {
   const fetchDocs = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/api/compliance-history', {
+      const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/compliance-history', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -161,7 +161,7 @@ export default function AnalyzedDocumentsDashboard() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('Hapus dokumen ini dari history?')) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/compliance-history/${id}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/compliance-history/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -179,7 +179,7 @@ export default function AnalyzedDocumentsDashboard() {
   const handleEditSave = async () => {
     if (!editDoc) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/compliance-history/${editDoc.id}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/compliance-history/${editDoc.id}`, {
         method: 'PUT',
         headers: { 
           'Authorization': `Bearer ${token}`,

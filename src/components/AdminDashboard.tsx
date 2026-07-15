@@ -100,7 +100,7 @@ export default function AdminDashboard() {
   const fetchDashboard = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/api/admin/dashboard', {
+      const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/admin/dashboard', {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store'
       });
@@ -110,7 +110,7 @@ export default function AdminDashboard() {
         setLastRefresh(new Date());
       }
       
-      const excRes = await fetch('http://localhost:8000/api/admin/kg-exclusions', {
+      const excRes = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/admin/kg-exclusions', {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store'
       });
@@ -133,7 +133,7 @@ export default function AdminDashboard() {
     if (!newExclusion.trim()) return;
     setAddingExclusion(true);
     try {
-      const res = await fetch('http://localhost:8000/api/admin/kg-exclusions', {
+      const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/admin/kg-exclusions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ entity_name: newExclusion })
@@ -155,7 +155,7 @@ export default function AdminDashboard() {
   const handleDeleteExclusion = async (id: number) => {
     if (!confirm('Hapus pengecualian ini?')) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/kg-exclusions/${id}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/admin/kg-exclusions/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });

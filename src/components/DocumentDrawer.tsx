@@ -59,7 +59,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
 
   // Use /api/pdf/ route (not StaticFiles /pdfs/) so CORS headers are applied correctly
   const pdfUrl = doc?.filename
-    ? `http://localhost:8000/api/pdf/${encodeURIComponent(doc.filename)}`
+    ? `${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/pdf/${encodeURIComponent(doc.filename)}`
     : null;
 
   // Effect 1: Run overview analysis when doc changes
@@ -72,7 +72,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
     setPasalData([]);
     setDeepError(null);
 
-    fetch('http://localhost:8000/api/analyze', {
+    fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -130,7 +130,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
     setIsDeepAnalyzing(true);
     setDeepError(null);
 
-    fetch('http://localhost:8000/api/analyze-pasals', {
+    fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/analyze-pasals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

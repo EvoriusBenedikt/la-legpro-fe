@@ -77,7 +77,7 @@ const NodeListCard = ({ node, kgData, onNavigate }: { node: KGNode, kgData: KGDa
   const connectedEdges = kgData.edges.filter(e => e.source_id === node.id || e.target_id === node.id);
   const connectedNodes = connectedEdges.map(e => {
     const otherId = e.source_id === node.id ? e.target_id : e.source_id;
-    return { node: kgData.nodes.find(n => n.id === otherId), rel: e.relation_type };
+    return { node: kgData.nodes.find(n => n.id === otherId), rel: e.relation };
   }).filter(n => n.node);
 
   return (
@@ -140,7 +140,6 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
   const [filterType, setFilterType] = useState('');
   const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
   const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
-  const [statsVisible, setStatsVisible] = useState(true);
   const [viewMode, setViewMode] = useState<'graph' | 'list'>('graph');
   const [activeScenario, setActiveScenario] = useState<string | null>(null);
   const [isScenarioLoading, setIsScenarioLoading] = useState<string | null>(null);
@@ -170,7 +169,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
     setScenarioNodes([]);
 
     try {
-      const res = await fetch(`http://localhost:8000/api/knowledge-graph/analyze-scenario`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/knowledge-graph/analyze-scenario`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scenario })
@@ -273,7 +272,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
       const params = new URLSearchParams();
       if (s) params.set('search', s);
       if (t) params.set('node_type', t);
-      const res = await fetch(`http://localhost:8000/api/knowledge-graph?${params}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/knowledge-graph?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {

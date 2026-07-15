@@ -31,7 +31,7 @@ function App() {
   return (
     <div className="layout-container dashboard-main">
       <div className="dashboard-content-row">
-        <Sidebar activeTab="" setActiveTab={() => {}} />
+        <Sidebar />
 
         <div className="dashboard-center" style={{ flex: 1, minWidth: 0 }}>
           <TopBar />

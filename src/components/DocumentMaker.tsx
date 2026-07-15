@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { UploadCloud, FileText, CheckCircle, AlertTriangle, AlertCircle, RefreshCw, ChevronDown, ChevronUp, XCircle } from 'lucide-react';
+import { FileText, RefreshCw, UploadCloud } from 'lucide-react';
 
 import ComplianceResultsViewer from './ComplianceResultsViewer';
 import type { ComplianceResult, ComplianceSummary } from './ComplianceResultsViewer';
@@ -38,7 +38,7 @@ export default function DocumentMaker() {
     formData.append('use_ocr', useOCR.toString());
 
     try {
-      const response = await fetch('http://localhost:8000/api/check-compliance', {
+      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/check-compliance', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -66,7 +66,7 @@ export default function DocumentMaker() {
     setIsSaving(true);
     setSaveSuccess(false);
     try {
-      const response = await fetch('http://localhost:8000/api/compliance-history', {
+      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/compliance-history', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
