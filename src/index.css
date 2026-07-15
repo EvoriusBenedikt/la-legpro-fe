@@ -13,6 +13,7 @@
   --accent-glow: rgba(168, 85, 247, 0.15);
   --accent-color: #A855F7;
   --accent-hover: #9333EA;
+  --gradient-brand: linear-gradient(135deg, #A855F7, #38BDF8);
   
   --success: #10B981;
   --success-bg: rgba(16, 185, 129, 0.1);
@@ -25,6 +26,13 @@
   
   --user-bubble: rgba(168, 85, 247, 0.15);
   --ai-bubble: rgba(30, 41, 59, 0.7);
+
+  --sidebar-width: 240px;
+  --topbar-height: 64px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 body {
   margin: 0;
@@ -124,31 +132,23 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Sidebar Styles */
 .sidebar {
-  width: 80px;
+  width: var(--sidebar-width);
   background: var(--bg-dark);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   padding-top: 24px;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   z-index: 50;
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
 }
 
-.sidebar:hover {
-  width: 250px;
-}
+
 
 .sidebar-header {
   margin-bottom: 32px;
   display: flex;
   align-items: center;
   padding: 0 20px;
-  min-width: 250px;
 }
 
 .sidebar-header .logo-icon {
@@ -161,14 +161,7 @@ h1, h2, h3, h4, h5, h6 {
   background: linear-gradient(to right, #fff, #94a3b8);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  opacity: 0;
-  transition: opacity 0.2s;
   white-space: nowrap;
-}
-
-.sidebar:hover .sidebar-header h2 {
-  opacity: 1;
-  transition-delay: 0.1s;
 }
 
 .sidebar-menu {
@@ -192,7 +185,6 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0 14px;
   position: relative;
   text-decoration: none;
-  min-width: 226px; /* 250 - 24 */
 }
 
 .sidebar-item:hover {
@@ -226,14 +218,7 @@ h1, h2, h3, h4, h5, h6 {
   margin-left: 16px;
   font-weight: 500;
   font-size: 0.95rem;
-  opacity: 0;
-  transition: opacity 0.2s;
   white-space: nowrap;
-}
-
-.sidebar:hover .sidebar-item .item-label {
-  opacity: 1;
-  transition-delay: 0.1s;
 }
 
 /* User Profile at Bottom */
@@ -255,7 +240,7 @@ h1, h2, h3, h4, h5, h6 {
   transition: all 0.2s;
 }
 
-.sidebar:hover .sidebar-user:hover {
+.sidebar-user:hover {
   background: rgba(255,255,255,0.05);
 }
 
@@ -275,16 +260,9 @@ h1, h2, h3, h4, h5, h6 {
 
 .user-info {
   margin-left: 12px;
-  opacity: 0;
-  transition: opacity 0.2s;
   display: flex;
   flex-direction: column;
   white-space: nowrap;
-}
-
-.sidebar:hover .user-info {
-  opacity: 1;
-  transition-delay: 0.1s;
 }
 
 .user-name {
@@ -2512,5 +2490,44 @@ h1, h2, h3, h4, h5, h6 {
   padding: 3px 10px;
   font-size: 0.75rem;
   font-weight: 500;
+}
+
+
+
+/* Markdown Styles */
+.markdown-body {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+.markdown-body p { margin-top: 0; margin-bottom: 16px; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  color: #fff;
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+.markdown-body ul, .markdown-body ol {
+  padding-left: 24px;
+  margin-bottom: 16px;
+}
+.markdown-body li { margin-bottom: 8px; }
+.markdown-body strong { color: #fff; font-weight: 600; }
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+.markdown-body th, .markdown-body td {
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+}
+.markdown-body th { background: rgba(255,255,255,0.05); }
+.markdown-body code {
+  background: rgba(0,0,0,0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--info);
 }
 

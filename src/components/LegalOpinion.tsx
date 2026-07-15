@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, ChevronDown, Bot, User, Search, Plus, Trash2, MoreHorizontal, Pencil } from 'lucide-react';
+import { Send, ChevronDown, Bot, User, Search, Plus, Trash2, MoreHorizontal, Pencil, FileText, Loader2, Link2, Sparkles } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface Source {
   id: string;
@@ -8,6 +10,7 @@ interface Source {
   sektor: string;
   judul: string;
   snippet: string;
+  rerank_score?: number;
 }
 
 interface Message {
@@ -67,7 +70,17 @@ export default function LegalOpinion() {
   const [menuConversationId, setMenuConversationId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '50px';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+    }
+  };
 
   useEffect(() => {
     if (!activeConversationId || !conversations.some(c => c.id === activeConversationId)) {
@@ -184,12 +197,17 @@ export default function LegalOpinion() {
     }));
     setInput('');
     setIsLoading(true);
+    setLoadingStep(1);
+    if (textareaRef.current) textareaRef.current.style.height = '50px';
 
     try {
       const apiMessages = [...existingMessages, userMessage].map(msg => ({
         role: msg.role === 'ai' ? 'assistant' : 'user',
         content: msg.content
       }));
+
+      setTimeout(() => { setIsLoading((loading) => { if (loading) setLoadingStep(2); return loading; }); }, 1500);
+      setTimeout(() => { setIsLoading((loading) => { if (loading) setLoadingStep(3); return loading; }); }, 3000);
 
       const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/chat', {
         method: 'POST',
@@ -239,12 +257,7 @@ export default function LegalOpinion() {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+
 
   return (
     <div className="view-container no-scroll">
@@ -340,13 +353,19 @@ export default function LegalOpinion() {
               <div key={msg.id} className={`message-item ${msg.role}`}>
                 <div className="bubble">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', opacity: 0.7, fontSize: '0.8rem', fontWeight: 600 }}>
-                    {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
+                    {msg.role === 'user' ? <User size={16} /> : <Bot size={16} color="var(--accent-color)" />}
                     {msg.role === 'user' ? 'Anda' : 'Legal Analyzer'}
                   </div>
 
-                  {msg.content.split('\n').map((line, i) => (
-                    <p key={i}>{line}</p>
-                  ))}
+                  {msg.role === 'user' ? (
+                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{msg.content}</div>
+                  ) : (
+                    <div className="markdown-body">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
 
                   {msg.sources && msg.sources.length > 0 && (
                     <div className="sources-container">
@@ -361,12 +380,15 @@ export default function LegalOpinion() {
             ))}
             {isLoading && (
               <div className="message-item ai">
-                <div className="bubble">
-                  <div className="typing-indicator">
-                    <span>Memproses dokumen legal</span>
-                    <div className="dot"></div>
-                    <div className="dot"></div>
-                    <div className="dot"></div>
+                <div className="bubble" style={{ background: 'transparent', border: 'none', padding: 0 }}>
+                  <div className="multi-loader">
+                    <Loader2 size={16} className="multi-loader-icon" color="var(--accent-color)" />
+                    <span>
+                      {loadingStep === 1 && "Running Hybrid Search (BM25 + Dense)..."}
+                      {loadingStep === 2 && "Cross-Encoder Reranking chunks..."}
+                      {loadingStep >= 3 && "Generating Contextual Analysis..."}
+                      {loadingStep === 0 && "Memproses..."}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -375,23 +397,42 @@ export default function LegalOpinion() {
           </div>
 
           <div className="input-area">
-            <div className="input-container">
-              <input
-                type="text"
+            <div className="input-container" style={{ alignItems: 'flex-end', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '8px', transition: 'border-color 0.2s' }}>
+              <textarea
+                ref={textareaRef}
                 className="chat-input"
-                placeholder="Tanyakan hukum OJK disini..."
+                placeholder="Tanyakan analisis regulasi (contoh: Apakah tanda tangan elektronik sah tanpa meterai?)..."
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
+                onChange={handleInput}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
                 disabled={isLoading}
+                style={{ 
+                  resize: 'none', 
+                  minHeight: '50px', 
+                  maxHeight: '200px', 
+                  overflowY: 'auto',
+                  border: 'none',
+                  background: 'transparent',
+                  padding: '12px',
+                  lineHeight: '1.5'
+                }}
               />
               <button
-                className="send-button"
+                className="send-button btn-primary"
                 onClick={handleSend}
                 disabled={!input.trim() || isLoading}
+                style={{ height: '40px', width: '40px', padding: 0, borderRadius: 'var(--radius-sm)', marginBottom: '4px', marginRight: '4px' }}
               >
-                <Send size={20} />
+                <Send size={18} />
               </button>
+            </div>
+            <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+              AI can make mistakes. Please verify important information with original documents.
             </div>
           </div>
         </div>
@@ -403,17 +444,49 @@ export default function LegalOpinion() {
 function SourceAccordion({ source }: { source: Source }) {
   const [isOpen, setIsOpen] = useState(false);
 
+  const rawScore = source.rerank_score ?? 0;
+  const percentScore = Math.min(100, Math.max(10, (rawScore + 5) * 10));
+
   return (
-    <div className={`source-item ${isOpen ? 'open' : ''}`}>
-      <button className="source-header" onClick={() => setIsOpen(!isOpen)}>
-        <div className="source-title">
-          <span className="source-tag">{source.sektor}</span>
-          {source.jenis} {source.nomor}
+    <div className={`evidence-card ${isOpen ? 'open' : ''}`}>
+      <div className="evidence-card-header" onClick={() => setIsOpen(!isOpen)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <FileText size={14} color="var(--text-secondary)" />
+            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+              {source.judul || `${source.jenis} ${source.nomor}`}
+            </span>
+          </div>
+          <div className="evidence-badges">
+            <span className={`jenis-badge ${source.jenis}`}>{source.jenis}</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{source.sektor}</span>
+            {source.rerank_score !== undefined && (
+              <span className="rerank-badge">
+                <Sparkles size={12} />
+                Reranked: {source.rerank_score.toFixed(2)}
+              </span>
+            )}
+          </div>
         </div>
-        <ChevronDown size={16} className="source-icon" />
-      </button>
-      <div className="source-content">
-        {source.snippet}
+        <ChevronDown size={18} color="var(--text-secondary)" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.3s' }} />
+      </div>
+      
+      {source.rerank_score !== undefined && (
+        <div className="relevance-bar-container">
+          <div className="relevance-bar" style={{ width: `${percentScore}%` }} />
+        </div>
+      )}
+
+      <div className="evidence-content">
+        <div className="evidence-snippet">
+          {source.snippet}
+        </div>
+        <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+          <button style={{ background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '6px 12px', fontSize: '0.75rem', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Link2 size={12} />
+            Buka Dokumen
+          </button>
+        </div>
       </div>
     </div>
   );

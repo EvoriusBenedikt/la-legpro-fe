@@ -1,13 +1,14 @@
 import axios from 'axios';
+import { API_BASE } from '../config';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || (import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '',
+  baseURL: API_BASE,
 });
 
 // Request interceptor to attach JWT token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('la_token');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -24,8 +25,8 @@ api.interceptors.response.use(
   (error) => {
     if (error.response && error.response.status === 401) {
       // Clear token and redirect to login if unauthorized
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      localStorage.removeItem('la_token');
+      localStorage.removeItem('la_user');
       window.dispatchEvent(new Event('auth-error'));
     }
     return Promise.reject(error);

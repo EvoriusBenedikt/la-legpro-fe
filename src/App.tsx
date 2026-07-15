@@ -36,7 +36,13 @@ function App() {
         <div className="dashboard-center" style={{ flex: 1, minWidth: 0 }}>
           <TopBar />
           <div className="main-content" style={{ padding: 0, marginTop: '24px' }}>
-            <Suspense fallback={<div className="loading-state">Loading Module...</div>}>
+            <Suspense fallback={
+              <div style={{ padding: '24px' }}>
+                <div className="skeleton" style={{ height: '40px', width: '30%', marginBottom: '24px' }} />
+                <div className="skeleton" style={{ height: '200px', width: '100%', marginBottom: '16px' }} />
+                <div className="skeleton" style={{ height: '200px', width: '100%' }} />
+              </div>
+            }>
             <div className="tab-panel--active">
               <Routes>
                 {/* Role-based default redirects */}
