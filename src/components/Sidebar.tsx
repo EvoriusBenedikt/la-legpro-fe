@@ -70,7 +70,7 @@ export default function Sidebar() {
             : (isITAdmin || isSekretaris) ? <ShieldCheck size={22} color="white" /> 
             : <Scale size={22} color="white" />}
         </div>
-        <h2>LA LegPro</h2>
+        <h2>LA Legal-Analyzer</h2>
       </div>
       
       <div className="sidebar-menu">

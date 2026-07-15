@@ -30,7 +30,7 @@ export default function TopBar() {
     <div className="topbar glass-panel" style={{ borderRadius: '0 0 0 24px', margin: '0 0 0 24px', borderTop: 'none', borderRight: 'none' }}>
       <div className="topbar-left">
         <div className="breadcrumb">
-          <span className="breadcrumb-brand">LA LegPro</span>
+          <span className="breadcrumb-brand">LA Legal-Analyzer</span>
           <span className="breadcrumb-separator">/</span>
           <span className="breadcrumb-current">{getPageTitle()}</span>
         </div>
