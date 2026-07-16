@@ -902,17 +902,19 @@ export default function LegalRepository() {
             <form onSubmit={handleShareSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <label style={{ fontSize: '0.9rem', color: '#94a3b8' }}>Pilih Pengguna *</label>
-                <select 
+                <input 
                   required
+                  list="users-list"
                   value={shareUser}
                   onChange={(e) => setShareUser(e.target.value)}
+                  placeholder="Ketik ID, Username, atau Email..."
                   style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '10px', color: '#f8fafc' }}
-                >
-                  <option value="" disabled>Pilih pengguna...</option>
+                />
+                <datalist id="users-list">
                   {usersList.map(u => (
-                    <option key={u.id} value={u.id}>{u.username} ({u.role})</option>
+                    <option key={u.id} value={u.id}>{u.username} - {u.email || 'Tanpa Email'} ({u.role})</option>
                   ))}
-                </select>
+                </datalist>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <label style={{ fontSize: '0.9rem', color: '#94a3b8' }}>Alasan *</label>

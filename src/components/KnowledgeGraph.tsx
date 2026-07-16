@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Network } from 'vis-network/standalone';
 import { DataSet } from 'vis-data';
+import { toPng } from 'html-to-image';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../config';
 import {
   GitFork, Search, RefreshCw, Info, X, Filter, Loader2,
   Database, Building2, Tag, FileText, ZoomIn, ZoomOut, Maximize2,
-  List, Network as NetworkIcon
+  List, Network as NetworkIcon, Download
 } from 'lucide-react';
 
 interface KGNode {
@@ -169,7 +171,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
     setScenarioNodes([]);
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/knowledge-graph/analyze-scenario`, {
+      const res = await fetch(`${API_BASE}/api/knowledge-graph/analyze-scenario`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scenario })
@@ -272,7 +274,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
       const params = new URLSearchParams();
       if (s) params.set('search', s);
       if (t) params.set('node_type', t);
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/knowledge-graph?${params}`, {
+      const res = await fetch(`${API_BASE}/api/knowledge-graph?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -470,6 +472,20 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
     fetchGraph('', '');
   };
 
+  const exportToPng = useCallback(() => {
+    if (containerRef.current === null) return;
+    toPng(containerRef.current, { cacheBust: true, backgroundColor: '#0f172a' })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = `knowledge-graph.png`;
+        link.href = dataUrl;
+        link.click();
+      })
+      .catch((err) => {
+        console.error('Failed to export graph', err);
+      });
+  }, [containerRef]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
       {/* Header */}
@@ -553,6 +569,16 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
             display: 'flex', alignItems: 'center',
           }}>
             <RefreshCw size={14} />
+          </button>
+
+          <button
+            type="button"
+            onClick={exportToPng}
+            className="button-secondary"
+            style={{ padding: '6px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '12px' }}
+          >
+            <Download size={14} />
+            Export PNG
           </button>
         </form>
       </div>

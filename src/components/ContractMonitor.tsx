@@ -132,6 +132,27 @@ export default function ContractMonitor() {
     finally { setLoadingViewId(null); }
   };
 
+  const handleDownloadCalendar = async (doc: AnalyzedDocument) => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/compliance-history/${doc.id}/calendar`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `contract_expiry_${doc.company_name?.replace(/\s+/g, '_') || doc.id}.ics`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } else {
+        alert('Gagal mengunduh kalender.');
+      }
+    } catch (e) { console.error(e); }
+  };
+
   // Compute KPIs
   const total = documents.length;
   const expired = documents.filter(d => { const e = getExpiryInfo(d.expiration_date); return e.status === 'expired'; }).length;
@@ -290,6 +311,12 @@ export default function ContractMonitor() {
                           }}>
                             {loadingViewId === doc.id ? '...' : <><Eye size={13} />{isViewing ? 'Tutup' : 'Lihat Analisis'}</>}
                           </button>
+
+                          <button onClick={() => handleDownloadCalendar(doc)} title="Tambah ke Kalender" style={{
+                            width: 32, height: 32, borderRadius: '8px', background: 'rgba(59,130,246,0.08)',
+                            border: '1px solid rgba(59,130,246,0.2)', color: '#60a5fa', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                          }}><Calendar size={14} /></button>
 
                           <button onClick={() => { setEditDoc(doc); setEditCompanyName(doc.company_name || ''); setEditExpirationDate(doc.expiration_date || ''); }} title="Edit" style={{
                             width: 32, height: 32, borderRadius: '8px', background: 'rgba(255,255,255,0.06)',
