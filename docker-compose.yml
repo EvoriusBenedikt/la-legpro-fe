@@ -5,16 +5,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Baked into the bundle at build time (Vite static replacement).
+        # Override per environment, e.g. VITE_API_URL=http://localhost:8000 docker compose up --build
+        VITE_API_URL: ${VITE_API_URL:-https://legal-analyzer.lintasarta.dev}
     container_name: legpro-frontend
     ports:
-      - "5173:5173"
-    volumes:
-      # Mount source for Vite HMR (Hot Module Replacement)
-      - ./src:/app/src
-      - ./public:/app/public
-      - ./index.html:/app/index.html
-      - ./vite.config.ts:/app/vite.config.ts
-    environment:
-      # Vite requires CHOKIDAR_USEPOLLING=true in some Docker Windows environments for HMR
-      - CHOKIDAR_USEPOLLING=true
-      - VITE_API_URL=http://localhost:8000
+      - "80:80"
+    # NOTE: no bind-mounts, no CHOKIDAR/HMR vars — this serves the production
+    # build via nginx. For local dev with HMR, run `npm run dev` directly instead.

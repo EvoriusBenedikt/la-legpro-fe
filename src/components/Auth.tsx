@@ -24,6 +24,17 @@ export default function Auth() {
       return;
     }
 
+    if (!isLogin) {
+      if (!/\d/.test(password)) {
+        setError("Password must contain at least one number");
+        return;
+      }
+      if (!/[^A-Za-z0-9]/.test(password)) {
+        setError("Password must contain at least one symbol");
+        return;
+      }
+    }
+
     setLoading(true);
 
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
@@ -65,7 +76,7 @@ export default function Auth() {
 
           <div className="auth-features" style={{ marginTop: '40px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-              <div style={{ padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
+              <div style={{ padding: '10px', background: 'rgba(0,0,0,0.05)', borderRadius: '12px' }}>
                 <ShieldCheck size={24} color="var(--accent-color)" />
               </div>
               <div>
@@ -75,7 +86,7 @@ export default function Auth() {
             </div>
             
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-              <div style={{ padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
+              <div style={{ padding: '10px', background: 'rgba(0,0,0,0.05)', borderRadius: '12px' }}>
                 <Brain size={24} color="#38BDF8" />
               </div>
               <div>
@@ -85,7 +96,7 @@ export default function Auth() {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-              <div style={{ padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
+              <div style={{ padding: '10px', background: 'rgba(0,0,0,0.05)', borderRadius: '12px' }}>
                 <Scale size={24} color="#10B981" />
               </div>
               <div>
@@ -169,6 +180,11 @@ export default function Auth() {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+              {!isLogin && (
+                <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
+                  Password must contain at least one number and one symbol.
+                </small>
+              )}
             </div>
 
             {!isLogin && (

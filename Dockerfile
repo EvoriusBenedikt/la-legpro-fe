@@ -1,16 +1,27 @@
-FROM node:20-alpine
+# ---- Build stage: compile the React app to static files ----
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# Copy package files and install dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
-# Copy all source files
 COPY . .
 
-# Expose Vite's default dev port
-EXPOSE 5173
+# Vite bakes VITE_* vars into the bundle AT BUILD TIME (runtime env cannot change them).
+# Pass the production API URL here, e.g.:
+#   docker build --build-arg VITE_API_URL=https://legal-analyzer.lintasarta.dev .
+ARG VITE_API_URL=https://legal-analyzer.lintasarta.dev
+ENV VITE_API_URL=$VITE_API_URL
 
-# Run the dev server and expose it on the host network
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+RUN npm run build
+
+# ---- Serve stage: production static server (no Vite dev server, no HMR websocket) ----
+FROM nginx:alpine
+
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
