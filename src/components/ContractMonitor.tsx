@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ComplianceResultsViewer from './ComplianceResultsViewer';
+import { API_BASE } from '../config';
 
 interface AnalyzedDocument {
   id: string;
@@ -33,7 +34,7 @@ interface ExpiryInfo {
 function getExpiryInfo(expiration_date: string | null): ExpiryInfo {
   if (!expiration_date) return {
     status: 'none', label: 'Tidak terdeteksi', daysLeft: null,
-    badgeColor: '#64748b', badgeBg: 'rgba(100,116,139,0.15)', badgeBorder: 'rgba(100,116,139,0.3)',
+    badgeColor: 'var(--text-secondary)', badgeBg: 'rgba(100,116,139,0.15)', badgeBorder: 'rgba(100,116,139,0.3)',
     notifText: '', notifColor: ''
   };
 
@@ -44,22 +45,22 @@ function getExpiryInfo(expiration_date: string | null): ExpiryInfo {
 
   if (daysLeft < 0) return {
     status: 'expired', label: `Kadaluarsa ${Math.abs(daysLeft)} hari lalu`, daysLeft,
-    badgeColor: '#f87171', badgeBg: 'rgba(239,68,68,0.15)', badgeBorder: 'rgba(239,68,68,0.4)',
-    notifText: `Dokumen telah KEDALUWARSA sejak ${dateStr}`, notifColor: '#f87171'
+    badgeColor: '#dc2626', badgeBg: 'rgba(239,68,68,0.15)', badgeBorder: 'rgba(239,68,68,0.4)',
+    notifText: `Dokumen telah KEDALUWARSA sejak ${dateStr}`, notifColor: '#dc2626'
   };
   if (daysLeft <= 7) return {
     status: 'critical', label: `${daysLeft} hari lagi`, daysLeft,
-    badgeColor: '#fb923c', badgeBg: 'rgba(249,115,22,0.15)', badgeBorder: 'rgba(249,115,22,0.4)',
-    notifText: `Kurang dari 1 minggu — kedaluwarsa ${dateStr}`, notifColor: '#fb923c'
+    badgeColor: '#ea580c', badgeBg: 'rgba(249,115,22,0.15)', badgeBorder: 'rgba(249,115,22,0.4)',
+    notifText: `Kurang dari 1 minggu — kedaluwarsa ${dateStr}`, notifColor: '#ea580c'
   };
   if (daysLeft <= 31) return {
     status: 'warning', label: `${daysLeft} hari lagi`, daysLeft,
-    badgeColor: '#fbbf24', badgeBg: 'rgba(251,191,36,0.12)', badgeBorder: 'rgba(251,191,36,0.35)',
-    notifText: `Kurang dari 1 bulan — kedaluwarsa ${dateStr}`, notifColor: '#fbbf24'
+    badgeColor: '#d97706', badgeBg: 'rgba(251,191,36,0.12)', badgeBorder: 'rgba(251,191,36,0.35)',
+    notifText: `Kurang dari 1 bulan — kedaluwarsa ${dateStr}`, notifColor: '#d97706'
   };
   return {
     status: 'active', label: dateStr, daysLeft,
-    badgeColor: '#34d399', badgeBg: 'rgba(52,211,153,0.12)', badgeBorder: 'rgba(52,211,153,0.3)',
+    badgeColor: '#059669', badgeBg: 'rgba(52,211,153,0.12)', badgeBorder: 'rgba(52,211,153,0.3)',
     notifText: '', notifColor: ''
   };
 }
@@ -79,7 +80,7 @@ export default function ContractMonitor() {
   const fetchDocs = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/compliance-history', {
+      const res = await fetch(API_BASE + '/api/compliance-history', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -97,7 +98,7 @@ export default function ContractMonitor() {
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Hapus dokumen ini dari monitoring?')) return;
-    const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/compliance-history/${id}`, {
+    const res = await fetch(`${API_BASE}/api/compliance-history/${id}`, {
       method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
     });
     if (res.ok) setDocuments(prev => prev.filter(d => d.id !== id));
@@ -106,7 +107,7 @@ export default function ContractMonitor() {
 
   const handleEditSave = async () => {
     if (!editDoc) return;
-    const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/compliance-history/${editDoc.id}`, {
+    const res = await fetch(`${API_BASE}/api/compliance-history/${editDoc.id}`, {
       method: 'PUT',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ company_name: editCompanyName || null, expiration_date: editExpirationDate || null })
@@ -123,7 +124,7 @@ export default function ContractMonitor() {
     if (viewingDoc?.id === doc.id) { setViewingDoc(null); return; }
     setLoadingViewId(doc.id);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/compliance-history/${doc.id}`, {
+      const res = await fetch(`${API_BASE}/api/compliance-history/${doc.id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) setViewingDoc(await res.json());
@@ -134,7 +135,7 @@ export default function ContractMonitor() {
 
   const handleDownloadCalendar = async (doc: AnalyzedDocument) => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/compliance-history/${doc.id}/calendar`, {
+      const res = await fetch(`${API_BASE}/api/compliance-history/${doc.id}/calendar`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -188,7 +189,7 @@ export default function ContractMonitor() {
           <BarChart2 size={24} color="#a855f7" />
           <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 700 }}>Contract Monitor</h2>
         </div>
-        <p style={{ color: '#64748b', margin: 0 }}>Pantau status dan kedaluwarsa seluruh dokumen analisis Anda.</p>
+        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Pantau status dan kedaluwarsa seluruh dokumen analisis Anda.</p>
       </div>
 
       {/* KPI Cards */}
@@ -200,15 +201,15 @@ export default function ContractMonitor() {
           { label: 'Kedaluwarsa', value: expired, icon: <XCircle size={20} />, color: '#f87171', bg: 'rgba(239,68,68,0.1)' },
         ].map(kpi => (
           <div key={kpi.label} style={{
-            background: 'rgba(30,41,59,0.6)', borderRadius: '16px', padding: '20px',
+            background: 'var(--bg-element)', borderRadius: '16px', padding: '20px',
             border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: '16px'
           }}>
             <div style={{ width: 44, height: 44, borderRadius: '12px', background: kpi.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: kpi.color, flexShrink: 0 }}>
               {kpi.icon}
             </div>
             <div>
-              <div style={{ fontSize: '1.7rem', fontWeight: 700, lineHeight: 1.1, color: 'white' }}>{kpi.value}</div>
-              <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '2px' }}>{kpi.label}</div>
+              <div style={{ fontSize: '1.7rem', fontWeight: 700, lineHeight: 1.1, color: 'var(--text-primary)' }}>{kpi.value}</div>
+              <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{kpi.label}</div>
             </div>
           </div>
         ))}
@@ -217,26 +218,26 @@ export default function ContractMonitor() {
       {/* Search + Filter */}
       <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
-          <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+          <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
           <input
             type="text"
             placeholder="Cari nama perusahaan atau file..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ width: '100%', padding: '10px 12px 10px 36px', background: 'rgba(30,41,59,0.6)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#f1f5f9', fontSize: '0.9rem', boxSizing: 'border-box' }}
+            style={{ width: '100%', padding: '10px 12px 10px 36px', background: 'var(--bg-element)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#f1f5f9', fontSize: '0.9rem', boxSizing: 'border-box' }}
           />
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {filterTabs.map(tab => (
             <button key={tab.id} onClick={() => setFilterTab(tab.id)} style={{
               padding: '8px 14px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
-              background: filterTab === tab.id ? tab.color : 'rgba(30,41,59,0.6)',
+              background: filterTab === tab.id ? tab.color : 'var(--bg-card)',
               border: filterTab === tab.id ? 'none' : '1px solid rgba(255,255,255,0.08)',
-              color: filterTab === tab.id ? 'white' : '#94a3b8',
+              color: filterTab === tab.id ? 'white' : 'var(--text-secondary)',
               display: 'flex', alignItems: 'center', gap: '6px'
             }}>
               {tab.label}
-              <span style={{ fontSize: '0.75rem', padding: '1px 6px', borderRadius: '999px', background: filterTab === tab.id ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.08)' }}>
+              <span style={{ fontSize: '0.75rem', padding: '1px 6px', borderRadius: '999px', background: filterTab === tab.id ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)' }}>
                 {tab.count}
               </span>
             </button>
@@ -246,9 +247,9 @@ export default function ContractMonitor() {
 
       {/* Document List */}
       {isLoading ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: '#64748b' }}>Memuat dokumen...</div>
+        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-secondary)' }}>Memuat dokumen...</div>
       ) : filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: '#64748b' }}>
+        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-secondary)' }}>
           <TrendingUp size={40} style={{ opacity: 0.3, marginBottom: '12px' }} />
           <p>Tidak ada dokumen yang sesuai.</p>
         </div>
@@ -260,7 +261,7 @@ export default function ContractMonitor() {
             return (
               <div key={doc.id}>
                 <div style={{
-                  background: 'rgba(30,41,59,0.5)', borderRadius: '14px', padding: '18px 20px',
+                  background: 'var(--bg-element)', borderRadius: '14px', padding: '18px 20px',
                   border: expiry.status !== 'active' && expiry.status !== 'none'
                     ? `1px solid ${expiry.badgeBorder}` : '1px solid rgba(255,255,255,0.06)',
                   transition: 'all 0.2s',
@@ -273,15 +274,15 @@ export default function ContractMonitor() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
                         <div style={{ minWidth: 0 }}>
-                          <p style={{ margin: 0, fontWeight: 600, color: 'white', fontSize: '0.95rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '480px' }}>
+                          <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.95rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '480px' }}>
                             {doc.filename}
                           </p>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '6px', flexWrap: 'wrap' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#94a3b8', fontSize: '0.83rem' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--text-secondary)', fontSize: '0.83rem' }}>
                               <Building size={13} />
                               {doc.company_name || <em style={{ opacity: 0.6 }}>Tidak terdeteksi</em>}
                             </span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#94a3b8', fontSize: '0.83rem' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--text-secondary)', fontSize: '0.83rem' }}>
                               <Calendar size={13} />
                               Dianalisis: {new Date(doc.created_at).toLocaleDateString('id-ID')}
                             </span>
@@ -304,9 +305,9 @@ export default function ContractMonitor() {
 
                           <button onClick={() => handleView(doc)} title="Lihat Analisis" style={{
                             padding: '6px 12px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 500,
-                            background: isViewing ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.06)',
-                            border: isViewing ? '1px solid #a855f7' : '1px solid rgba(255,255,255,0.1)',
-                            color: isViewing ? '#d8b4fe' : '#94a3b8', cursor: 'pointer',
+                            background: isViewing ? 'rgba(168,85,247,0.2)' : 'rgba(0,0,0,0.05)',
+                            border: isViewing ? '1px solid #a855f7' : '1px solid rgba(0,0,0,0.1)',
+                            color: isViewing ? '#d8b4fe' : 'var(--text-secondary)', cursor: 'pointer',
                             display: 'flex', alignItems: 'center', gap: '6px'
                           }}>
                             {loadingViewId === doc.id ? '...' : <><Eye size={13} />{isViewing ? 'Tutup' : 'Lihat Analisis'}</>}
@@ -319,8 +320,8 @@ export default function ContractMonitor() {
                           }}><Calendar size={14} /></button>
 
                           <button onClick={() => { setEditDoc(doc); setEditCompanyName(doc.company_name || ''); setEditExpirationDate(doc.expiration_date || ''); }} title="Edit" style={{
-                            width: 32, height: 32, borderRadius: '8px', background: 'rgba(255,255,255,0.06)',
-                            border: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8', cursor: 'pointer',
+                            width: 32, height: 32, borderRadius: '8px', background: 'rgba(0,0,0,0.05)',
+                            border: '1px solid rgba(0,0,0,0.1)', color: 'var(--text-secondary)', cursor: 'pointer',
                             display: 'flex', alignItems: 'center', justifyContent: 'center'
                           }}><Edit2 size={14} /></button>
 
@@ -347,10 +348,10 @@ export default function ContractMonitor() {
 
                 {/* Inline viewer */}
                 {isViewing && viewingDoc && (
-                  <div style={{ background: 'rgba(15,23,42,0.6)', borderRadius: '14px', border: '1px solid rgba(168,85,247,0.2)', marginTop: '4px', padding: '0 12px 24px' }}>
+                  <div style={{ background: 'var(--bg-element)', borderRadius: '14px', border: '1px solid rgba(168,85,247,0.2)', marginTop: '4px', padding: '0 12px 24px' }}>
                     <button onClick={() => setViewingDoc(null)} style={{
                       display: 'flex', alignItems: 'center', gap: '6px', margin: '16px 0 8px',
-                      background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.85rem'
+                      background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.85rem'
                     }}>
                       <X size={14} /> Tutup Hasil Analisis
                     </button>
@@ -371,21 +372,21 @@ export default function ContractMonitor() {
       {/* Edit Modal */}
       {editDoc && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ background: '#1e293b', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '440px', border: '1px solid #334155' }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '440px', border: '1px solid #334155' }}>
             <h3 style={{ margin: '0 0 20px', color: 'white', fontSize: '1.1rem' }}>Edit Metadata Dokumen</h3>
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.88rem', color: '#94a3b8' }}>Nama Perusahaan</label>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.88rem', color: 'var(--text-secondary)' }}>Nama Perusahaan</label>
               <input type="text" value={editCompanyName} onChange={e => setEditCompanyName(e.target.value)}
-                style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '10px 12px', color: 'white', boxSizing: 'border-box' }}
+                style={{ width: '100%', background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '10px 12px', color: 'white', boxSizing: 'border-box' }}
                 placeholder="Contoh: PT Lintasarta & PT Global Prima" />
             </div>
             <div style={{ marginBottom: '24px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.88rem', color: '#94a3b8' }}>Tanggal Kadaluarsa</label>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.88rem', color: 'var(--text-secondary)' }}>Tanggal Kadaluarsa</label>
               <input type="date" value={editExpirationDate} onChange={e => setEditExpirationDate(e.target.value)}
-                style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '10px 12px', color: 'white', boxSizing: 'border-box' }} />
+                style={{ width: '100%', background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '10px 12px', color: 'white', boxSizing: 'border-box' }} />
             </div>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setEditDoc(null)} style={{ background: 'transparent', border: '1px solid #334155', color: '#cbd5e1', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer' }}>Batal</button>
+              <button onClick={() => setEditDoc(null)} style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer' }}>Batal</button>
               <button onClick={handleEditSave} style={{ background: '#8b5cf6', border: 'none', color: 'white', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Simpan</button>
             </div>
           </div>

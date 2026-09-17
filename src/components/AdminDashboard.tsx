@@ -5,6 +5,7 @@ import {
   Shield, Database, FileText, AlertTriangle, CheckCircle2,
   Clock, Users, Activity, Server, Eye, Lock, XCircle, RefreshCw
 } from 'lucide-react';
+import { API_BASE } from '../config';
 
 interface DashboardData {
   doc_status: Record<string, number>;
@@ -70,16 +71,16 @@ const StatusCard = ({ label, value, icon, color, totalDocs, docs = [] }: any) =>
           placeholder={`Cari regulasi ${label.toLowerCase()}...`}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ width: '100%', padding: '8px 12px', background: 'rgba(0,0,0,0.2)', border: `1px solid ${color}55`, borderRadius: '6px', color: '#fff', marginTop: '16px', marginBottom: '12px', fontSize: '0.85rem' }}
+          style={{ width: '100%', padding: '8px 12px', background: 'var(--bg-element)', border: `1px solid ${color}55`, borderRadius: '6px', color: 'var(--text-primary)', marginTop: '16px', marginBottom: '12px', fontSize: '0.85rem' }}
         />
         <div className="custom-scrollbar" style={{ maxHeight: '200px', flexGrow: 1, overflowY: 'auto' }}>
           {filteredDocs.length > 0 ? filteredDocs.map((d: any, i: number) => (
-            <div key={i} style={{ padding: '8px 0', borderBottom: i < filteredDocs.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
-              <div style={{ fontSize: '0.85rem', color: '#e2e8f0', fontWeight: 500, lineHeight: '1.4' }}>{d.judul}</div>
-              {d.nomor && <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>{d.nomor}</div>}
+            <div key={i} style={{ padding: '8px 0', borderBottom: i < filteredDocs.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 500, lineHeight: '1.4' }}>{d.judul}</div>
+              {d.nomor && <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{d.nomor}</div>}
             </div>
           )) : (
-            <div style={{ fontSize: '0.8rem', color: '#64748b', textAlign: 'center', padding: '10px 0' }}>Tidak ada dokumen ditemukan</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center', padding: '10px 0' }}>Tidak ada dokumen ditemukan</div>
           )}
         </div>
       </div>
@@ -100,7 +101,7 @@ export default function AdminDashboard() {
   const fetchDashboard = async () => {
     setLoading(true);
     try {
-      const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/admin/dashboard', {
+      const res = await fetch(API_BASE + '/api/admin/dashboard', {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store'
       });
@@ -110,7 +111,7 @@ export default function AdminDashboard() {
         setLastRefresh(new Date());
       }
       
-      const excRes = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/admin/kg-exclusions', {
+      const excRes = await fetch(API_BASE + '/api/admin/kg-exclusions', {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store'
       });
@@ -133,7 +134,7 @@ export default function AdminDashboard() {
     if (!newExclusion.trim()) return;
     setAddingExclusion(true);
     try {
-      const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/admin/kg-exclusions', {
+      const res = await fetch(API_BASE + '/api/admin/kg-exclusions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ entity_name: newExclusion })
@@ -155,7 +156,7 @@ export default function AdminDashboard() {
   const handleDeleteExclusion = async (id: number) => {
     if (!confirm('Hapus pengecualian ini?')) return;
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/admin/kg-exclusions/${id}`, {
+      const res = await fetch(`${API_BASE}/api/admin/kg-exclusions/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -307,7 +308,7 @@ export default function AdminDashboard() {
                     </span>
                     <span style={{ fontWeight: 600, color: KLASIFIKASI_COLORS[klas] ?? 'var(--text-primary)' }}>{count}</span>
                   </div>
-                  <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px' }}>
+                  <div style={{ height: '6px', background: 'rgba(0,0,0,0.05)', borderRadius: '3px' }}>
                     <div style={{
                       height: '100%', borderRadius: '3px',
                       background: KLASIFIKASI_COLORS[klas] ?? '#94A3B8',
@@ -341,7 +342,7 @@ export default function AdminDashboard() {
                         color: '#38BDF8', fontSize: '0.85rem', fontWeight: 600,
                       }}>{item.count}</span>
                     </div>
-                    <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '3px' }}>
+                    <div style={{ height: '6px', background: 'rgba(0,0,0,0.05)', borderRadius: '3px' }}>
                       <div style={{
                         height: '100%', borderRadius: '3px',
                         background: '#38BDF8',
@@ -367,13 +368,13 @@ export default function AdminDashboard() {
                 placeholder="Nama entitas untuk dikecualikan (misal: 'Menteri Hukum', 'Kementerian X')..."
                 value={newExclusion}
                 onChange={(e) => setNewExclusion(e.target.value)}
-                style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.05)', color: 'white' }}
+                style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.05)', color: 'var(--text-primary)' }}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddExclusion()}
               />
               <button
                 onClick={handleAddExclusion}
                 disabled={addingExclusion}
-                style={{ background: '#F43F5E', color: 'white', border: 'none', padding: '0 20px', borderRadius: '8px', cursor: addingExclusion ? 'wait' : 'pointer', fontWeight: 600 }}
+                style={{ background: '#F43F5E', color: 'var(--text-primary)', border: 'none', padding: '0 20px', borderRadius: '8px', cursor: addingExclusion ? 'wait' : 'pointer', fontWeight: 600 }}
               >
                 {addingExclusion ? 'Menambahkan...' : 'Tambah Pengecualian'}
               </button>
@@ -391,7 +392,7 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody>
                   {exclusions.map(exc => (
-                    <tr key={exc.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                    <tr key={exc.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
                       <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>{exc.id}</td>
                       <td style={{ padding: '10px 12px', color: 'var(--text-primary)', fontWeight: 500 }}>{exc.entity_name}</td>
                       <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>{new Date(exc.created_at).toLocaleString('id-ID')}</td>
@@ -443,7 +444,7 @@ export default function AdminDashboard() {
                   </thead>
                   <tbody>
                     {data.audit_logs.map(log => (
-                      <tr key={log.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                      <tr key={log.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.04)' }}>
                         <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
                           {new Date(log.timestamp).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}
                         </td>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { MoreVertical, Edit2, Trash2, Calendar, Building, FileCheck, AlertTriangle, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { API_BASE } from '../config';
 
 interface AnalyzedDocument {
   id: string;
@@ -32,7 +33,7 @@ function getExpiryInfo(expiration_date: string | null): ExpiryInfo {
       status: 'none',
       label: 'Tidak terdeteksi',
       daysLeft: null,
-      badgeColor: '#64748b',
+      badgeColor: 'var(--text-secondary)',
       badgeBg: 'rgba(100, 116, 139, 0.15)',
       badgeBorder: 'rgba(100, 116, 139, 0.3)',
       glowColor: 'transparent',
@@ -140,7 +141,7 @@ export default function AnalyzedDocumentsDashboard() {
   const fetchDocs = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/compliance-history', {
+      const res = await fetch(API_BASE + '/api/compliance-history', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -161,7 +162,7 @@ export default function AnalyzedDocumentsDashboard() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('Hapus dokumen ini dari history?')) return;
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/compliance-history/${id}`, {
+      const res = await fetch(`${API_BASE}/api/compliance-history/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -179,7 +180,7 @@ export default function AnalyzedDocumentsDashboard() {
   const handleEditSave = async () => {
     if (!editDoc) return;
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/compliance-history/${editDoc.id}`, {
+      const res = await fetch(`${API_BASE}/api/compliance-history/${editDoc.id}`, {
         method: 'PUT',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -237,7 +238,7 @@ export default function AnalyzedDocumentsDashboard() {
                   marginBottom: '12px',
                   border: expiry.status !== 'none' && expiry.status !== 'upcoming'
                     ? `1px solid ${expiry.badgeBorder}`
-                    : '1px solid rgba(255,255,255,0.05)',
+                    : '1px solid rgba(0,0,0,0.05)',
                   position: 'relative',
                   transition: 'all 0.2s ease',
                 }}
@@ -255,12 +256,12 @@ export default function AnalyzedDocumentsDashboard() {
                   <div className="relative">
                     <button
                       onClick={() => setOpenDropdownId(openDropdownId === doc.id ? null : doc.id)}
-                      style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+                      style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '4px' }}
                     >
                       <MoreVertical size={16} />
                     </button>
                     {openDropdownId === doc.id && (
-                      <div style={{ position: 'absolute', right: 0, top: '24px', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', zIndex: 10, boxShadow: '0 4px 6px rgba(0,0,0,0.3)', width: '120px', overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', right: 0, top: '24px', background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', zIndex: 10, boxShadow: '0 4px 6px rgba(0,0,0,0.3)', width: '120px', overflow: 'hidden' }}>
                         <button
                           onClick={() => {
                             setEditDoc(doc);
@@ -284,7 +285,7 @@ export default function AnalyzedDocumentsDashboard() {
                 </div>
 
                 {/* Meta Row */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem', color: '#94a3b8', width: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.85rem', color: 'var(--text-secondary)', width: '100%' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Building size={14} />
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -296,7 +297,7 @@ export default function AnalyzedDocumentsDashboard() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <Calendar size={14} />
-                      <span style={{ color: '#64748b' }}>Kadaluarsa:</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>Kadaluarsa:</span>
                     </div>
                     {doc.expiration_date ? (
                       <span style={{
@@ -347,27 +348,27 @@ export default function AnalyzedDocumentsDashboard() {
       {/* Edit Modal */}
       {editDoc && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ background: '#1e293b', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '400px', border: '1px solid #334155' }}>
+          <div style={{ background: 'var(--bg-card)', borderRadius: '12px', padding: '24px', width: '100%', maxWidth: '400px', border: '1px solid #334155' }}>
             <h3 style={{ margin: '0 0 16px 0', color: 'white' }}>Edit Metadata Dokumen</h3>
 
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: '#94a3b8' }}>Nama Perusahaan (Para Pihak)</label>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Nama Perusahaan (Para Pihak)</label>
               <input
                 type="text"
                 value={editCompanyName}
                 onChange={(e) => setEditCompanyName(e.target.value)}
-                style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '10px 12px', color: 'white' }}
+                style={{ width: '100%', background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '10px 12px', color: 'white' }}
                 placeholder="Contoh: PT Lintasarta & PT Global Prima"
               />
             </div>
 
             <div style={{ marginBottom: '24px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: '#94a3b8' }}>Tanggal Berakhir (Kadaluarsa)</label>
+              <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Tanggal Berakhir (Kadaluarsa)</label>
               <input
                 type="date"
                 value={editExpirationDate}
                 onChange={(e) => setEditExpirationDate(e.target.value)}
-                style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '10px 12px', color: 'white' }}
+                style={{ width: '100%', background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '10px 12px', color: 'white' }}
               />
             </div>
 

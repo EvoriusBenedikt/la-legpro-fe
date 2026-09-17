@@ -5,6 +5,7 @@ import ComplianceResultsViewer from './ComplianceResultsViewer';
 import type { ComplianceResult, ComplianceSummary } from './ComplianceResultsViewer';
 
 import { useAuth } from '../context/AuthContext';
+import { API_BASE } from '../config';
 
 export default function DocumentMaker() {
   const { token } = useAuth();
@@ -38,7 +39,7 @@ export default function DocumentMaker() {
     formData.append('use_ocr', useOCR.toString());
 
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/check-compliance', {
+      const response = await fetch(API_BASE + '/api/check-compliance', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -66,7 +67,7 @@ export default function DocumentMaker() {
     setIsSaving(true);
     setSaveSuccess(false);
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/compliance-history', {
+      const response = await fetch(API_BASE + '/api/compliance-history', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -131,7 +132,7 @@ export default function DocumentMaker() {
                 onChange={() => {}} 
                 style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: '#f59e0b' }} 
               />
-              <span style={{ fontSize: '0.85rem', color: useOCR ? '#f8fafc' : '#94a3b8', fontWeight: useOCR ? 600 : 400 }}>Gunakan OCR Tradisional (Sesuai FR-2)</span>
+              <span style={{ fontSize: '0.85rem', color: useOCR ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: useOCR ? 600 : 400 }}>Gunakan OCR Tradisional (Sesuai FR-2)</span>
             </div>
 
             <button 

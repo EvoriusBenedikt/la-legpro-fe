@@ -4,6 +4,7 @@ import DocumentDrawer from './DocumentDrawer';
 import { useAuth } from '../context/AuthContext';
 import ComplianceResultsViewer from './ComplianceResultsViewer';
 import ProtectedRoute from './ProtectedRoute';
+import { API_BASE } from '../config';
 
 interface OJKDocument {
   id: string;
@@ -74,7 +75,7 @@ export default function LegalRepository() {
 
   const fetchPendingDocs = async () => {
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/repository/pending', {
+      const response = await fetch(API_BASE + '/api/repository/pending', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -90,7 +91,7 @@ export default function LegalRepository() {
     if (!window.confirm("Apakah Anda yakin ingin menghapus dokumen ini? Semua relasi dan akses akan dihapus.")) return;
     
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/repository/document/${docId}`, {
+      const response = await fetch(`${API_BASE}/api/repository/document/${docId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -112,7 +113,7 @@ export default function LegalRepository() {
 
   const handleConfirmPending = async (docId: string, klasifikasi: string) => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/repository/pending/${docId}/confirm`, {
+      const res = await fetch(`${API_BASE}/api/repository/pending/${docId}/confirm`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -136,7 +137,7 @@ export default function LegalRepository() {
   const fetchDocs = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/repository', {
+      const response = await fetch(API_BASE + '/api/repository', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -152,7 +153,7 @@ export default function LegalRepository() {
 
   const fetchHistoryDocs = async () => {
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/compliance-history', {
+      const response = await fetch(API_BASE + '/api/compliance-history', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -167,7 +168,7 @@ export default function LegalRepository() {
   const handleViewHistoryDoc = async (doc: AnalyzedDocument) => {
     setLoadingReportId(doc.id);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/compliance-history/${doc.id}`, {
+      const response = await fetch(`${API_BASE}/api/compliance-history/${doc.id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -186,7 +187,7 @@ export default function LegalRepository() {
 
   const fetchUsersList = async () => {
     try {
-      const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/auth/users', {
+      const res = await fetch(API_BASE + '/api/auth/users', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -207,7 +208,7 @@ export default function LegalRepository() {
     setIsSharing(true);
     
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/documents/${showShareModal.id}/grant-access`, {
+      const res = await fetch(`${API_BASE}/api/documents/${showShareModal.id}/grant-access`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -238,7 +239,7 @@ export default function LegalRepository() {
 
   const fetchTemplates = async () => {
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/templates', {
+      const response = await fetch(API_BASE + '/api/templates', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -255,7 +256,7 @@ export default function LegalRepository() {
   useEffect(() => {
     const fetchTaxonomy = async () => {
       try {
-        const res = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/taxonomy', {
+        const res = await fetch(API_BASE + '/api/taxonomy', {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (res.ok) {
@@ -273,7 +274,7 @@ export default function LegalRepository() {
   useEffect(() => {
     if (!viewPdfDoc || !viewPdfDoc.filename) return;
     
-    const pdfUrl = `${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/pdf/${encodeURIComponent(viewPdfDoc.filename)}`;
+    const pdfUrl = `${API_BASE}/api/pdf/${encodeURIComponent(viewPdfDoc.filename)}`;
     setIsPdfLoading(true);
     setPdfBlobUrl(null);
     
@@ -310,7 +311,7 @@ export default function LegalRepository() {
     setIsGenerating(true);
     setGeneratedDoc(null);
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/templates/generate', {
+      const response = await fetch(API_BASE + '/api/templates/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -381,7 +382,7 @@ export default function LegalRepository() {
   const handleClearFailedDocuments = async () => {
     if (!confirm('Apakah Anda yakin ingin menghapus semua dokumen yang gagal diproses (termasuk duplikat)?')) return;
     try {
-      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/repository/failed', {
+      const response = await fetch(API_BASE + '/api/repository/failed', {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -410,7 +411,7 @@ export default function LegalRepository() {
     }
 
     setIsUploading(true);
-    const endpoint = (import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/upload';
+    const endpoint = API_BASE + '/api/upload';
 
     let successCount = 0;
     
@@ -543,7 +544,7 @@ export default function LegalRepository() {
           </div>
           <div className="stat-info">
             <h4>{regulationDocs.length} Public</h4>
-            <p>OJK Regulations</p>
+            <p>Regulations</p>
           </div>
         </div>
         <div className="stat-card">
@@ -711,7 +712,7 @@ export default function LegalRepository() {
                 >
                   <BookOpen size={14} /> Lihat Dokumen
                 </button>
-                <div style={{ marginTop: '12px', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '8px' }}>
+                <div style={{ marginTop: '12px', padding: '12px', background: 'var(--bg-element)', borderRadius: '8px' }}>
                   
                   {revealedAi[doc.id] ? (
                     <div style={{ padding: '8px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', borderRadius: '6px', marginBottom: '12px', fontSize: '0.85rem', color: '#60a5fa' }}>
@@ -727,11 +728,11 @@ export default function LegalRepository() {
                     </button>
                   )}
 
-                  <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: '#94a3b8' }}>Klasifikasi Akhir:</p>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Klasifikasi Akhir:</p>
                   <select
                     defaultValue=""
                     onChange={(e) => { (doc as any).selectedKlasifikasi = e.target.value; }}
-                    style={{ width: '100%', background: '#0f172a', border: '1px solid #334155', borderRadius: '6px', padding: '8px', color: '#f8fafc', marginBottom: '12px' }}
+                    style={{ width: '100%', background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '6px', padding: '8px', color: 'var(--text-primary)', marginBottom: '12px' }}
                   >
                     <option value="" disabled>Pilih Klasifikasi...</option>
                     <option value="Umum">Umum</option>
@@ -758,7 +759,7 @@ export default function LegalRepository() {
                   {tpl.category} Template
                 </div>
                 <h3 className="doc-title">{tpl.title}</h3>
-                <p style={{ fontSize: '0.9rem', color: '#94a3b8', margin: '8px 0 16px', lineHeight: '1.4' }}>
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '8px 0 16px', lineHeight: '1.4' }}>
                   {tpl.description}
                 </p>
                 <button
@@ -853,19 +854,19 @@ export default function LegalRepository() {
       {/* Centered PDF Modal for Pending Documents */}
       {viewPdfDoc && (
         <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyItems: 'center', padding: '24px', justifyContent: 'center' }}>
-          <div className="modal-content" style={{ background: '#1e293b', width: '100%', maxWidth: '900px', height: '90vh', borderRadius: '12px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', background: '#0f172a', borderBottom: '1px solid #334155' }}>
+          <div className="modal-content" style={{ background: 'var(--bg-card)', width: '100%', maxWidth: '900px', height: '90vh', borderRadius: '12px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', background: 'var(--bg-dark)', borderBottom: '1px solid #334155' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{ background: '#f59e0b', color: '#fff', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>Menunggu Konfirmasi</div>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#f8fafc' }}>{viewPdfDoc.judul}</h3>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{viewPdfDoc.judul}</h3>
               </div>
-              <button onClick={() => { setViewPdfDoc(null); setPdfBlobUrl(null); }} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#f8fafc', cursor: 'pointer', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button onClick={() => { setViewPdfDoc(null); setPdfBlobUrl(null); }} style={{ background: 'rgba(0,0,0,0.1)', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={20} />
               </button>
             </div>
-            <div style={{ flex: 1, position: 'relative', background: '#0f172a' }}>
+            <div style={{ flex: 1, position: 'relative', background: 'var(--bg-dark)' }}>
               {isPdfLoading ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
                   <File size={48} style={{ opacity: 0.5, marginBottom: '16px' }} />
                   <p>Memuat PDF...</p>
                 </div>
@@ -889,10 +890,10 @@ export default function LegalRepository() {
       {/* Share Modal (FR-21 & FR-22) */}
       {showShareModal && (
         <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="modal-content" style={{ background: '#1e293b', width: '90%', maxWidth: '500px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div className="modal-content" style={{ background: 'var(--bg-card)', width: '90%', maxWidth: '500px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '12px' }}>
               <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Beri Akses Dokumen</h3>
-              <button onClick={() => setShowShareModal(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+              <button onClick={() => setShowShareModal(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
             </div>
@@ -901,14 +902,14 @@ export default function LegalRepository() {
             </p>
             <form onSubmit={handleShareSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label style={{ fontSize: '0.9rem', color: '#94a3b8' }}>Pilih Pengguna *</label>
+                <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Pilih Pengguna *</label>
                 <input 
                   required
                   list="users-list"
                   value={shareUser}
                   onChange={(e) => setShareUser(e.target.value)}
                   placeholder="Ketik ID, Username, atau Email..."
-                  style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '10px', color: '#f8fafc' }}
+                  style={{ background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)' }}
                 />
                 <datalist id="users-list">
                   {usersList.map(u => (
@@ -917,22 +918,22 @@ export default function LegalRepository() {
                 </datalist>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label style={{ fontSize: '0.9rem', color: '#94a3b8' }}>Alasan *</label>
+                <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Alasan *</label>
                 <textarea 
                   required
                   value={shareReason}
                   onChange={(e) => setShareReason(e.target.value)}
                   placeholder="Alasan wajib diisi..."
-                  style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '10px', color: '#f8fafc', height: '80px', resize: 'none' }}
+                  style={{ background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)', height: '80px', resize: 'none' }}
                 />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label style={{ fontSize: '0.9rem', color: '#94a3b8' }}>Batas Waktu (Opsional)</label>
+                <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Batas Waktu (Opsional)</label>
                 <input 
                   type="date"
                   value={shareExpiry}
                   onChange={(e) => setShareExpiry(e.target.value)}
-                  style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '10px', color: '#f8fafc', colorScheme: 'dark' }}
+                  style={{ background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)', colorScheme: 'dark' }}
                 />
               </div>
               <button 
@@ -950,10 +951,10 @@ export default function LegalRepository() {
       {/* Prompt Modal */}
       {showPromptModal && (
         <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="modal-content" style={{ background: '#1e293b', width: '90%', maxWidth: '700px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div className="modal-content" style={{ background: 'var(--bg-card)', width: '90%', maxWidth: '700px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '12px' }}>
               <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Generate Dokumen</h3>
-              <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+              <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
             </div>
@@ -967,7 +968,7 @@ export default function LegalRepository() {
                   value={promptInput}
                   onChange={(e) => setPromptInput(e.target.value)}
                   placeholder="Masukkan instruksi kustomisasi dokumen..."
-                  style={{ width: '100%', height: '120px', background: '#0f172a', border: '1px solid #334155', borderRadius: '8px', padding: '12px', color: '#f8fafc', fontSize: '0.95rem', resize: 'none' }}
+                  style={{ width: '100%', height: '120px', background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '12px', color: 'var(--text-primary)', fontSize: '0.95rem', resize: 'none' }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
                   <button onClick={() => { setShowPromptModal(null); setPromptInput(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', cursor: 'pointer' }}>Batal</button>
@@ -979,7 +980,7 @@ export default function LegalRepository() {
               </>
             ) : (
               <>
-                <div style={{ background: '#0f172a', padding: '16px', borderRadius: '8px', color: '#e2e8f0', fontSize: '0.95rem', whiteSpace: 'pre-wrap', lineHeight: '1.6', flex: 1, overflowY: 'auto' }}>
+                <div style={{ background: 'var(--bg-dark)', padding: '16px', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.95rem', whiteSpace: 'pre-wrap', lineHeight: '1.6', flex: 1, overflowY: 'auto' }}>
                   {generatedDoc}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', flexWrap: 'wrap' }}>

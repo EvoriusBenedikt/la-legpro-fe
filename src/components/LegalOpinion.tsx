@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { Send, ChevronDown, Bot, User, Search, Plus, Trash2, MoreHorizontal, Pencil, FileText, Loader2, Link2, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { API_BASE } from '../config';
 
 interface Source {
   id: string;
@@ -209,7 +210,7 @@ export default function LegalOpinion() {
       setTimeout(() => { setIsLoading((loading) => { if (loading) setLoadingStep(2); return loading; }); }, 1500);
       setTimeout(() => { setIsLoading((loading) => { if (loading) setLoadingStep(3); return loading; }); }, 3000);
 
-      const response = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/chat', {
+      const response = await fetch(API_BASE + '/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -369,7 +370,7 @@ export default function LegalOpinion() {
 
                   {msg.sources && msg.sources.length > 0 && (
                     <div className="sources-container">
-                      <div style={{ fontSize: '0.75rem', marginTop: '16px', color: '#94a3b8', fontWeight: 600 }}>SUMBER DOKUMEN YANG DITEMUKAN:</div>
+                      <div style={{ fontSize: '0.75rem', marginTop: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>SUMBER DOKUMEN YANG DITEMUKAN:</div>
                       {msg.sources.map((source, index) => (
                         <SourceAccordion key={source.id + index} source={source} />
                       ))}
@@ -460,7 +461,7 @@ function SourceAccordion({ source }: { source: Source }) {
           <div className="evidence-badges">
             <span className={`jenis-badge ${source.jenis}`}>{source.jenis}</span>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{source.sektor}</span>
-            {source.rerank_score !== undefined && (
+            {source.rerank_score != null && (
               <span className="rerank-badge">
                 <Sparkles size={12} />
                 Reranked: {source.rerank_score.toFixed(2)}
@@ -471,7 +472,7 @@ function SourceAccordion({ source }: { source: Source }) {
         <ChevronDown size={18} color="var(--text-secondary)" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.3s' }} />
       </div>
       
-      {source.rerank_score !== undefined && (
+      {source.rerank_score != null && (
         <div className="relevance-bar-container">
           <div className="relevance-bar" style={{ width: `${percentScore}%` }} />
         </div>

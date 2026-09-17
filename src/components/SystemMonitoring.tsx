@@ -8,7 +8,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsToolti
 import { useAuth } from '../context/AuthContext';
 import './SystemMonitoring.css';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev';
+import { API_BASE } from '../config';
 
 interface HealthData {
   cpu: number;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { MessageSquare, ShieldCheck, ChevronDown } from 'lucide-react';
+import { API_BASE } from '../config';
 
 interface Activity {
   id: string;
@@ -18,10 +19,10 @@ export default function ActivityFeed() {
     // Fetch real data from backend to populate this list
     const fetchHistory = async () => {
       try {
-        const chatRes = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/chat-sessions', {
+        const chatRes = await fetch(API_BASE + '/api/chat-sessions', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        const compRes = await fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/compliance-history', {
+        const compRes = await fetch(API_BASE + '/api/compliance-history', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 

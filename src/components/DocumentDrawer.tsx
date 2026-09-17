@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, FileText, List, Eye, AlertCircle, BookOpen, ChevronRight, BarChart2, Layers } from 'lucide-react';
+import { API_BASE } from '../config';
 
 interface OutlineItem {
   type: 'bab' | 'pasal';
@@ -59,7 +60,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
 
   // Use /api/pdf/ route (not StaticFiles /pdfs/) so CORS headers are applied correctly
   const pdfUrl = doc?.filename
-    ? `${import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev'}/api/pdf/${encodeURIComponent(doc.filename)}`
+    ? `${API_BASE}/api/pdf/${encodeURIComponent(doc.filename)}`
     : null;
 
   // Effect 1: Run overview analysis when doc changes
@@ -72,7 +73,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
     setPasalData([]);
     setDeepError(null);
 
-    fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/analyze', {
+    fetch(API_BASE + '/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -130,7 +131,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
     setIsDeepAnalyzing(true);
     setDeepError(null);
 
-    fetch((import.meta.env.VITE_API_URL || 'https://legal-analyzer.lintasarta.dev') + '/api/analyze-pasals', {
+    fetch(API_BASE + '/api/analyze-pasals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
