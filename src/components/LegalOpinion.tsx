@@ -75,13 +75,23 @@ export default function LegalOpinion() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const resizeTextarea = () => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  };
+
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(e.target.value);
-    if (textareaRef.current) {
-      textareaRef.current.style.height = '50px';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
-    }
   };
+
+  // Keep height in sync with content no matter which code path changed the
+  // value (typing, send, new conversation, conversation switch, suggestions).
+  // Without this, clearing the text leaves a stale tall box behind.
+  useEffect(() => {
+    resizeTextarea();
+  }, [input]);
 
   useEffect(() => {
     if (!activeConversationId || !conversations.some(c => c.id === activeConversationId)) {
@@ -114,6 +124,19 @@ export default function LegalOpinion() {
       return inTitle || inMessages;
     });
   }, [conversationSearch, conversations]);
+
+  // Repairs the model's sloppy markdown before render (non-destructive —
+  // the stored message is untouched). Handles: empty **** markers, bullets
+  // that are only a marker + colon, missing space after -/+, stray whitespace.
+  const normalizeMarkdown = (text: string) => {
+    return text
+      .replace(/\*\*\s*\*\*/g, '')
+      .replace(/^(\s*[-*+]\s*):/gm, '$1')
+      .replace(/^(\s*[-+])(\S)/gm, '$1 $2')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -363,7 +386,7 @@ export default function LegalOpinion() {
                   ) : (
                     <div className="markdown-body">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content}
+                        {normalizeMarkdown(msg.content)}
                       </ReactMarkdown>
                     </div>
                   )}
@@ -402,6 +425,7 @@ export default function LegalOpinion() {
               <textarea
                 ref={textareaRef}
                 className="chat-input"
+                rows={1}
                 placeholder="Tanyakan analisis regulasi (contoh: Apakah tanda tangan elektronik sah tanpa meterai?)..."
                 value={input}
                 onChange={handleInput}

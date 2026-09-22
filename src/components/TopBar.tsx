@@ -1,10 +1,13 @@
-import { Search, Bell, ShieldCheck, User } from 'lucide-react';
+import { useState } from 'react';
+import { Search, Bell, ShieldCheck, User, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
-export default function TopBar() {
+export default function TopBar({ onMenu }: { onMenu?: () => void }) {
   const { user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   const getPageTitle = () => {
     const path = location.pathname;
@@ -27,8 +30,13 @@ export default function TopBar() {
   };
 
   return (
-    <div className="topbar glass-panel" style={{ borderRadius: '0 0 0 24px', margin: '0 0 0 24px', borderTop: 'none', borderRight: 'none' }}>
+    <div className="topbar glass-panel" style={{ borderRadius: '0 0 0 24px', borderTop: 'none', borderRight: 'none', flexWrap: 'wrap' }}>
       <div className="topbar-left">
+        {onMenu && (
+          <button className="menu-btn" onClick={onMenu} aria-label="Open navigation menu">
+            <Menu size={20} />
+          </button>
+        )}
         <div className="breadcrumb">
           <span className="breadcrumb-brand">LA Legal-Analyzer</span>
           <span className="breadcrumb-separator">/</span>
@@ -39,14 +47,28 @@ export default function TopBar() {
       <div className="topbar-right">
         <div className="search-bar-top">
           <Search size={16} />
-          <input type="text" placeholder="Search everywhere..." />
+          <input type="text" placeholder="Search everywhere..." aria-label="Search everywhere" />
         </div>
-        
-        <button className="icon-btn-top">
+
+        <button
+          className="search-toggle-btn"
+          onClick={() => setMobileSearchOpen(o => !o)}
+          aria-label={mobileSearchOpen ? 'Close search' : 'Open search'}
+          aria-expanded={mobileSearchOpen}
+        >
+          {mobileSearchOpen ? <X size={20} /> : <Search size={20} />}
+        </button>
+
+        <button className="icon-btn-top" aria-label="Notifications">
           <Bell size={18} />
         </button>
         
-        <div className="topbar-user-pill">
+        <div 
+          className="topbar-user-pill"
+          onClick={() => navigate('/account')}
+          style={{ cursor: 'pointer' }}
+          title="Go to Account Settings"
+        >
           <div className="avatar-small">
             {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
           </div>
@@ -56,6 +78,12 @@ export default function TopBar() {
           </div>
         </div>
       </div>
+      {mobileSearchOpen && (
+        <div className="topbar-search-expand">
+          <Search size={16} />
+          <input type="text" placeholder="Search everywhere..." aria-label="Search everywhere" autoFocus />
+        </div>
+      )}
     </div>
   );
 }

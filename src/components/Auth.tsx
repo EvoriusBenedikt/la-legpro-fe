@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Lock, User, LogIn, UserPlus, Mail, Scale, Eye, EyeOff, ShieldCheck, Brain } from 'lucide-react';
 import { API_BASE } from '../config';
+import { Link } from 'react-router-dom';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -226,6 +227,12 @@ export default function Auth() {
             <button type="button" onClick={() => { setIsLogin(!isLogin); setError(''); }}>
               {isLogin ? 'Register here' : 'Login here'}
             </button>
+          </div>
+
+          <div className="auth-toggle" style={{ marginTop: '8px' }}>
+            <Link to="/" style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+              ← Back to overview
+            </Link>
           </div>
         </div>
       </div>

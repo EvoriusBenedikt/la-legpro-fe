@@ -63,7 +63,25 @@ export default function LegalRepository() {
   const [generatedDoc, setGeneratedDoc] = useState<string | null>(null);
   const [showPromptModal, setShowPromptModal] = useState<string | null>(null);
   const [promptInput, setPromptInput] = useState('');
-  const [viewKlasifikasi, setViewKlasifikasi] = useState('Semua');
+  // --- Multi-select filters (regulations + internal tabs) ---
+  // Empty array = "all". Klasifikasi options stay role-gated like before.
+  const [selectedKlasifikasi, setSelectedKlasifikasi] = useState<string[]>([]);
+  const [selectedJenis, setSelectedJenis] = useState<string[]>([]);
+  const [selectedStatus, setSelectedStatus] = useState<string[]>([]);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  // --- Pagination ---
+  const [rowsPerPage, setRowsPerPage] = useState(12);
+  const [page, setPage] = useState(1);
+
+  const toggleInList = (list: string[], v: string) =>
+    list.includes(v) ? list.filter(x => x !== v) : [...list, v];
+  const clearAllFilters = () => {
+    setSelectedKlasifikasi([]);
+    setSelectedJenis([]);
+    setSelectedStatus([]);
+    setPage(1);
+  };
   const [showShareModal, setShowShareModal] = useState<OJKDocument | null>(null);
   const [usersList, setUsersList] = useState<UserListItem[]>([]);
   const [shareUser, setShareUser] = useState('');
@@ -424,7 +442,7 @@ export default function LegalRepository() {
       formData.append("file", file);
       formData.append("doc_type", activeTab);
       if (selectedTaxonomy) formData.append("jenis_dokumen", selectedTaxonomy);
-      formData.append("klasifikasi", viewKlasifikasi === 'Semua' ? 'Umum' : viewKlasifikasi);
+      formData.append("klasifikasi", selectedKlasifikasi[0] ?? 'Umum');
 
       try {
         const response = await fetch(endpoint, {
@@ -461,25 +479,116 @@ export default function LegalRepository() {
     doc => doc.sektor === "Upload Manual" || doc.sektor === "Dokumen Internal"
   );
   const activeDocuments = activeTab === 'regulations' ? regulationDocs : internalDocs;
-  const filteredDocs = activeDocuments.filter(doc => {
-    const matchesSearch = doc.judul.toLowerCase().includes(search.toLowerCase()) ||
-                          doc.nomor.toLowerCase().includes(search.toLowerCase()) ||
-                          doc.sektor.toLowerCase().includes(search.toLowerCase());
-                          
-    if (viewKlasifikasi === 'Duplikat') {
-      return matchesSearch && (doc.status === 'Gagal - Duplikat' || doc.status.includes('Duplikat'));
+
+  // --- Filter option sources ---
+  const roleLower = user?.role?.toLowerCase() || '';
+  const klasifikasiOptions = [
+    'Umum',
+    ...(['manajer', 'direktur', 'admin', 'sekretaris perusahaan'].includes(roleLower) ? ['Rahasia'] : []),
+    ...(['direktur', 'admin', 'sekretaris perusahaan'].includes(roleLower) ? ['Terbatas'] : []),
+  ];
+  // Ignore selections the current role is no longer allowed to see
+  const visibleKlasifikasi = selectedKlasifikasi.filter(k => klasifikasiOptions.includes(k));
+
+  const isDup = (d: OJKDocument) => d.status.includes('Duplikat');
+  const docKlas = (d: OJKDocument) => (d as any).klasifikasi || 'Umum';
+  const normStatus = (d: OJKDocument) => isDup(d) ? 'Duplikat' : d.status;
+
+  const matchesSearch = (d: OJKDocument) => {
+    const q = search.toLowerCase();
+    return d.judul.toLowerCase().includes(q) ||
+           d.nomor.toLowerCase().includes(q) ||
+           d.sektor.toLowerCase().includes(q) ||
+           (d.filename || '').toLowerCase().includes(q);
+  };
+
+  const jenisOptions = [...new Set(activeDocuments.map(d => d.jenis))].sort();
+  const statusOptions = [...new Set(activeDocuments.map(normStatus))].sort();
+
+  // Live per-option counts: respect search + the OTHER two filter groups
+  const countKlas = (k: string) => activeDocuments.filter(d =>
+    matchesSearch(d) &&
+    (selectedJenis.length === 0 || selectedJenis.includes(d.jenis)) &&
+    (selectedStatus.length === 0 || selectedStatus.includes(normStatus(d))) &&
+    docKlas(d) === k
+  ).length;
+  const countJenis = (j: string) => activeDocuments.filter(d =>
+    matchesSearch(d) &&
+    (visibleKlasifikasi.length === 0 || visibleKlasifikasi.includes(docKlas(d))) &&
+    (selectedStatus.length === 0 || selectedStatus.includes(normStatus(d))) &&
+    d.jenis === j
+  ).length;
+  const countStatus = (s: string) => activeDocuments.filter(d =>
+    matchesSearch(d) &&
+    (visibleKlasifikasi.length === 0 || visibleKlasifikasi.includes(docKlas(d))) &&
+    (selectedJenis.length === 0 || selectedJenis.includes(d.jenis)) &&
+    normStatus(d) === s
+  ).length;
+
+  const filteredDocs = activeDocuments.filter(d => {
+    if (!matchesSearch(d)) return false;
+    if (visibleKlasifikasi.length > 0 && !visibleKlasifikasi.includes(docKlas(d))) return false;
+    if (selectedJenis.length > 0 && !selectedJenis.includes(d.jenis)) return false;
+    if (selectedStatus.length > 0) {
+      if (!selectedStatus.includes(normStatus(d))) return false;
+    } else if (isDup(d)) {
+      return false; // duplicates stay hidden unless explicitly selected
     }
-    
-    const docKlas = (doc as any).klasifikasi || 'Umum';
-    const matchesKlasifikasi = viewKlasifikasi === 'Semua' || docKlas === viewKlasifikasi;
-    
-    // Sembunyikan dokumen duplikat dari tampilan biasa
-    return matchesSearch && matchesKlasifikasi && !doc.status.includes('Duplikat');
+    return true;
   });
 
-  const filteredHistoryDocs = historyDocs.filter(doc => 
+  const activeFilterCount = visibleKlasifikasi.length + selectedJenis.length + selectedStatus.length;
+
+  // --- Pagination (regulations + internal) ---
+  const totalPages = Math.max(1, Math.ceil(filteredDocs.length / rowsPerPage));
+  const safePage = Math.min(page, totalPages);
+  const pagedDocs = filteredDocs.slice((safePage - 1) * rowsPerPage, safePage * rowsPerPage);
+
+  const filteredHistoryDocs = historyDocs.filter(doc =>
     doc.filename.toLowerCase().includes(search.toLowerCase())
   );
+  const historyTotalPages = Math.max(1, Math.ceil(filteredHistoryDocs.length / rowsPerPage));
+  const safeHistoryPage = Math.min(page, historyTotalPages);
+  const pagedHistoryDocs = filteredHistoryDocs.slice(
+    (safeHistoryPage - 1) * rowsPerPage, safeHistoryPage * rowsPerPage
+  );
+
+  // Pager values shared by the footer nav (regulations, internal, analyzed)
+  const isAnalyzedTab = activeTab === 'analyzed';
+  const showPagerTab = activeTab === 'regulations' || activeTab === 'internal' || isAnalyzedTab;
+  const pagerPages = isAnalyzedTab ? historyTotalPages : totalPages;
+  const pagerCur = isAnalyzedTab ? safeHistoryPage : safePage;
+  const pagerTotal = isAnalyzedTab ? filteredHistoryDocs.length : filteredDocs.length;
+  const pagerStart = Math.max(1, Math.min(pagerCur - 3, pagerPages - 6));
+  const pagerNums: number[] = [];
+  for (let i = pagerStart; i <= Math.min(pagerPages, pagerStart + 6); i++) pagerNums.push(i);
+  const pagerFrom = (pagerCur - 1) * rowsPerPage + 1;
+  const pagerTo = Math.min(pagerCur * rowsPerPage, pagerTotal);
+  const showPager = showPagerTab && pagerPages > 1;
+  const navBtn: React.CSSProperties = {
+    minWidth: '44px', height: '44px', padding: '0 12px',
+    borderRadius: '8px', border: '1px solid var(--border-color)',
+    background: 'var(--bg-card)', color: 'var(--text-primary)',
+    cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
+  };
+
+  // Reset to first page whenever the result set definition changes
+  useEffect(() => { setPage(1); }, [search, activeTab, rowsPerPage, selectedKlasifikasi, selectedJenis, selectedStatus]);
+
+  // Close filter dropdown on outside click / Escape
+  useEffect(() => {
+    if (!filterOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFilterOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [filterOpen]);
 
   const tabs = [
     { id: 'regulations' as ActiveTab, label: 'Regulations', icon: <BookOpen size={16} />, count: regulationDocs.length },
@@ -491,8 +600,23 @@ export default function LegalRepository() {
     tabs.push({ id: 'pending' as ActiveTab, label: 'Pending Documents', icon: <Clock size={16} />, count: pendingDocs.length });
   }
 
+  const gotoPage = (p: number) => {
+    setPage(p);
+    requestAnimationFrame(() => {
+      document.querySelector('.document-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const chipStyle: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    fontSize: '0.78rem', fontWeight: 600,
+    background: 'rgba(59, 130, 246, 0.12)', color: '#60a5fa',
+    border: '1px solid rgba(59, 130, 246, 0.35)', borderRadius: '999px',
+    padding: '3px 6px 3px 10px', cursor: 'pointer',
+  };
+
   return (
-    <div className="view-container repository-view" style={{ padding: '24px 32px', boxSizing: 'border-box' }}>
+    <div className="view-container repository-view">
       {/* Upload Overlay */}
       {isUploading && (
         <div className="upload-overlay">
@@ -523,7 +647,7 @@ export default function LegalRepository() {
           </div>
         </div>
         <div className="hero-graphic">
-          <div className="floating-sphere"></div>
+          <img src="/logoLintas-removebg-preview.png" alt="" className="hero-graphic-img" />
         </div>
       </div>
 
@@ -573,30 +697,67 @@ export default function LegalRepository() {
           <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Repository Details</h3>
         </div>
         <ProtectedRoute minRole="manajer">
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <button 
-              className="upload-btn" 
+          <div className="repo-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button
+              className="upload-btn"
               onClick={handleClearFailedDocuments} 
               style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}
               title="Hapus semua dokumen yang gagal diproses"
             >
               <Trash2 size={16} /> Bersihkan Duplikat
             </button>
-            <select 
-              value={viewKlasifikasi} 
-              onChange={e => setViewKlasifikasi(e.target.value)}
-              style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem' }}
-            >
-              <option value="Semua">Tampilkan: Semua</option>
-              <option value="Umum">Klasifikasi: Umum</option>
-              {['manajer', 'direktur', 'admin', 'sekretaris perusahaan'].includes(user?.role?.toLowerCase() || '') && (
-                <option value="Rahasia">Klasifikasi: Rahasia</option>
+            <div ref={filterRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setFilterOpen(o => !o)}
+                aria-expanded={filterOpen}
+                style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+                <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>{filterOpen ? '▲' : '▼'}</span>
+              </button>
+              {filterOpen && (
+                <div className="repo-filter-panel">
+                  {[
+                    { title: 'Klasifikasi', options: klasifikasiOptions, selected: selectedKlasifikasi, set: setSelectedKlasifikasi, count: countKlas },
+                    { title: 'Kategori (Jenis)', options: jenisOptions, selected: selectedJenis, set: setSelectedJenis, count: countJenis },
+                    { title: 'Status', options: statusOptions, selected: selectedStatus, set: setSelectedStatus, count: countStatus },
+                  ].map(group => (
+                    <div key={group.title} style={{ padding: '8px 8px 4px' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                        {group.title}
+                      </div>
+                      {group.options.length === 0 && (
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', padding: '2px 4px' }}>Tidak ada opsi.</div>
+                      )}
+                      {group.options.map(opt => {
+                        const n = group.count(opt);
+                        return (
+                          <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 4px', minHeight: '44px', boxSizing: 'border-box', fontSize: '0.88rem', color: 'var(--text-primary)', cursor: n === 0 && !group.selected.includes(opt) ? 'not-allowed' : 'pointer', opacity: n === 0 && !group.selected.includes(opt) ? 0.45 : 1 }}>
+                            <input
+                              type="checkbox"
+                              checked={group.selected.includes(opt)}
+                              disabled={n === 0 && !group.selected.includes(opt)}
+                              onChange={() => group.set(toggleInList(group.selected, opt))}
+                            />
+                            <span style={{ flex: 1 }}>{opt}</span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'var(--bg-element)', borderRadius: '10px', padding: '1px 8px' }}>{n}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ))}
+                  <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '6px', padding: '8px' }}>
+                    <button
+                      onClick={clearAllFilters}
+                      disabled={activeFilterCount === 0}
+                      style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)', background: activeFilterCount === 0 ? 'transparent' : 'rgba(239, 68, 68, 0.1)', color: activeFilterCount === 0 ? 'var(--text-secondary)' : '#ef4444', cursor: activeFilterCount === 0 ? 'not-allowed' : 'pointer', fontSize: '0.85rem', fontWeight: 600, opacity: activeFilterCount === 0 ? 0.5 : 1 }}
+                    >
+                      Bersihkan semua filter
+                    </button>
+                  </div>
+                </div>
               )}
-              {['direktur', 'admin', 'sekretaris perusahaan'].includes(user?.role?.toLowerCase() || '') && (
-                <option value="Terbatas">Klasifikasi: Terbatas</option>
-              )}
-              <option value="Duplikat">Status: Duplikat</option>
-            </select>
+            </div>
             <button className="upload-btn" onClick={() => fileInputRef.current?.click()} style={{ background: 'var(--accent-color)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Upload size={18} /> Tambah PDF
             </button>
@@ -661,6 +822,63 @@ export default function LegalRepository() {
           />
         </div>
 
+        {/* Result count + active filter chips + rows per page */}
+        {(activeTab === 'regulations' || activeTab === 'internal' || activeTab === 'analyzed') && !isLoading && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', margin: '16px 0 4px' }}>
+            <span style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>
+              Menampilkan{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {activeTab === 'analyzed' ? pagedHistoryDocs.length : pagedDocs.length}
+              </strong>
+              {' '}dari{' '}
+              <strong style={{ color: 'var(--text-primary)' }}>
+                {activeTab === 'analyzed' ? filteredHistoryDocs.length : filteredDocs.length}
+              </strong>
+              {' '}dokumen
+              {(activeFilterCount > 0 || search) && (
+                <span style={{ color: 'var(--accent-color)' }}> (terfilter)</span>
+              )}
+            </span>
+            {(activeTab === 'regulations' || activeTab === 'internal') && (
+              <>
+                {visibleKlasifikasi.map(v => (
+                  <button key={'k-' + v} onClick={() => setSelectedKlasifikasi(toggleInList(selectedKlasifikasi, v))} style={chipStyle} title="Hapus filter">
+                    {v} <X size={12} />
+                  </button>
+                ))}
+                {selectedJenis.map(v => (
+                  <button key={'j-' + v} onClick={() => setSelectedJenis(toggleInList(selectedJenis, v))} style={chipStyle} title="Hapus filter">
+                    {v} <X size={12} />
+                  </button>
+                ))}
+                {selectedStatus.map(v => (
+                  <button key={'s-' + v} onClick={() => setSelectedStatus(toggleInList(selectedStatus, v))} style={chipStyle} title="Hapus filter">
+                    {v} <X size={12} />
+                  </button>
+                ))}
+                {activeFilterCount > 0 && (
+                  <button onClick={clearAllFilters} style={{ ...chipStyle, background: 'transparent', color: 'var(--text-secondary)', borderColor: 'var(--border-color)' }}>
+                    Bersihkan semua
+                  </button>
+                )}
+              </>
+            )}
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              <label htmlFor="repo-rows">Baris per halaman:</label>
+              <select
+                id="repo-rows"
+                value={rowsPerPage}
+                onChange={e => setRowsPerPage(Number(e.target.value))}
+                style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem' }}
+              >
+                {[12, 24, 48, 96].map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
         {/* Document Grid */}
         {isLoading ? (
           <div className="loading-state">
@@ -695,6 +913,7 @@ export default function LegalRepository() {
             )}
           </div>
         ) : (
+          <>
           <div className="document-grid">
             {activeTab === 'pending' && pendingDocs.map((doc, idx) => (
               <div key={idx} className="document-card" style={{ borderColor: '#f59e0b', background: 'rgba(245, 158, 11, 0.05)' }}>
@@ -772,7 +991,7 @@ export default function LegalRepository() {
               </div>
             ))}
             
-            {activeTab === 'regulations' || activeTab === 'internal' ? filteredDocs.map((doc, idx) => (
+            {activeTab === 'regulations' || activeTab === 'internal' ? pagedDocs.map((doc, idx) => (
               <div key={idx} className={`document-card ${activeTab === 'internal' ? 'internal-card' : ''}`}>
                 <div className={`doc-type-badge ${activeTab === 'internal' ? 'internal-badge' : ''}`}>
                   {doc.jenis}
@@ -825,7 +1044,7 @@ export default function LegalRepository() {
               </div>
             )) : null}
             
-            {activeTab === 'analyzed' && filteredHistoryDocs.map((doc, idx) => (
+            {activeTab === 'analyzed' && pagedHistoryDocs.map((doc, idx) => (
               <div key={idx} className="document-card internal-card">
                 <div className="doc-type-badge internal-badge">
                   Compliance Report
@@ -845,6 +1064,31 @@ export default function LegalRepository() {
               </div>
             ))}
           </div>
+          {showPager && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', margin: '20px 0 8px', flexWrap: 'wrap' }}>
+              <button onClick={() => gotoPage(pagerCur - 1)} disabled={pagerCur <= 1} style={{ ...navBtn, opacity: pagerCur <= 1 ? 0.4 : 1, cursor: pagerCur <= 1 ? 'not-allowed' : 'pointer' }}>
+                ‹
+              </button>
+              {pagerNums.map(n => (
+                <button
+                  key={n}
+                  onClick={() => gotoPage(n)}
+                  style={n === pagerCur
+                    ? { ...navBtn, background: 'var(--accent-color)', borderColor: 'var(--accent-color)', color: 'white' }
+                    : navBtn}
+                >
+                  {n}
+                </button>
+              ))}
+              <button onClick={() => gotoPage(pagerCur + 1)} disabled={pagerCur >= pagerPages} style={{ ...navBtn, opacity: pagerCur >= pagerPages ? 0.4 : 1, cursor: pagerCur >= pagerPages ? 'not-allowed' : 'pointer' }}>
+                ›
+              </button>
+              <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginLeft: '8px' }}>
+                Hal. {pagerCur}/{pagerPages} · {pagerFrom}–{pagerTo} dari {pagerTotal}
+              </span>
+              </div>
+            )}
+          </>
         )}
           </div>
         </>

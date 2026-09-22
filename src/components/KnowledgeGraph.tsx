@@ -89,18 +89,18 @@ const NodeListCard = ({ node, kgData, onNavigate }: { node: KGNode, kgData: KGDa
         style={{ cursor: 'pointer' }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <strong style={{ color: '#f8fafc', fontSize: '1rem' }}>{node.label}</strong>
+          <strong style={{ color: 'var(--text-primary)', fontSize: '1rem' }}>{node.label}</strong>
           <span style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', background: node.type === 'regulasi' ? 'rgba(56,189,248,0.1)' : node.type === 'entitas' ? 'rgba(168,85,247,0.1)' : 'rgba(52,211,153,0.1)', color: node.type === 'regulasi' ? '#38bdf8' : node.type === 'entitas' ? '#a855f7' : '#34d399' }}>
             {node.type.toUpperCase()}
           </span>
         </div>
-        <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
           {connectedEdges.length} Relasi Terhubung
         </div>
       </div>
       
       {connectedEdges.length > 0 && (
-        <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '12px' }}>
+        <div style={{ marginTop: '12px', borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: '12px' }}>
           <button 
             onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
             style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}
@@ -109,9 +109,9 @@ const NodeListCard = ({ node, kgData, onNavigate }: { node: KGNode, kgData: KGDa
           </button>
           
           {isExpanded && (
-            <div style={{ marginTop: '12px', maxHeight: '200px', overflowY: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', padding: '8px' }} className="custom-scrollbar">
+            <div style={{ marginTop: '12px', maxHeight: '200px', overflowY: 'auto', background: 'var(--bg-element)', borderRadius: '6px', padding: '8px' }} className="custom-scrollbar">
               {connectedNodes.map((cn, i) => (
-                <div key={i} style={{ padding: '8px', borderBottom: i < connectedNodes.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div key={i} style={{ padding: '8px', borderBottom: i < connectedNodes.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div style={{ fontSize: '0.7rem', color: '#cbd5e1' }}><span style={{ color: '#a855f7', fontWeight: 600 }}>{cn.rel}</span> • {cn.node?.type.toUpperCase()}</div>
                   <div 
                     onClick={() => onNavigate(cn.node!.id)}
@@ -142,7 +142,17 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
   const [filterType, setFilterType] = useState('');
   const [selectedNode, setSelectedNode] = useState<SelectedNode | null>(null);
   const [hoveredRelationId, setHoveredRelationId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'graph' | 'list'>('graph');
+  // Small screens default to the read-only list view (canvas physics is
+  // unusable on phones); follow the breakpoint if the viewport changes.
+  const [viewMode, setViewMode] = useState<'graph' | 'list'>(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? 'list' : 'graph'
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const onChange = (e: MediaQueryListEvent) => setViewMode(e.matches ? 'list' : 'graph');
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
   const [activeScenario, setActiveScenario] = useState<string | null>(null);
   const [isScenarioLoading, setIsScenarioLoading] = useState<string | null>(null);
   const [scenarioNodes, setScenarioNodes] = useState<KGNode[]>([]);
@@ -213,7 +223,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
       const nodeUpdates = kgData.nodes.map(n => ({
         id: n.id,
         color: { opacity: nodesToHighlight.has(n.id) ? 1 : 0.05 },
-        font: { color: nodesToHighlight.has(n.id) ? '#ffffff' : 'rgba(255,255,255,0.05)' }
+        font: { color: nodesToHighlight.has(n.id) ? '#ffffff' : 'rgba(0,0,0,0.05)' }
       }));
       
       const edgeUpdates = kgData.edges.map(e => {
@@ -333,7 +343,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
       // Highlight Hubs differently from the leaf nodes
       const font = isCenter 
         ? { color: '#ffffff', size: Math.min(32, 16 + (degree * 0.2)), face: 'Inter, sans-serif', bold: true }
-        : { color: '#f8fafc', size: 10, face: 'Inter, sans-serif', bold: false };
+        : { color: 'var(--text-primary)', size: 10, face: 'Inter, sans-serif', bold: false };
 
       const nodeProps: any = {
         id: n.id,
@@ -474,7 +484,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
 
   const exportToPng = useCallback(() => {
     if (containerRef.current === null) return;
-    toPng(containerRef.current, { cacheBust: true, backgroundColor: '#0f172a' })
+    toPng(containerRef.current, { cacheBust: true, backgroundColor: 'var(--bg-dark)' })
       .then((dataUrl) => {
         const link = document.createElement('a');
         link.download = `knowledge-graph.png`;
@@ -485,6 +495,27 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
         console.error('Failed to export graph', err);
       });
   }, [containerRef]);
+
+  const exportData = async (format: 'json' | 'csv') => {
+    try {
+      const res = await fetch(`${API_BASE}/api/knowledge-graph/export?format=${format}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to export data');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = format === 'json' ? 'knowledge_graph_export.json' : 'knowledge_graph_export.zip';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Export error', err);
+      alert('Gagal mengekspor data');
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
@@ -527,7 +558,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
           </div>
           <div style={{
             display: 'flex', alignItems: 'center', gap: '8px',
-            background: 'rgba(30,41,59,0.6)', borderRadius: '10px',
+            background: 'var(--bg-element)', borderRadius: '10px',
             padding: '8px 14px', border: '1px solid var(--border-color)',
           }}>
             <Search size={14} color="var(--text-secondary)" />
@@ -546,7 +577,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
             style={{
-              background: 'rgba(30,41,59,0.6)', border: '1px solid var(--border-color)',
+              background: 'var(--bg-element)', border: '1px solid var(--border-color)',
               borderRadius: '10px', padding: '8px 12px',
               color: 'var(--text-primary)', fontSize: '0.85rem', cursor: 'pointer',
             }}
@@ -574,11 +605,64 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
           <button
             type="button"
             onClick={exportToPng}
-            className="button-secondary"
-            style={{ padding: '6px 12px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px', marginLeft: '12px' }}
+            style={{ 
+              padding: '6px 12px', 
+              fontSize: '0.85rem', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px', 
+              marginLeft: '12px',
+              background: 'var(--bg-element)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '8px',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer'
+            }}
           >
             <Download size={14} />
             Export PNG
+          </button>
+          
+          <div style={{ width: '1px', height: '24px', background: 'rgba(255,255,255,0.2)', margin: '0 8px' }} />
+
+          <button
+            type="button"
+            onClick={() => exportData('json')}
+            style={{ 
+              padding: '6px 12px', 
+              fontSize: '0.85rem', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px',
+              background: 'var(--bg-element)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '8px',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer'
+            }}
+          >
+            <Download size={14} />
+            Export JSON
+          </button>
+
+          <button
+            type="button"
+            onClick={() => exportData('csv')}
+            style={{ 
+              padding: '6px 12px', 
+              fontSize: '0.85rem', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px',
+              background: 'var(--bg-element)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '8px',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer'
+            }}
+          >
+            <Download size={14} />
+            Export CSV (ZIP)
           </button>
         </form>
       </div>
@@ -623,7 +707,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
                 { icon: <Maximize2 size={16} />, action: () => networkRef.current?.fit({ animation: true }) },
               ].map((btn, i) => (
                 <button type="button" key={i} onClick={btn.action} style={{
-                  background: 'rgba(30,41,59,0.85)', border: '1px solid var(--border-color)',
+                  background: 'var(--bg-element)', border: '1px solid var(--border-color)',
                   borderRadius: '8px', width: '36px', height: '36px', cursor: 'pointer',
                   color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
@@ -649,7 +733,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
                   />
                 ))}
                 {kgData && kgData.nodes.filter(n => n.label.toLowerCase().includes(search.toLowerCase()) && (filterType === '' || n.type.toLowerCase() === filterType.toLowerCase())).length > 100 && (
-                  <div style={{ textAlign: 'center', color: '#64748b', padding: '20px', fontSize: '0.85rem' }}>
+                  <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '20px', fontSize: '0.85rem' }}>
                     Menampilkan 100 dari {kgData.nodes.filter(n => n.label.toLowerCase().includes(search.toLowerCase()) && (filterType === '' || n.type.toLowerCase() === filterType.toLowerCase())).length} node. Gunakan pencarian untuk hasil lebih spesifik.
                   </div>
                 )}
@@ -661,7 +745,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
         {/* Right Side Panel: Legend + Selected Node Info */}
         <div style={{
           width: '260px', minWidth: '260px',
-          background: 'rgba(15,23,42,0.5)', borderLeft: '1px solid var(--border-color)',
+          background: 'var(--bg-element)', borderLeft: '1px solid var(--border-color)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
           {/* Prototype Scenarios */}
@@ -672,7 +756,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
                 onClick={() => handleScenarioClick('PKS')}
                 style={{
                   flex: 1, padding: '8px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
-                  background: activeScenario === 'PKS' ? 'rgba(56,189,248,0.2)' : 'rgba(30,41,59,0.6)',
+                  background: activeScenario === 'PKS' ? 'rgba(56,189,248,0.2)' : 'var(--bg-card)',
                   color: activeScenario === 'PKS' ? '#38BDF8' : 'var(--text-secondary)',
                   border: `1px solid ${activeScenario === 'PKS' ? '#38BDF8' : 'var(--border-color)'}`,
                   transition: 'all 0.2s'
@@ -683,7 +767,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
                 onClick={() => handleScenarioClick('NDA')}
                 style={{
                   flex: 1, padding: '8px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
-                  background: activeScenario === 'NDA' ? 'rgba(168,85,247,0.2)' : 'rgba(30,41,59,0.6)',
+                  background: activeScenario === 'NDA' ? 'rgba(168,85,247,0.2)' : 'var(--bg-card)',
                   color: activeScenario === 'NDA' ? '#A855F7' : 'var(--text-secondary)',
                   border: `1px solid ${activeScenario === 'NDA' ? '#A855F7' : 'var(--border-color)'}`,
                   transition: 'all 0.2s'
@@ -693,14 +777,14 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
             </div>
             
             {activeScenario && scenarioNodes.length > 0 && (
-              <div style={{ marginTop: '16px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '8px', padding: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '8px', fontWeight: 600 }}>NODE TERKAIT ({activeScenario})</div>
+              <div style={{ marginTop: '16px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '8px', padding: '12px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 600 }}>NODE TERKAIT ({activeScenario})</div>
                 <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'block', paddingRight: '4px' }} className="custom-scrollbar">
                   {scenarioNodes.map(node => (
                     <div 
                       key={node.id} 
                       onClick={() => handleRelationClick(node.id)}
-                      style={{ cursor: 'pointer', marginBottom: '6px', fontSize: '0.75rem', background: 'rgba(255,255,255,0.05)', padding: '6px 8px', borderRadius: '4px', color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.4' }} 
+                      style={{ cursor: 'pointer', marginBottom: '6px', fontSize: '0.75rem', background: 'var(--bg-element)', padding: '6px 8px', borderRadius: '4px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.4' }} 
                       title={node.label}
                     >
                       • {node.label}
@@ -808,7 +892,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
                           onMouseLeave={() => setHoveredRelationId(null)}
                           onClick={() => handleRelationClick(rel.id)}
                           style={{ 
-                            background: hoveredRelationId === rel.id ? 'rgba(255,255,255,0.1)' : 'rgba(15,23,42,0.4)', 
+                            background: hoveredRelationId === rel.id ? 'rgba(0,0,0,0.1)' : 'rgba(15,23,42,0.4)', 
                             borderRadius: '6px', padding: '8px',
                             borderLeft: `2px solid ${RELATION_COLORS[rel.relation] ?? '#94A3B8'}`,
                             cursor: 'pointer',

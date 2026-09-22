@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Auth from './components/Auth';
@@ -16,25 +16,35 @@ const AdminDashboard = React.lazy(() => import('./components/AdminDashboard'));
 const KnowledgeGraph = React.lazy(() => import('./components/KnowledgeGraph'));
 const SystemMonitoring = React.lazy(() => import('./components/SystemMonitoring'));
 const TaxonomyManager = React.lazy(() => import('./components/TaxonomyManager'));
+const LandingPage = React.lazy(() => import('./components/LandingPage'));
 
 function App() {
   const { isAuthenticated, user } = useAuth();
   const role = user?.role?.toLowerCase() || '';
+  const [navOpen, setNavOpen] = useState(false);
   const isITAdmin = role === 'admin';
   const isSekretaris = role === 'sekretaris perusahaan';
   const isEngineer = role === 'insinyur ti';
 
   if (!isAuthenticated) {
-    return <Auth />;
+    return (
+      <Suspense fallback={<div style={{ padding: '48px', textAlign: 'center' }}>Loading…</div>}>
+        <Routes>
+          <Route path="/login" element={<Auth />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    );
   }
 
   return (
     <div className="layout-container dashboard-main">
       <div className="dashboard-content-row">
-        <Sidebar />
+        <Sidebar mobileOpen={navOpen} onClose={() => setNavOpen(false)} />
 
         <div className="dashboard-center" style={{ flex: 1, minWidth: 0 }}>
-          <TopBar />
+          <TopBar onMenu={() => setNavOpen(true)} />
           <div className="main-content" style={{ padding: 0, marginTop: '24px' }}>
             <Suspense fallback={
               <div style={{ padding: '24px' }}>

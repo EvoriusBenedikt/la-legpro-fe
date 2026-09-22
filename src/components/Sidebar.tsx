@@ -2,7 +2,7 @@ import { Database, Scale, FileText, User, BarChart2, ShieldCheck, Network, Folde
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-export default function Sidebar() {
+export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: boolean; onClose?: () => void } = {}) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const role = user?.role?.toLowerCase() || '';
@@ -56,7 +56,9 @@ export default function Sidebar() {
   }
 
   return (
-    <div className="sidebar">
+    <>
+    {mobileOpen && <div className="sidebar-backdrop open" onClick={onClose} aria-hidden="true" />}
+    <div className={`sidebar${mobileOpen ? ' open' : ''}`}>
       <div className="sidebar-header">
         <div className="logo-icon" style={{
           width: '40px', height: '40px', borderRadius: '12px',
@@ -75,12 +77,14 @@ export default function Sidebar() {
         <h2>LA Legal-Analyzer</h2>
       </div>
       
-      <div className="sidebar-menu">
+      <div className="sidebar-menu" role="navigation" aria-label="Main">
         {tabs.map(tab => (
           <NavLink
             key={tab.path}
             to={tab.path}
             title={tab.name}
+            aria-label={tab.name}
+            onClick={onClose}
             className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
           >
             <div className="item-icon">{tab.icon}</div>
@@ -90,7 +94,12 @@ export default function Sidebar() {
       </div>
 
       <div className="sidebar-footer">
-        <div className="sidebar-user">
+        <div 
+          className="sidebar-user" 
+          onClick={() => navigate('/account')}
+          style={{ cursor: 'pointer' }}
+          title="Go to Account Settings"
+        >
           <div className="avatar-small" style={{ position: 'relative' }}>
             {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
             <div style={{ position: 'absolute', bottom: 0, right: 0, width: '10px', height: '10px', background: 'var(--success)', borderRadius: '50%', border: '2px solid var(--bg-dark)' }} />
@@ -101,11 +110,12 @@ export default function Sidebar() {
           </div>
         </div>
         
-        <button className="logout-btn" onClick={handleLogout}>
+        <button className="logout-btn" onClick={handleLogout} title="Logout" aria-label="Logout">
           <LogOut size={20} className="item-icon" />
           <span className="item-label">Logout</span>
         </button>
       </div>
     </div>
+    </>
   );
 }
