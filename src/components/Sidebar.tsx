@@ -1,10 +1,29 @@
-import { Database, Scale, FileText, User, BarChart2, ShieldCheck, Network, FolderTree, LogOut } from 'lucide-react';
+import { useState } from 'react';
+import { Database, Scale, FileText, User, BarChart2, ShieldCheck, Network, FolderTree, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: boolean; onClose?: () => void } = {}) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('la_sidebar_collapsed') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCollapsed = () => {
+    setCollapsed(prev => {
+      try {
+        localStorage.setItem('la_sidebar_collapsed', prev ? '0' : '1');
+      } catch {
+        /* private mode — collapse just won't persist */
+      }
+      return !prev;
+    });
+  };
   const role = user?.role?.toLowerCase() || '';
   const isITAdmin = role === 'admin';
   const isSekretaris = role === 'sekretaris perusahaan';
@@ -58,7 +77,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
   return (
     <>
     {mobileOpen && <div className="sidebar-backdrop open" onClick={onClose} aria-hidden="true" />}
-    <div className={`sidebar${mobileOpen ? ' open' : ''}`}>
+    <div className={`sidebar${mobileOpen ? ' open' : ''}${!mobileOpen && collapsed ? ' collapsed' : ''}`}>
       <div className="sidebar-header">
         <div className="logo-icon" style={{
           width: '40px', height: '40px', borderRadius: '12px',
@@ -75,6 +94,15 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
             : <Scale size={22} color="white" />}
         </div>
         <h2>LA Legal-Analyzer</h2>
+        <button
+          className="sidebar-collapse-btn"
+          onClick={toggleCollapsed}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!collapsed}
+        >
+          {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+        </button>
       </div>
       
       <div className="sidebar-menu" role="navigation" aria-label="Main">

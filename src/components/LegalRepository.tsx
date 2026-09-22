@@ -639,11 +639,12 @@ export default function LegalRepository() {
         <div className="hero-content">
           <h2>Legal Repository <span>☆</span></h2>
           <p>Manage all your regulatory and internal documents in one place!</p>
-          <div className="hero-avatars">
-            <div className="add-avatar">+</div>
-            <div className="avatar">U1</div>
-            <div className="avatar">U2</div>
-            <div className="avatar-count">+18</div>
+          <div className="hero-avatars" title="Team members with documents in this repository">
+            <div className="add-avatar" title="Invite a contributor">+</div>
+            <div className="avatar" title="Contributor U1">U1</div>
+            <div className="avatar" title="Contributor U2">U2</div>
+            <div className="avatar-count" title="18 more contributors">+18</div>
+            <span className="avatar-caption">Contributors</span>
           </div>
         </div>
         <div className="hero-graphic">
@@ -654,7 +655,7 @@ export default function LegalRepository() {
       {/* Statistics */}
       <div className="stats-row">
         <div className="stat-card">
-          <div className="stat-icon pink">
+          <div className="stat-icon blue">
             <CheckCircle2 size={16} />
           </div>
           <div className="stat-info">
@@ -663,7 +664,7 @@ export default function LegalRepository() {
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon blue">
+          <div className="stat-icon green">
             <Database size={16} />
           </div>
           <div className="stat-info">
@@ -680,7 +681,7 @@ export default function LegalRepository() {
             <p>Your private documents</p>
           </div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card priority" title="Documents waiting for your confirmation">
           <div className="stat-icon orange" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '32px', height: '32px' }}>
             <Clock size={16} />
           </div>
@@ -699,10 +700,9 @@ export default function LegalRepository() {
         <ProtectedRoute minRole="manajer">
           <div className="repo-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <button
-              className="upload-btn"
-              onClick={handleClearFailedDocuments} 
-              style={{ background: 'var(--bg-card)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}
-              title="Hapus semua dokumen yang gagal diproses"
+              className="btn-danger-outline"
+              onClick={handleClearFailedDocuments}
+              title="Permanently delete all failed and duplicate documents"
             >
               <Trash2 size={16} /> Bersihkan Duplikat
             </button>
@@ -815,8 +815,8 @@ export default function LegalRepository() {
           <input
             type="text"
             placeholder={activeTab === 'regulations'
-              ? "Cari regulasi berdasarkan judul, nomor, atau sektor..."
-              : activeTab === 'analyzed' ? "Cari dokumen hasil analisis..." : "Cari dokumen internal berdasarkan nama..."}
+              ? "Search regulations by title, number, or sector..."
+              : activeTab === 'analyzed' ? "Search analyzed documents..." : "Search internal documents by name..."}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -894,19 +894,19 @@ export default function LegalRepository() {
               <>
                 <FolderOpen size={48} style={{ opacity: 0.3 }} />
                 <p>Belum ada dokumen internal.</p>
-                <p style={{ fontSize: '0.85rem', opacity: 0.6 }}>Klik "Tambah PDF" untuk mengunggah dokumen pertama Anda.</p>
+                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>Klik "Tambah PDF" untuk mengunggah dokumen pertama Anda.</p>
               </>
             ) : activeTab === 'analyzed' && historyDocs.length === 0 ? (
               <>
                 <FileCheck size={48} style={{ opacity: 0.3 }} />
                 <p>Belum ada dokumen yang dianalisis.</p>
-                <p style={{ fontSize: '0.85rem', opacity: 0.6 }}>Gunakan Compliance Checker untuk menganalisis dokumen dan menyimpannya ke sini.</p>
+                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>Gunakan Compliance Checker untuk menganalisis dokumen dan menyimpannya ke sini.</p>
               </>
             ) : activeTab === 'templates' && templates.length === 0 ? (
               <>
                 <File size={48} style={{ opacity: 0.3 }} />
                 <p>Belum ada template dokumen.</p>
-                <p style={{ fontSize: '0.85rem', opacity: 0.6 }}>Template akan ditambahkan oleh administrator.</p>
+                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>Template akan ditambahkan oleh administrator.</p>
               </>
             ) : (
               <p>Tidak ada dokumen yang sesuai dengan pencarian Anda.</p>
