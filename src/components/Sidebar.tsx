@@ -79,30 +79,12 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
     {mobileOpen && <div className="sidebar-backdrop open" onClick={onClose} aria-hidden="true" />}
     <div className={`sidebar${mobileOpen ? ' open' : ''}${!mobileOpen && collapsed ? ' collapsed' : ''}`}>
       <div className="sidebar-header">
-        <div className="logo-icon" style={{
-          width: '40px', height: '40px', borderRadius: '12px',
-          background: isEngineer ? 'linear-gradient(135deg, #10B981, #059669)' 
-            : (isITAdmin || isSekretaris) ? 'linear-gradient(135deg, #F59E0B, #F43F5E)'
-            : 'var(--gradient-brand)',
-          backgroundSize: '200% 200%',
-          animation: 'gradientShift 5s ease infinite',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: `0 4px 15px ${isEngineer ? 'rgba(16, 185, 129, 0.4)' : (isITAdmin || isSekretaris) ? 'rgba(245,158,11,0.4)' : 'rgba(168, 85, 247, 0.4)'}`,
-        }}>
-          {isEngineer ? <Network size={22} color="white" /> 
-            : (isITAdmin || isSekretaris) ? <ShieldCheck size={22} color="white" /> 
-            : <Scale size={22} color="white" />}
-        </div>
+        <img
+          src="/LegalAnalyzerLogo.png"
+          alt="LA Legal-Analyzer"
+          className="logo-icon sidebar-logo-img"
+        />
         <h2>LA Legal-Analyzer</h2>
-        <button
-          className="sidebar-collapse-btn"
-          onClick={toggleCollapsed}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-expanded={!collapsed}
-        >
-          {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-        </button>
       </div>
       
       <div className="sidebar-menu" role="navigation" aria-label="Main">
@@ -144,6 +126,15 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
         </button>
       </div>
     </div>
+    <button
+      className={`sidebar-collapse-btn${collapsed ? ' is-collapsed' : ''}`}
+      onClick={toggleCollapsed}
+      title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      aria-expanded={!collapsed}
+    >
+      {collapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
+    </button>
     </>
   );
 }

@@ -143,21 +143,30 @@ h1, h2, h3, h4, h5, h6 {
   transition: width 0.25s ease;
 }
 
+/* Collapse handle — half-pill straddling the sidebar's right edge, vertically
+   centered. Rendered as a SIBLING of .sidebar (fixed-positioned) so the
+   sidebar's overflow: hidden cannot clip it; `left` tracks the sidebar width
+   with the same 0.25s ease as the width transition. */
 .sidebar-collapse-btn {
-  margin-left: auto;
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  position: fixed;
+  top: 50%;
+  left: calc(var(--sidebar-width) - 12px);
+  transform: translateY(-50%);
+  z-index: 60;
+  width: 24px;
+  height: 48px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
+  background: var(--bg-element);
   border: 1px solid var(--border-color);
-  border-radius: 9px;
+  border-radius: 999px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  transition: left 0.25s ease, color 0.15s ease, border-color 0.15s ease;
 }
+.sidebar-collapse-btn.is-collapsed { left: calc(76px - 12px); }
 .sidebar-collapse-btn:hover {
   color: var(--text-primary);
   border-color: var(--border-highlight);
@@ -174,6 +183,13 @@ h1, h2, h3, h4, h5, h6 {
 
 .sidebar-header .logo-icon {
   flex-shrink: 0;
+}
+
+/* Brand image logo (public/LegalAnalyzerLogo.png) */
+.sidebar-logo-img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
 }
 
 .sidebar-header h2 {
@@ -2039,7 +2055,9 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0;
   overflow: hidden;
   min-height: 0;
-  margin-left: 240px;
+  /* No left margin: the sidebar is an in-flow flex sibling, so a margin here
+     double-offsets the content and leaves a sidebar-wide gap. */
+  margin-left: 0;
 }
 
 
@@ -2946,152 +2964,30 @@ select::placeholder {
 }
 
 /* ── Mobile-M fine-tuning (≤480px) ── */
-/* Global Footer — flush with the content column (no left offset; the parent
-   .dashboard-center already sits right of the sidebar) */
+/* Global Footer — slim copyright bar pinned to the bottom of the content
+   column (no left offset; the parent .dashboard-center already sits right of
+   the sidebar). Kept intentionally short: this is a fixed 100vh dashboard
+   layout, so a tall footer permanently squishes .main-content. */
 .app-footer {
   flex-shrink: 0;
   width: 100%;
   margin-left: 0;
-  background: #0f2a4a;
-  color: #cbd5e1;
-}
-
-/* Top section: brand + links */
-.app-footer-top {
-  display: flex;
-  gap: 48px;
-  padding: 36px 40px 28px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.app-footer-brand {
-  flex: 0 0 220px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.app-footer-logo {
-  height: 36px;
-  width: auto;
-  object-fit: contain;
-  filter: brightness(0) invert(1);
-}
-
-.app-footer-tagline {
-  font-size: 0.78rem;
-  color: #94a3b8;
-  line-height: 1.6;
-  margin: 0;
-}
-
-.app-footer-socials {
-  display: flex;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.app-footer-socials a {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.07);
-  color: #94a3b8;
-  text-decoration: none;
-  transition: background 0.2s, color 0.2s;
-}
-
-.app-footer-socials a:hover {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
-}
-
-.app-footer-links {
-  flex: 1;
-  display: flex;
-  gap: 40px;
-  justify-content: flex-end;
-}
-
-.app-footer-col h4 {
-  font-family: 'Outfit', sans-serif;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: #f1f5f9;
-  margin: 0 0 12px 0;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-}
-
-.app-footer-col ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.app-footer-col ul li,
-.app-footer-col ul li a {
-  font-size: 0.82rem;
-  color: #94a3b8;
-  text-decoration: none;
-  transition: color 0.2s;
-  cursor: default;
-}
-
-.app-footer-col ul li a {
-  cursor: pointer;
-}
-
-.app-footer-col ul li a:hover {
-  color: #e2e8f0;
-}
-
-/* Bottom bar */
-.app-footer-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 40px;
-  background: #071e36;
+  padding: 10px 24px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-element);
 }
 
 .app-footer-copyright {
-  font-size: 0.8rem;
-  color: #64748b;
-}
-
-.app-footer-version {
-  font-size: 0.75rem;
-  color: #334155;
-  font-family: var(--font-mono);
-}
-
-@media (max-width: 1024px) {
-  .app-footer-top {
-    flex-direction: column;
-    gap: 28px;
-    padding: 28px 20px 20px;
-  }
-  .app-footer-brand { flex: none; }
-  .app-footer-links { justify-content: flex-start; flex-wrap: wrap; gap: 24px; }
-  .app-footer-bottom { padding: 12px 20px; }
+  font-size: 0.78rem;
+  color: var(--text-secondary);
 }
 
 @media (max-width: 767px) {
-  .app-footer-links { gap: 20px; }
-  .app-footer-bottom {
-    flex-direction: column;
-    gap: 4px;
-    text-align: center;
-    padding: 12px 16px;
-  }
-  .app-footer-copyright { font-size: 0.78rem; }
+  .app-footer { padding: 8px 16px; }
+  .app-footer-copyright { font-size: 0.72rem; text-align: center; }
 }
 
 /* ── Collapse-on-click (desktop): same rail look as tablet, user-toggled ──
@@ -3101,7 +2997,6 @@ select::placeholder {
 .sidebar.collapsed .sidebar-header { padding: 0; justify-content: center; margin-bottom: 24px; }
 .sidebar.collapsed .sidebar-header h2 { display: none; }
 .sidebar.collapsed .sidebar-header .logo-icon { display: none; }
-.sidebar.collapsed .sidebar-collapse-btn { margin-left: 0; }
 .sidebar.collapsed .sidebar-menu { align-items: center; }
 .sidebar.collapsed .sidebar-item { margin: 0; padding: 0; width: 48px; height: 48px; justify-content: center; }
 .sidebar.collapsed .sidebar-item .item-label { display: none; }
