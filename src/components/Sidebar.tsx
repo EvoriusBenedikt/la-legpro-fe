@@ -1,34 +1,21 @@
-import { useState } from 'react';
-import { Database, Scale, FileText, User, BarChart2, ShieldCheck, Network, FolderTree, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { Database, Scale, User, BarChart2, ShieldCheck, Network, FolderTree } from 'lucide-react';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: boolean; onClose?: () => void } = {}) {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem('la_sidebar_collapsed') === '1';
-    } catch {
-      return false;
-    }
-  });
+interface SidebarProps {
+  /** Mobile: off-canvas drawer open state */
+  mobileOpen?: boolean;
+  /** Mobile: close the drawer (backdrop click / nav selection) */
+  onClose?: () => void;
+}
 
-  const toggleCollapsed = () => {
-    setCollapsed(prev => {
-      try {
-        localStorage.setItem('la_sidebar_collapsed', prev ? '0' : '1');
-      } catch {
-        /* private mode — collapse just won't persist */
-      }
-      return !prev;
-    });
-  };
+export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = {}) {
+  const { user } = useAuth();
   const role = user?.role?.toLowerCase() || '';
   const isITAdmin = role === 'admin';
   const isSekretaris = role === 'sekretaris perusahaan';
   const isEngineer = role === 'insinyur ti';
-  
+
   const userLevel = user?.role ? getRoleLevel(user.role) : 1;
 
   function getRoleLevel(role: string): number {
@@ -38,11 +25,6 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
     return levels[role.toLowerCase()] ?? 1;
   }
 
-  const handleLogout = () => {
-    logout();
-    navigate('/');
-  };
-
   const adminTabs = [
     { path: '/admin', name: 'Admin Dashboard', icon: <ShieldCheck size={20} /> },
     { path: '/account', name: 'Account Settings', icon: <User size={20} /> },
@@ -51,8 +33,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
   const regularTabs = [
     { path: '/repository', name: 'Legal Repository', icon: <Database size={20} /> },
     { path: '/opinion', name: 'Legal Opinion', icon: <Scale size={20} /> },
-    { path: '/maker', name: 'Compliance Checker', icon: <FileText size={20} /> },
-    { path: '/contracts', name: 'Contract Monitor', icon: <BarChart2 size={20} /> },
+    { path: '/contracts', name: 'Contracts', icon: <BarChart2 size={20} /> },
     ...(userLevel >= 2 ? [{ path: '/graph', name: 'Knowledge Graph', icon: <Network size={20} /> }] : []),
   ];
 
@@ -76,65 +57,23 @@ export default function Sidebar({ mobileOpen = false, onClose }: { mobileOpen?: 
 
   return (
     <>
-    {mobileOpen && <div className="sidebar-backdrop open" onClick={onClose} aria-hidden="true" />}
-    <div className={`sidebar${mobileOpen ? ' open' : ''}${!mobileOpen && collapsed ? ' collapsed' : ''}`}>
-      <div className="sidebar-header">
-        <img
-          src="/LegalAnalyzerLogo.png"
-          alt="LA Legal-Analyzer"
-          className="logo-icon sidebar-logo-img"
-        />
-        <h2>LA Legal-Analyzer</h2>
-      </div>
-      
-      <div className="sidebar-menu" role="navigation" aria-label="Main">
-        {tabs.map(tab => (
-          <NavLink
-            key={tab.path}
-            to={tab.path}
-            title={tab.name}
-            aria-label={tab.name}
-            onClick={onClose}
-            className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
-          >
-            <div className="item-icon">{tab.icon}</div>
-            <span className="item-label">{tab.name}</span>
-          </NavLink>
-        ))}
-      </div>
-
-      <div className="sidebar-footer">
-        <div 
-          className="sidebar-user" 
-          onClick={() => navigate('/account')}
-          style={{ cursor: 'pointer' }}
-          title="Go to Account Settings"
-        >
-          <div className="avatar-small" style={{ position: 'relative' }}>
-            {user?.username ? user.username.charAt(0).toUpperCase() : 'U'}
-            <div style={{ position: 'absolute', bottom: 0, right: 0, width: '10px', height: '10px', background: 'var(--success)', borderRadius: '50%', border: '2px solid var(--bg-dark)' }} />
-          </div>
-          <div className="user-info">
-            <span className="user-name">{user?.username || 'User'}</span>
-            <span className="user-role">{user?.role || 'Pengguna'}</span>
-          </div>
+      {mobileOpen && <div className="sidebar-backdrop open" onClick={onClose} aria-hidden="true" />}
+      <div className={`sidebar${mobileOpen ? ' open' : ''}`}>
+        <div className="sidebar-menu" role="navigation" aria-label="Main">
+          {tabs.map(tab => (
+            <NavLink
+              key={tab.path}
+              to={tab.path}
+              aria-label={tab.name}
+              onClick={onClose}
+              className={({ isActive }) => `sidebar-item ${isActive ? 'active' : ''}`}
+            >
+              <div className="item-icon">{tab.icon}</div>
+              <span className="item-label">{tab.name}</span>
+            </NavLink>
+          ))}
         </div>
-        
-        <button className="logout-btn" onClick={handleLogout} title="Logout" aria-label="Logout">
-          <LogOut size={20} className="item-icon" />
-          <span className="item-label">Logout</span>
-        </button>
       </div>
-    </div>
-    <button
-      className={`sidebar-collapse-btn${collapsed ? ' is-collapsed' : ''}`}
-      onClick={toggleCollapsed}
-      title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-      aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-      aria-expanded={!collapsed}
-    >
-      {collapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
-    </button>
     </>
   );
 }

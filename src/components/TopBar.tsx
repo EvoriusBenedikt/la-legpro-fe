@@ -3,7 +3,12 @@ import { Search, Bell, ShieldCheck, User, Menu, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-export default function TopBar({ onMenu }: { onMenu?: () => void }) {
+interface TopBarProps {
+  /** Mobile (≤767px): opens the off-canvas drawer */
+  onMenu?: () => void;
+}
+
+export default function TopBar({ onMenu }: TopBarProps) {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -14,8 +19,7 @@ export default function TopBar({ onMenu }: { onMenu?: () => void }) {
     if (path.includes('/admin')) return 'Admin Dashboard';
     if (path.includes('/repository')) return 'Legal Repository';
     if (path.includes('/opinion')) return 'Legal Opinion';
-    if (path.includes('/maker')) return 'Compliance Checker';
-    if (path.includes('/contracts')) return 'Contract Monitor';
+    if (path.includes('/contracts')) return 'Contracts';
     if (path.includes('/graph')) return 'Knowledge Graph';
     if (path.includes('/monitoring')) return 'System Monitoring';
     if (path.includes('/taxonomy')) return 'Taxonomy Manager';
@@ -30,15 +34,21 @@ export default function TopBar({ onMenu }: { onMenu?: () => void }) {
   };
 
   return (
-    <div className="topbar glass-panel" style={{ borderRadius: '0 0 0 24px', borderTop: 'none', borderRight: 'none', flexWrap: 'wrap' }}>
+    <div className="topbar">
       <div className="topbar-left">
+        <div className="topbar-brand">
+          <img src="/LegalAnalyzerLogo.png" alt="" className="topbar-brand-logo" />
+          <span className="topbar-brand-name">Legal Analyzer</span>
+        </div>
+
         {onMenu && (
           <button className="menu-btn" onClick={onMenu} aria-label="Open navigation menu">
             <Menu size={20} />
           </button>
         )}
+
         <div className="breadcrumb">
-          <span className="breadcrumb-brand">LA Legal-Analyzer</span>
+          <span className="breadcrumb-brand">Legal Analyzer</span>
           <span className="breadcrumb-separator">/</span>
           <span className="breadcrumb-current">{getPageTitle()}</span>
         </div>

@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import {
   Search, BarChart2, FileCheck, AlertTriangle, CheckCircle,
   XCircle, Clock, Edit2, Trash2, Eye, Calendar, Building,
-  TrendingUp, ShieldCheck, X
+  TrendingUp, ShieldCheck, X, Upload, RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useContractUpload } from '../context/ContractUploadContext';
 import ComplianceResultsViewer from './ComplianceResultsViewer';
+import ContractUploadModal from './ContractUploadModal';
 import { API_BASE } from '../config';
 
 interface AnalyzedDocument {
@@ -34,7 +36,7 @@ interface ExpiryInfo {
 function getExpiryInfo(expiration_date: string | null): ExpiryInfo {
   if (!expiration_date) return {
     status: 'none', label: 'Tidak terdeteksi', daysLeft: null,
-    badgeColor: 'var(--text-secondary)', badgeBg: 'rgba(100,116,139,0.15)', badgeBorder: 'rgba(100,116,139,0.3)',
+    badgeColor: '#475569', badgeBg: 'rgba(100,116,139,0.15)', badgeBorder: 'rgba(100,116,139,0.3)',
     notifText: '', notifColor: ''
   };
 
@@ -45,22 +47,22 @@ function getExpiryInfo(expiration_date: string | null): ExpiryInfo {
 
   if (daysLeft < 0) return {
     status: 'expired', label: `Kadaluarsa ${Math.abs(daysLeft)} hari lalu`, daysLeft,
-    badgeColor: '#dc2626', badgeBg: 'rgba(239,68,68,0.15)', badgeBorder: 'rgba(239,68,68,0.4)',
-    notifText: `Dokumen telah KEDALUWARSA sejak ${dateStr}`, notifColor: '#dc2626'
+    badgeColor: '#b91c1c', badgeBg: 'rgba(239,68,68,0.15)', badgeBorder: 'rgba(239,68,68,0.4)',
+    notifText: `Dokumen telah KEDALUWARSA sejak ${dateStr}`, notifColor: '#b91c1c'
   };
   if (daysLeft <= 7) return {
     status: 'critical', label: `${daysLeft} hari lagi`, daysLeft,
-    badgeColor: '#ea580c', badgeBg: 'rgba(249,115,22,0.15)', badgeBorder: 'rgba(249,115,22,0.4)',
-    notifText: `Kurang dari 1 minggu — kedaluwarsa ${dateStr}`, notifColor: '#ea580c'
+    badgeColor: '#9a3412', badgeBg: 'rgba(249,115,22,0.15)', badgeBorder: 'rgba(249,115,22,0.4)',
+    notifText: `Kurang dari 1 minggu — kedaluwarsa ${dateStr}`, notifColor: '#9a3412'
   };
   if (daysLeft <= 31) return {
     status: 'warning', label: `${daysLeft} hari lagi`, daysLeft,
-    badgeColor: '#d97706', badgeBg: 'rgba(251,191,36,0.12)', badgeBorder: 'rgba(251,191,36,0.35)',
-    notifText: `Kurang dari 1 bulan — kedaluwarsa ${dateStr}`, notifColor: '#d97706'
+    badgeColor: '#92400e', badgeBg: 'rgba(251,191,36,0.12)', badgeBorder: 'rgba(251,191,36,0.35)',
+    notifText: `Kurang dari 1 bulan — kedaluwarsa ${dateStr}`, notifColor: '#92400e'
   };
   return {
     status: 'active', label: dateStr, daysLeft,
-    badgeColor: '#059669', badgeBg: 'rgba(52,211,153,0.12)', badgeBorder: 'rgba(52,211,153,0.3)',
+    badgeColor: '#047857', badgeBg: 'rgba(52,211,153,0.12)', badgeBorder: 'rgba(52,211,153,0.3)',
     notifText: '', notifColor: ''
   };
 }
@@ -76,6 +78,9 @@ export default function ContractMonitor() {
   const [editExpirationDate, setEditExpirationDate] = useState('');
   const [viewingDoc, setViewingDoc] = useState<AnalyzedDocument | null>(null);
   const [loadingViewId, setLoadingViewId] = useState<string | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const { jobs, subscribe } = useContractUpload();
+  const processingCount = jobs.filter(j => j.status === 'processing').length;
 
   const fetchDocs = async () => {
     setIsLoading(true);
@@ -94,7 +99,19 @@ export default function ContractMonitor() {
     }
   };
 
-  useEffect(() => { fetchDocs(); }, [token]);
+  useEffect(() => {
+    fetchDocs();
+    // Refresh the list whenever a background analysis job finishes
+    return subscribe(() => { fetchDocs(); });
+  }, [token, subscribe]);
+
+  // Edit modal: Escape closes (overlay click handled on the overlay itself)
+  useEffect(() => {
+    if (!editDoc) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setEditDoc(null); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [editDoc]);
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Hapus dokumen ini dari monitoring?')) return;
@@ -174,23 +191,40 @@ export default function ContractMonitor() {
     return matchesTab && matchesSearch;
   });
 
-  const filterTabs: { id: FilterTab; label: string; count: number; color: string }[] = [
-    { id: 'all',      label: 'Semua',           count: total,    color: '#a855f7' },
-    { id: 'active',   label: 'Aktif',           count: active,   color: '#34d399' },
-    { id: 'expiring', label: 'Segera Berakhir', count: expiring, color: '#fbbf24' },
-    { id: 'expired',  label: 'Kedaluwarsa',     count: expired,  color: '#f87171' },
+  const filterTabs: { id: FilterTab; label: string; count: number; color: string; text: string; bg: string }[] = [
+    { id: 'all',      label: 'Semua',           count: total,    color: '#a855f7', text: '#6d28d9', bg: 'rgba(168,85,247,0.15)' },
+    { id: 'active',   label: 'Aktif',           count: active,   color: '#34d399', text: '#047857', bg: 'rgba(52,211,153,0.15)' },
+    { id: 'expiring', label: 'Segera Berakhir', count: expiring, color: '#fbbf24', text: '#92400e', bg: 'rgba(251,191,36,0.15)' },
+    { id: 'expired',  label: 'Kedaluwarsa',     count: expired,  color: '#f87171', text: '#b91c1c', bg: 'rgba(239,68,68,0.15)' },
   ];
 
   return (
     <div className="view-container" style={{ padding: '24px 32px', boxSizing: 'border-box', overflowY: 'auto' }}>
       {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
-          <BarChart2 size={24} color="#a855f7" />
-          <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 700 }}>Contract Monitor</h2>
+      <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+            <BarChart2 size={24} color="#a855f7" />
+            <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 700 }}>Contracts</h2>
+          </div>
+          <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Pantau status dan kedaluwarsa seluruh dokumen analisis Anda.</p>
         </div>
-        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Pantau status dan kedaluwarsa seluruh dokumen analisis Anda.</p>
+        <button
+          className="upload-btn"
+          onClick={() => setUploadOpen(true)}
+          style={{ background: 'var(--accent-color)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', minHeight: '44px', fontWeight: 600 }}
+        >
+          <Upload size={18} /> Upload Dokumen
+        </button>
       </div>
+
+      {/* Background analysis jobs (keep running across route changes) */}
+      {processingCount > 0 && (
+        <div className="bg-jobs-pill" role="status">
+          <RefreshCw size={14} className="animate-spin-slow" />
+          {processingCount} dokumen sedang dianalisis di latar belakang…
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '28px' }}>
@@ -202,7 +236,7 @@ export default function ContractMonitor() {
         ].map(kpi => (
           <div key={kpi.label} style={{
             background: 'var(--bg-element)', borderRadius: '16px', padding: '20px',
-            border: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: '16px'
+            border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: '16px'
           }}>
             <div style={{ width: 44, height: 44, borderRadius: '12px', background: kpi.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: kpi.color, flexShrink: 0 }}>
               {kpi.icon}
@@ -224,20 +258,20 @@ export default function ContractMonitor() {
             placeholder="Cari nama perusahaan atau file..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ width: '100%', padding: '10px 12px 10px 36px', background: 'var(--bg-element)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', color: '#f1f5f9', fontSize: '0.9rem', boxSizing: 'border-box' }}
+            style={{ width: '100%', padding: '10px 12px 10px 36px', background: 'var(--bg-element)', border: '1px solid var(--border-color)', borderRadius: '10px', color: 'var(--text-primary)', fontSize: '0.9rem', boxSizing: 'border-box' }}
           />
         </div>
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           {filterTabs.map(tab => (
-            <button key={tab.id} onClick={() => setFilterTab(tab.id)} style={{
-              padding: '8px 14px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
-              background: filterTab === tab.id ? tab.color : 'var(--bg-card)',
-              border: filterTab === tab.id ? 'none' : '1px solid rgba(255,255,255,0.08)',
-              color: filterTab === tab.id ? 'white' : 'var(--text-secondary)',
+            <button key={tab.id} onClick={() => setFilterTab(tab.id)} aria-pressed={filterTab === tab.id} style={{
+              padding: '8px 14px', minHeight: '44px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+              background: filterTab === tab.id ? tab.bg : 'var(--bg-card)',
+              border: filterTab === tab.id ? `1px solid ${tab.color}` : '1px solid var(--border-color)',
+              color: filterTab === tab.id ? tab.text : 'var(--text-secondary)',
               display: 'flex', alignItems: 'center', gap: '6px'
             }}>
               {tab.label}
-              <span style={{ fontSize: '0.75rem', padding: '1px 6px', borderRadius: '999px', background: filterTab === tab.id ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.08)' }}>
+              <span style={{ fontSize: '0.75rem', padding: '1px 6px', borderRadius: '999px', background: 'rgba(0,0,0,0.08)' }}>
                 {tab.count}
               </span>
             </button>
@@ -263,7 +297,7 @@ export default function ContractMonitor() {
                 <div style={{
                   background: 'var(--bg-element)', borderRadius: '14px', padding: '18px 20px',
                   border: expiry.status !== 'active' && expiry.status !== 'none'
-                    ? `1px solid ${expiry.badgeBorder}` : '1px solid rgba(255,255,255,0.06)',
+                    ? `1px solid ${expiry.badgeBorder}` : '1px solid var(--border-color)',
                   transition: 'all 0.2s',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
@@ -303,33 +337,33 @@ export default function ContractMonitor() {
                             {expiry.label}
                           </span>
 
-                          <button onClick={() => handleView(doc)} title="Lihat Analisis" style={{
-                            padding: '6px 12px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 500,
-                            background: isViewing ? 'rgba(168,85,247,0.2)' : 'rgba(0,0,0,0.05)',
-                            border: isViewing ? '1px solid #a855f7' : '1px solid rgba(0,0,0,0.1)',
-                            color: isViewing ? '#d8b4fe' : 'var(--text-secondary)', cursor: 'pointer',
+                          <button onClick={() => handleView(doc)} title="Lihat Analisis" aria-expanded={isViewing} style={{
+                            padding: '6px 12px', minHeight: '44px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 500,
+                            background: isViewing ? 'rgba(168,85,247,0.12)' : 'var(--bg-element)',
+                            border: isViewing ? '1px solid #a855f7' : '1px solid var(--border-color)',
+                            color: isViewing ? '#6d28d9' : 'var(--text-primary)', cursor: 'pointer',
                             display: 'flex', alignItems: 'center', gap: '6px'
                           }}>
                             {loadingViewId === doc.id ? '...' : <><Eye size={13} />{isViewing ? 'Tutup' : 'Lihat Analisis'}</>}
                           </button>
 
-                          <button onClick={() => handleDownloadCalendar(doc)} title="Tambah ke Kalender" style={{
-                            width: 32, height: 32, borderRadius: '8px', background: 'rgba(59,130,246,0.08)',
-                            border: '1px solid rgba(59,130,246,0.2)', color: '#60a5fa', cursor: 'pointer',
+                          <button onClick={() => handleDownloadCalendar(doc)} title="Tambah ke Kalender" aria-label="Tambah ke Kalender" style={{
+                            width: 44, height: 44, borderRadius: '8px', background: 'rgba(59,130,246,0.08)',
+                            border: '1px solid rgba(59,130,246,0.2)', color: '#2563eb', cursor: 'pointer',
                             display: 'flex', alignItems: 'center', justifyContent: 'center'
-                          }}><Calendar size={14} /></button>
+                          }}><Calendar size={16} /></button>
 
-                          <button onClick={() => { setEditDoc(doc); setEditCompanyName(doc.company_name || ''); setEditExpirationDate(doc.expiration_date || ''); }} title="Edit" style={{
-                            width: 32, height: 32, borderRadius: '8px', background: 'rgba(0,0,0,0.05)',
-                            border: '1px solid rgba(0,0,0,0.1)', color: 'var(--text-secondary)', cursor: 'pointer',
+                          <button onClick={() => { setEditDoc(doc); setEditCompanyName(doc.company_name || ''); setEditExpirationDate(doc.expiration_date || ''); }} title="Edit" aria-label="Edit metadata dokumen" style={{
+                            width: 44, height: 44, borderRadius: '8px', background: 'var(--bg-element)',
+                            border: '1px solid var(--border-color)', color: 'var(--text-primary)', cursor: 'pointer',
                             display: 'flex', alignItems: 'center', justifyContent: 'center'
-                          }}><Edit2 size={14} /></button>
+                          }}><Edit2 size={16} /></button>
 
-                          <button onClick={() => handleDelete(doc.id)} title="Hapus" style={{
-                            width: 32, height: 32, borderRadius: '8px', background: 'rgba(239,68,68,0.08)',
-                            border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', cursor: 'pointer',
+                          <button onClick={() => handleDelete(doc.id)} title="Hapus" aria-label="Hapus dokumen" style={{
+                            width: 44, height: 44, borderRadius: '8px', background: 'rgba(239,68,68,0.08)',
+                            border: '1px solid rgba(239,68,68,0.2)', color: '#dc2626', cursor: 'pointer',
                             display: 'flex', alignItems: 'center', justifyContent: 'center'
-                          }}><Trash2 size={14} /></button>
+                          }}><Trash2 size={16} /></button>
                         </div>
                       </div>
 
@@ -351,7 +385,7 @@ export default function ContractMonitor() {
                   <div style={{ background: 'var(--bg-element)', borderRadius: '14px', border: '1px solid rgba(168,85,247,0.2)', marginTop: '4px', padding: '0 12px 24px' }}>
                     <button onClick={() => setViewingDoc(null)} style={{
                       display: 'flex', alignItems: 'center', gap: '6px', margin: '16px 0 8px',
-                      background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.85rem'
+                      background: 'transparent', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '0.85rem'
                     }}>
                       <X size={14} /> Tutup Hasil Analisis
                     </button>
@@ -371,26 +405,37 @@ export default function ContractMonitor() {
 
       {/* Edit Modal */}
       {editDoc && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ background: 'var(--bg-card)', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '440px', border: '1px solid #334155' }}>
-            <h3 style={{ margin: '0 0 20px', color: 'white', fontSize: '1.1rem' }}>Edit Metadata Dokumen</h3>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Edit Metadata Dokumen"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setEditDoc(null); }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+        >
+          <div style={{ background: 'var(--bg-card)', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '440px', border: '1px solid var(--border-color)' }}>
+            <h3 style={{ margin: '0 0 20px', color: 'var(--text-primary)', fontSize: '1.1rem' }}>Edit Metadata Dokumen</h3>
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.88rem', color: 'var(--text-secondary)' }}>Nama Perusahaan</label>
               <input type="text" value={editCompanyName} onChange={e => setEditCompanyName(e.target.value)}
-                style={{ width: '100%', background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '10px 12px', color: 'white', boxSizing: 'border-box' }}
+                style={{ width: '100%', background: 'var(--bg-element)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text-primary)', boxSizing: 'border-box' }}
                 placeholder="Contoh: PT Lintasarta & PT Global Prima" />
             </div>
             <div style={{ marginBottom: '24px' }}>
               <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.88rem', color: 'var(--text-secondary)' }}>Tanggal Kadaluarsa</label>
               <input type="date" value={editExpirationDate} onChange={e => setEditExpirationDate(e.target.value)}
-                style={{ width: '100%', background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '10px 12px', color: 'white', boxSizing: 'border-box' }} />
+                style={{ width: '100%', background: 'var(--bg-element)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px 12px', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
             </div>
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setEditDoc(null)} style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer' }}>Batal</button>
-              <button onClick={handleEditSave} style={{ background: '#8b5cf6', border: 'none', color: 'white', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Simpan</button>
+              <button onClick={() => setEditDoc(null)} style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-primary)', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer' }}>Batal</button>
+              <button onClick={handleEditSave} style={{ background: 'var(--accent-color)', border: 'none', color: 'white', padding: '9px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Simpan</button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Upload modal — merged Compliance Checker flow */}
+      {uploadOpen && (
+        <ContractUploadModal onClose={() => setUploadOpen(false)} />
       )}
     </div>
   );

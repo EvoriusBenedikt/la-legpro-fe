@@ -28,6 +28,7 @@
   --ai-bubble: rgba(255, 255, 255, 0.9);
 
   --sidebar-width: 240px;
+  --sidebar-rail: 60px;
   --topbar-height: 64px;
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -130,84 +131,63 @@ h1, h2, h3, h4, h5, h6 {
   overflow: hidden;
 }
 
-/* Sidebar Styles */
+/* Floating sidebar — pill-shaped icon rail hovering inside
+   .dashboard-content-row (16px inset from the navbar and the left edge).
+   Its height wraps the menu instead of spanning the viewport. Hover or
+   keyboard focus expands it into the labeled panel; it OVERLAYS content
+   (the content column only reserves the rail strip), so expanding never
+   reflows the page. */
 .sidebar {
-  width: var(--sidebar-width);
-  background: var(--bg-dark);
-  border-right: 1px solid var(--border-color);
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: var(--sidebar-rail);
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
   display: flex;
   flex-direction: column;
-  padding-top: 24px;
-  overflow: hidden;
-  z-index: 50;
+  padding: 12px 0;
+  overflow: visible; /* labels may paint outside mid-transition */
+  z-index: 100;
   transition: width 0.25s ease;
 }
 
-/* Collapse handle — half-pill straddling the sidebar's right edge, vertically
-   centered. Rendered as a SIBLING of .sidebar (fixed-positioned) so the
-   sidebar's overflow: hidden cannot clip it; `left` tracks the sidebar width
-   with the same 0.25s ease as the width transition. */
-.sidebar-collapse-btn {
-  position: fixed;
-  top: 50%;
-  left: calc(var(--sidebar-width) - 12px);
-  transform: translateY(-50%);
-  z-index: 60;
-  width: 24px;
+/* Hover / keyboard focus → expand into the labeled panel.
+   :has(:focus-visible) instead of :focus-within: a mouse-clicked link keeps
+   DOM focus, and :focus-within would pin the panel open after the mouse
+   leaves. :focus-visible only matches keyboard-originated focus. */
+.sidebar:hover,
+.sidebar:has(:focus-visible) { width: var(--sidebar-width); }
+.sidebar:hover .sidebar-menu,
+.sidebar:has(:focus-visible) .sidebar-menu { align-items: stretch; }
+.sidebar:hover .sidebar-item,
+.sidebar:has(:focus-visible) .sidebar-item {
+  width: auto;
   height: 48px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-element);
-  border: 1px solid var(--border-color);
-  border-radius: 999px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
-  transition: left 0.25s ease, color 0.15s ease, border-color 0.15s ease;
+  margin: 0 12px;
+  padding: 0 14px;
+  justify-content: flex-start;
 }
-.sidebar-collapse-btn.is-collapsed { left: calc(76px - 12px); }
-.sidebar-collapse-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--border-highlight);
+.sidebar:hover .sidebar-item .item-label,
+.sidebar:has(:focus-visible) .sidebar-item .item-label {
+  display: inline;
+  /* fade in after the width animation is mostly done so nowrap text
+     never spills outside the pill mid-transition */
+  animation: labelFadeIn 0.12s ease 0.18s both;
 }
-
-
-
-.sidebar-header {
-  margin-bottom: 32px;
-  display: flex;
-  align-items: center;
-  padding: 0 20px;
-}
-
-.sidebar-header .logo-icon {
-  flex-shrink: 0;
-}
-
-/* Brand image logo (public/LegalAnalyzerLogo.png) */
-.sidebar-logo-img {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-}
-
-.sidebar-header h2 {
-  font-size: 1.2rem;
-  margin: 0 0 0 16px;
-  background: linear-gradient(to right, var(--accent-color), #38bdf8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  white-space: nowrap;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+@keyframes labelFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .sidebar-menu {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
   width: 100%;
 }
@@ -215,15 +195,17 @@ h1, h2, h3, h4, h5, h6 {
 .sidebar-item {
   display: flex;
   align-items: center;
-  height: 48px;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
   background: transparent;
   border: none;
   border-radius: 12px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s ease;
-  margin: 0 12px;
-  padding: 0 14px;
+  margin: 0;
+  padding: 0;
   position: relative;
   text-decoration: none;
 }
@@ -238,16 +220,17 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--accent-glow);
 }
 
+/* Active glow — underline at the BOTTOM of the item (not the left edge),
+   spanning the item width with an 8px inset per side */
 .sidebar-item.active::before {
   content: '';
   position: absolute;
-  left: -12px;
-  top: 50%;
-  transform: translateY(-50%);
-  height: 24px;
-  width: 4px;
+  left: 8px;
+  right: 8px;
+  bottom: 3px;
+  height: 4px;
   background: var(--accent-color);
-  border-radius: 0 4px 4px 0;
+  border-radius: 4px;
   box-shadow: 0 0 10px var(--accent-color);
 }
 
@@ -256,35 +239,14 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .sidebar-item .item-label {
+  display: none;
   margin-left: 16px;
   font-weight: 500;
   font-size: 0.95rem;
   white-space: nowrap;
 }
 
-/* User Profile at Bottom */
-.sidebar-footer {
-  margin-top: auto;
-  padding: 24px 12px;
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 250px;
-}
-
-.sidebar-user {
-  display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  border-radius: 12px;
-  transition: all 0.2s;
-}
-
-.sidebar-user:hover {
-  background: rgba(255,255,255,0.05);
-}
-
+/* Avatar (topbar user pill) */
 .avatar-small {
   width: 32px;
   height: 32px;
@@ -297,61 +259,6 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   font-size: 0.9rem;
   flex-shrink: 0;
-}
-
-.user-info {
-  margin-left: 12px;
-  display: flex;
-  flex-direction: column;
-  white-space: nowrap;
-}
-
-.user-name {
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--text-primary);
-}
-
-.user-role {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  text-transform: capitalize;
-}
-
-.logout-btn {
-  display: flex;
-  align-items: center;
-  height: 44px;
-  background: transparent;
-  border: none;
-  border-radius: 10px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  padding: 0 14px;
-}
-
-.logout-btn:hover {
-  color: var(--danger);
-  background: var(--danger-bg);
-}
-
-.logout-btn .item-icon {
-  flex-shrink: 0;
-}
-
-.logout-btn .item-label {
-  margin-left: 16px;
-  font-weight: 500;
-  font-size: 0.95rem;
-  opacity: 0;
-  transition: opacity 0.2s;
-  white-space: nowrap;
-}
-
-.sidebar:hover .logout-btn .item-label {
-  opacity: 1;
-  transition-delay: 0.1s;
 }
 
 /* Main Content Wrapper */
@@ -1435,25 +1342,70 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* ────────────────────────────────────────────────────────────
-   COMPLIANCE CHECKER STYLES
+   CONTRACT UPLOAD MODAL STYLES (merged Compliance Checker flow)
 ──────────────────────────────────────────────────────────── */
-.checker-content {
+.upload-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 300;
   display: flex;
-  flex-direction: column;
-  padding: 24px 32px;
-  flex: 1;
-  overflow-y: auto;
-}
-
-.upload-section {
-  display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex: 1;
-  gap: 24px;
+  padding: 16px;
 }
 
+.upload-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+  outline: none;
+}
+
+.upload-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.upload-modal-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  color: var(--text-primary);
+}
+
+.upload-modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.upload-modal-close:hover {
+  background: var(--bg-element);
+  color: var(--text-primary);
+}
+
+.upload-modal-subtitle {
+  margin: 4px 0 16px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Dropzone rendered as a real <button>: keyboard, click and drag & drop */
 .upload-box {
   border: 2px dashed rgba(148, 163, 184, 0.3);
   background: var(--bg-element);
@@ -1467,11 +1419,19 @@ h1, h2, h3, h4, h5, h6 {
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
+  font: inherit;
+  color: inherit;
 }
 
-.upload-box:hover {
+.upload-box:hover,
+.upload-box--dragover {
   border-color: var(--accent-color);
   background: rgba(56, 189, 248, 0.05);
+}
+
+.upload-box--modal {
+  padding: 32px 24px;
+  max-width: 100%;
 }
 
 .upload-icon-main {
@@ -1479,14 +1439,16 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: 16px;
 }
 
-.upload-box h3 {
+.upload-box-title {
+  display: block;
   margin: 0 0 8px 0;
   color: var(--text-primary);
-  font-size: 1.1rem;
+  font-size: 1.05rem;
+  font-weight: 600;
 }
 
-.upload-box p {
-  margin: 0;
+.upload-box-hint {
+  display: block;
   color: var(--text-secondary);
   font-size: 0.85rem;
 }
@@ -1505,33 +1467,151 @@ h1, h2, h3, h4, h5, h6 {
   border: 1px solid rgba(56, 189, 248, 0.3);
 }
 
-.analyze-btn-large {
+.ocr-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 14px 28px;
-  background: var(--accent-color);
-  color: #0f172a;
-  border: none;
-  border-radius: 12px;
-  font-weight: 600;
-  font-size: 1rem;
+  margin-top: 16px;
   cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.2);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
 }
 
-.analyze-btn-large:hover:not(:disabled) {
-  background: var(--accent-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(56, 189, 248, 0.3);
+.ocr-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: #f59e0b;
+  cursor: pointer;
 }
 
-.analyze-btn-large:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
+.error-message {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fee2e2;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #b91c1c;
+  font-size: 0.85rem;
+  font-weight: 500;
 }
+
+.upload-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.btn-modal-secondary {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 9px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.btn-modal-secondary:hover:not(:disabled) { background: var(--bg-element); }
+.btn-modal-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.upload-modal-note {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--bg-element);
+  border: 1px solid var(--border-color);
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+}
+
+.upload-modal-note p { margin: 0; }
+
+/* Background upload job toasts (rendered by UploadProvider) */
+.upload-toast-container {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: min(360px, calc(100vw - 40px));
+  pointer-events: none;
+}
+
+.upload-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  pointer-events: auto;
+  animation: upload-toast-in 0.2s ease;
+}
+
+@keyframes upload-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.upload-toast > svg:first-child {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.upload-toast span { flex: 1; }
+
+.upload-toast--info { border-left: 4px solid var(--accent-color); }
+.upload-toast--info > svg:first-child { color: var(--accent-color); }
+
+.upload-toast--success { border-left: 4px solid #047857; }
+.upload-toast--success > svg:first-child { color: #047857; }
+
+.upload-toast--error { border-left: 4px solid #b91c1c; }
+.upload-toast--error > svg:first-child { color: #b91c1c; }
+
+.upload-toast-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.upload-toast-close:hover {
+  background: var(--bg-element);
+  color: var(--text-primary);
+}
+
+/* In-progress background jobs indicator on the Contracts page */
+.bg-jobs-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: -8px 0 20px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  color: #1d4ed8;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.bg-jobs-pill svg { color: #1d4ed8; }
 
 .results-section {
   display: flex;
@@ -2032,11 +2112,12 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-/* Dashboard 3-Column Layout */
+/* Dashboard layout — full-width navbar on top; below it the floating
+   sidebar overlays the content column (see .sidebar). */
 .dashboard-main {
   display: flex;
   flex: 1;
-  flex-direction: row;
+  flex-direction: column;
   background: var(--bg-dark);
   height: 100vh;
   position: relative;
@@ -2046,6 +2127,7 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   flex: 1;
   min-height: 0;
+  position: relative; /* anchor for the absolutely-positioned floating sidebar */
 }
 
 .dashboard-center {
@@ -2055,27 +2137,95 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0;
   overflow: hidden;
   min-height: 0;
-  /* No left margin: the sidebar is an in-flow flex sibling, so a margin here
-     double-offsets the content and leaves a sidebar-wide gap. */
+  /* Full width: the rail-strip inset lives on .route-inset instead, so the
+     footer (a sibling of .route-inset inside the scroller) can span the
+     whole viewport edge to edge. */
   margin-left: 0;
 }
 
+/* Route views keep clear of the floating rail strip (16px inset + rail +
+   16px gap); the footer below deliberately does not. Flex column so view
+   roots keep the same flex-item behavior they had directly under
+   .tab-panel--active. */
+.route-inset {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+  min-height: 0;
+  margin-left: calc(32px + var(--sidebar-rail));
+}
 
-/* TopBar Styles */
+
+/* TopBar Styles — full-width bar, edge to edge */
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 20px 24px;
   margin: 0;
-  background: transparent;
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-color);
+  position: relative;
+  z-index: 110;
+  flex-shrink: 0;
 }
 
 .topbar-left {
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Brand: logo + name, far left of the navbar */
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.topbar-brand-logo {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.topbar-brand-name {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--accent-color);
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+/* Hamburger — mobile only (the desktop sidebar expands on hover);
+   shown again in the ≤767px query */
+.menu-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.menu-btn:hover {
+  border-color: var(--border-highlight);
+  color: var(--accent-color);
 }
 
 .search-bar-top {
@@ -2268,16 +2418,22 @@ h1, h2, h3, h4, h5, h6 {
   margin-top: 40px;
 }
 
-/* Hero Banner */
+/* Hero header — compact, search-forward utility header (not a marketing
+   hero). Depth comes from a navy→blue gradient + faint document-grid
+   pattern + a soft blue glow instead of a flat dark fill. */
 .hero-banner {
-  background: linear-gradient(135deg, rgba(20, 15, 38, 0.8), rgba(42, 36, 64, 0.6));
-  border-radius: 20px;
-  padding: 20px 24px;
   position: relative;
-  overflow: visible;
-  margin-bottom: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  border-radius: 16px;
+  padding: 14px 20px 16px;
+  margin-bottom: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: white;
+  background:
+    radial-gradient(circle at 88% 10%, rgba(59, 130, 246, 0.28), transparent 55%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 26px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px 26px),
+    linear-gradient(120deg, #0d1b3e 0%, #16336f 60%, #1d4ed8 140%);
 }
 
 .hero-content {
@@ -2285,9 +2441,30 @@ h1, h2, h3, h4, h5, h6 {
   z-index: 2;
 }
 
+.hero-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Scale-of-justice tile — replaces the old abstract blue-square graphic */
+.hero-icon-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: white;
+}
+
 .hero-content h2 {
-  font-size: 1.4rem;
-  margin: 0 0 4px 0;
+  font-size: 1.3rem;
+  margin: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2295,31 +2472,58 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .hero-content h2 span {
-  font-size: 1.5rem;
+  font-size: 1.3rem;
   color: rgba(255, 255, 255, 0.8);
 }
 
-.hero-content p {
-  color: rgba(255, 255, 255, 0.8);
-  margin: 0 0 12px 0;
-  font-size: 0.9rem;
+/* Key stat surfaced in the header for emphasis */
+.hero-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
 }
+
+.hero-content p {
+  color: rgba(255, 255, 255, 0.78);
+  margin: 6px 0 10px;
+  font-size: 0.85rem;
+}
+
+/* Search is the header's primary action — light card lifted off the dark
+   background so it reads as the main interactive element */
+.hero-search {
+  max-width: 720px;
+  margin-bottom: 12px;
+  background: var(--bg-card);
+  box-shadow: 0 6px 18px rgba(8, 15, 40, 0.35);
+}
+
+.hero-search input { padding: 12px; }
 
 .hero-avatars {
   display: flex;
   align-items: center;
+  margin-left: auto;
 }
 
 .hero-avatars > div {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 0.75rem;
   font-weight: 600;
-  border: 2px solid #221E36;
+  border: 2px solid rgba(255, 255, 255, 0.85);
   margin-left: -8px;
 }
 
@@ -2344,46 +2548,11 @@ h1, h2, h3, h4, h5, h6 {
   color: white;
 }
 
-.hero-graphic {
-  position: absolute;
-  right: 24px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 140px;
-  height: 140px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.hero-graphic img,
-.hero-graphic svg {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-
 .avatar-caption {
   font-size: 0.72rem;
   color: rgba(255, 255, 255, 0.55);
   margin-left: 10px;
   white-space: nowrap;
-}
-
-.floating-sphere {
-  width: 84px;
-  height: 84px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #A855F7, #4C1D95);
-  box-shadow: 0 10px 30px rgba(168, 85, 247, 0.3), inset -10px -10px 20px rgba(0,0,0,0.5);
-  animation: float 6s ease-in-out infinite;
-}
-
-@keyframes float {
-  0% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
-  100% { transform: translateY(0px); }
 }
 
 /* Statistics Row */
@@ -2743,17 +2912,14 @@ select::placeholder {
    768 tablet · 375 mobile-M. Mobile-first overrides below.
    ═══════════════════════════════════════════════════════════════════ */
 
-/* Logout label is tappable content — never hover-gated (touch has no hover) */
-.logout-btn .item-label { opacity: 1; }
-
 /* Repository view padding (responsive overrides live in the mobile query) */
 .repository-view {
   padding: 24px 32px;
   box-sizing: border-box;
 }
 
-/* Hamburger + mobile search toggle: hidden on desktop, shown on mobile */
-.menu-btn,
+/* Mobile search toggle: hidden on desktop, shown on mobile (the hamburger
+   menu-btn is always visible now — it toggles the floating sidebar) */
 .search-toggle-btn,
 .topbar-search-expand { display: none; }
 
@@ -2783,24 +2949,9 @@ select::placeholder {
   z-index: 90;
 }
 
-/* ── Laptop (≤1024px): sidebar becomes an icon rail ── */
+/* ── Laptop (≤1024px): floating sidebar overlays content — no rail forcing;
+      the navbar hamburger toggles it exactly like on desktop ── */
 @media (max-width: 1024px) {
-  .dashboard-center { margin-left: 0; padding: 0; }
-
-  .sidebar { width: 76px; padding-top: 20px; }
-  .sidebar-header { padding: 0; justify-content: center; margin-bottom: 24px; }
-  .sidebar-header h2 { display: none; }
-  .sidebar-collapse-btn { display: none; }
-  .sidebar-menu { align-items: center; }
-  .sidebar-item { margin: 0; padding: 0; width: 48px; height: 48px; justify-content: center; }
-  .sidebar-item .item-label { display: none; }
-  .sidebar-item.active::before { left: -14px; }
-  .sidebar-footer { min-width: 0; padding: 16px 0; align-items: center; }
-  .sidebar-user { padding: 8px; }
-  .user-info { display: none; }
-  .logout-btn { padding: 0; width: 48px; height: 48px; justify-content: center; }
-  .logout-btn .item-label { display: none; }
-
   .stats-row { flex-wrap: wrap; }
   .stat-card { flex: 1 1 calc(50% - 8px); min-width: 0; }
 
@@ -2810,46 +2961,44 @@ select::placeholder {
 
 /* ── Mobile (≤767px): drawer nav, stacked everything ── */
 @media (max-width: 767px) {
-  /* Sidebar → off-canvas drawer */
+  /* Sidebar → floating off-canvas drawer (keeps the pill shape); the open
+     state shows the labeled layout directly — touch has no hover */
   .sidebar {
     position: fixed;
-    top: 0; bottom: 0; left: 0;
+    top: 16px; bottom: auto; left: 16px;
     width: min(280px, 84vw);
-    transform: translateX(-105%);
+    transform: translateX(calc(-100% - 24px));
     transition: transform 0.25s ease;
     z-index: 100;
-    padding-top: 20px;
   }
   .sidebar.open { transform: translateX(0); }
-  .sidebar.open .sidebar-header { padding: 0 20px; justify-content: flex-start; }
-  .sidebar.open .sidebar-header h2 { display: block; }
   .sidebar.open .sidebar-menu { align-items: stretch; }
-  .sidebar.open .sidebar-item { width: auto; margin: 0 12px; padding: 0 14px; justify-content: flex-start; }
-  .sidebar.open .sidebar-item .item-label { display: block; }
-  .sidebar.open .sidebar-footer { min-width: 0; padding: 24px 12px; align-items: stretch; }
-  .sidebar.open .user-info { display: flex; }
-  .sidebar.open .logout-btn { width: auto; padding: 0 14px; justify-content: flex-start; }
-  .sidebar.open .logout-btn .item-label { display: block; }
+  .sidebar.open .sidebar-item {
+    width: auto;
+    height: 48px;
+    margin: 0 12px;
+    padding: 0 14px;
+    justify-content: flex-start;
+  }
+  .sidebar.open .sidebar-item .item-label { display: inline; animation: none; }
   .sidebar-backdrop.open { display: block; }
 
-  .dashboard-center { margin-left: 0; padding: 0; min-width: 0; }
+  .route-inset { margin-left: 0; min-width: 0; }
   .view-container { min-width: 0; }
   .view-header { padding: 16px; }
 
-  /* TopBar */
+  /* TopBar — drawer + backdrop sit above it (z-90 matches the backdrop;
+     DOM order puts the topbar first so the backdrop paints over it);
+     the brand name hides, the logo stays */
+  .topbar-brand-name { display: none; }
   .menu-btn {
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    width: 44px;
+    height: 44px;
     min-width: 44px;
     min-height: 44px;
-    background: transparent;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    color: var(--text-primary);
-    cursor: pointer;
   }
-  .topbar { padding: 12px 16px; gap: 12px; margin: 0; }
+  .topbar { padding: 12px 16px; gap: 12px; margin: 0; z-index: 90; }
   .topbar-left { gap: 12px; min-width: 0; }
   .breadcrumb { gap: 8px; min-width: 0; }
   .breadcrumb-brand, .breadcrumb-separator { display: none; }
@@ -2959,61 +3108,131 @@ select::placeholder {
   /* View + modal padding for narrow screens */
   .repository-view { padding: 16px 12px !important; }
   .modal-content { max-width: calc(100vw - 24px) !important; }
-  .hero-banner { flex-direction: column; gap: 16px; }
+  .hero-title-row { gap: 8px; }
+  .hero-avatars { margin-left: 0; }
+  .hero-search { max-width: 100%; }
   .compliance-summary-card { flex-direction: column; align-items: flex-start; }
 }
 
 /* ── Mobile-M fine-tuning (≤480px) ── */
-/* Global Footer — slim copyright bar pinned to the bottom of the content
-   column (no left offset; the parent .dashboard-center already sits right of
-   the sidebar). Kept intentionally short: this is a fixed 100vh dashboard
-   layout, so a tall footer permanently squishes .main-content. */
+/* Corporate footer (modeled on lintasarta.co.id) — lives INSIDE the scroll
+   flow (.tab-panel--active) with margin-top: auto, so it sits at the end of
+   the page and is revealed by scrolling instead of squishing the
+   fixed-height dashboard viewport. Titles/labels are real; values are
+   placeholders pending final content. */
 .app-footer {
   flex-shrink: 0;
+  margin-top: auto;
   width: 100%;
-  margin-left: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 24px;
+  background: #eaeef2;
   border-top: 1px solid var(--border-color);
-  background: var(--bg-element);
+  box-sizing: border-box;
 }
+
+/* Copyright bar sits at the very top of the footer — the content/footer
+   boundary — instead of at the bottom of the page */
+.footer-copyright-bar {
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  gap: 40px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 48px 48px 0;
+}
+
+.footer-brand-logo {
+  height: 44px;
+  width: auto;
+  object-fit: contain;
+}
+
+.footer-address {
+  margin: 16px 0 28px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.footer-contact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 24px;
+}
+
+.footer-contact-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text-secondary);
+}
+
+.footer-contact-item svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-primary);
+}
+
+.footer-contact-item strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+
+.footer-contact-item span {
+  display: block;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.footer-col h4 {
+  margin: 0 0 14px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.footer-section { margin-bottom: 28px; }
+.footer-section:last-child { margin-bottom: 0; }
+
+.footer-link {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.footer-link:hover { color: var(--accent-color); }
+
+.footer-title-link {
+  display: block;
+  margin-bottom: 20px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.footer-title-link:hover { color: var(--accent-color); }
 
 .app-footer-copyright {
   font-size: 0.78rem;
   color: var(--text-secondary);
 }
 
-@media (max-width: 767px) {
-  .app-footer { padding: 8px 16px; }
-  .app-footer-copyright { font-size: 0.72rem; text-align: center; }
+@media (max-width: 1024px) {
+  .footer-grid { padding: 40px 32px 0; grid-template-columns: 1fr 1fr; gap: 32px; }
 }
 
-/* ── Collapse-on-click (desktop): same rail look as tablet, user-toggled ──
-   Specificity (0,2,0) beats the base rules; the drawer mode below is
-   unaffected because Sidebar only applies .collapsed when not .open. */
-.sidebar.collapsed { width: 76px; padding-top: 20px; }
-.sidebar.collapsed .sidebar-header { padding: 0; justify-content: center; margin-bottom: 24px; }
-.sidebar.collapsed .sidebar-header h2 { display: none; }
-.sidebar.collapsed .sidebar-header .logo-icon { display: none; }
-.sidebar.collapsed .sidebar-menu { align-items: center; }
-.sidebar.collapsed .sidebar-item { margin: 0; padding: 0; width: 48px; height: 48px; justify-content: center; }
-.sidebar.collapsed .sidebar-item .item-label { display: none; }
-.sidebar.collapsed .sidebar-item.active::before { left: -14px; }
-.sidebar.collapsed .sidebar-footer { min-width: 0; padding: 16px 0; align-items: center; }
-.sidebar.collapsed .sidebar-user { padding: 8px; }
-.sidebar.collapsed .user-info { display: none; }
-.sidebar.collapsed .logout-btn { padding: 0; width: 48px; height: 48px; justify-content: center; }
-.sidebar.collapsed .logout-btn .item-label { display: none; }
 @media (max-width: 767px) {
-  .sidebar-collapse-btn { display: none; }
-}
-
-.hero-graphic-img {
-  width: 180px;
-  height: 180px;
-  object-fit: contain;
-  filter: drop-shadow(0 10px 30px rgba(168, 85, 247, 0.3));
-  animation: float 6s ease-in-out infinite;
+  .footer-grid { padding: 32px 16px 0; grid-template-columns: 1fr; gap: 28px; }
+  .footer-contact-grid { grid-template-columns: 1fr; }
+  .app-footer-copyright { font-size: 0.72rem; }
 }

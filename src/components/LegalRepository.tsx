@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Database, File, Upload, CheckCircle2, BookOpen, FolderOpen, Zap, FileCheck, X, Trash2, Clock, Bot } from 'lucide-react';
+import { Search, Database, File, Upload, CheckCircle2, BookOpen, FolderOpen, Zap, FileCheck, X, Trash2, Clock, Bot, Scale } from 'lucide-react';
 import DocumentDrawer from './DocumentDrawer';
 import { useAuth } from '../context/AuthContext';
 import ComplianceResultsViewer from './ComplianceResultsViewer';
@@ -634,21 +634,39 @@ export default function LegalRepository() {
         </div>
       )}
 
-      {/* Hero Banner */}
+      {/* Hero header — compact, search-forward */}
       <div className="hero-banner">
         <div className="hero-content">
-          <h2>Legal Repository <span>☆</span></h2>
-          <p>Manage all your regulatory and internal documents in one place!</p>
-          <div className="hero-avatars" title="Team members with documents in this repository">
-            <div className="add-avatar" title="Invite a contributor">+</div>
-            <div className="avatar" title="Contributor U1">U1</div>
-            <div className="avatar" title="Contributor U2">U2</div>
-            <div className="avatar-count" title="18 more contributors">+18</div>
-            <span className="avatar-caption">Contributors</span>
+          <div className="hero-title-row">
+            <span className="hero-icon-tile" aria-hidden="true">
+              <Scale size={22} strokeWidth={1.75} />
+            </span>
+            <h2>Legal Repository <span>☆</span></h2>
+            <span className="hero-stat-chip" title="Total documents indexed in this repository">
+              <Database size={13} /> {documents.length} documents indexed
+            </span>
+            <div className="hero-avatars" title="Team members with documents in this repository">
+              <div className="add-avatar" title="Invite a contributor">+</div>
+              <div className="avatar" title="Contributor U1">U1</div>
+              <div className="avatar" title="Contributor U2">U2</div>
+              <div className="avatar-count" title="18 more contributors">+18</div>
+              <span className="avatar-caption">Contributors</span>
+            </div>
           </div>
-        </div>
-        <div className="hero-graphic">
-          <img src="/logoLintas-removebg-preview.png" alt="" className="hero-graphic-img" />
+          <p>Manage all your regulatory and internal documents in one place!</p>
+          {!selectedHistoryDoc && (
+            <div className="search-bar hero-search">
+              <Search size={20} className="search-icon" />
+              <input
+                type="text"
+                placeholder={activeTab === 'regulations'
+                  ? "Search regulations by title, number, or sector..."
+                  : activeTab === 'analyzed' ? "Search analyzed documents..." : "Search internal documents by name..."}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -809,19 +827,6 @@ export default function LegalRepository() {
       </div>
 
       <div className="repository-content">
-        {/* Search */}
-        <div className="search-bar">
-          <Search size={20} className="search-icon" />
-          <input
-            type="text"
-            placeholder={activeTab === 'regulations'
-              ? "Search regulations by title, number, or sector..."
-              : activeTab === 'analyzed' ? "Search analyzed documents..." : "Search internal documents by name..."}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
         {/* Result count + active filter chips + rows per page */}
         {(activeTab === 'regulations' || activeTab === 'internal' || activeTab === 'analyzed') && !isLoading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', margin: '16px 0 4px' }}>
@@ -900,7 +905,7 @@ export default function LegalRepository() {
               <>
                 <FileCheck size={48} style={{ opacity: 0.3 }} />
                 <p>Belum ada dokumen yang dianalisis.</p>
-                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>Gunakan Compliance Checker untuk menganalisis dokumen dan menyimpannya ke sini.</p>
+                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>Gunakan tombol Upload Dokumen di halaman Contracts untuk menganalisis dokumen dan menyimpannya ke sini.</p>
               </>
             ) : activeTab === 'templates' && templates.length === 0 ? (
               <>
