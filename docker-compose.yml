@@ -5,8 +5,13 @@ services:
       dockerfile: Dockerfile
       args:
         # Baked into the bundle at build time (Vite static replacement).
-        # Override per environment, e.g. VITE_API_URL=http://localhost:8000 docker compose up --build
-        VITE_API_URL: ${VITE_API_URL:-https://legal-analyzer.lintasarta.dev}
+        # The substitution var is deliberately NOT named VITE_API_URL: Compose
+        # auto-loads this directory's .env (Vite's dev file, which holds
+        # VITE_API_URL=http://localhost:8080) for ${VAR} interpolation, so a
+        # VITE_API_URL here leaked the dev URL into production builds and end
+        # users' browsers hit ERR_CONNECTION_REFUSED on their own localhost.
+        # Override per environment, e.g. FE_API_URL=https://api.example.com docker compose up --build
+        VITE_API_URL: ${FE_API_URL:-https://legal-analyzer.lintasarta.dev}
     container_name: legpro-frontend
     restart: always
     ports:

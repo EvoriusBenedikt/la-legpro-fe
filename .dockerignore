@@ -1,0 +1,8 @@
+# Keep dev secrets/env out of the image — VITE_API_URL for builds comes from
+# the compose build arg (FE_API_URL), never from this directory's .env.
+.env
+.env.*
+
+node_modules
+dist
+*.log
