@@ -219,8 +219,8 @@ export default function AdminDashboard() {
           {/* System Health */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' }}>
             {[
-              { label: 'SQLite Database', ok: data.system_health.sqlite, icon: <Database size={18} /> },
-              { label: 'ChromaDB Vector', ok: data.system_health.chromadb, icon: <Server size={18} /> },
+              { label: 'PostgreSQL Database', ok: data.system_health.sqlite, icon: <Database size={18} /> },
+              { label: 'PGVector', ok: data.system_health.chromadb, icon: <Server size={18} /> },
             ].map(item => (
               <div key={item.label} style={{
                 background: 'var(--bg-card)', borderRadius: '14px', padding: '20px',
