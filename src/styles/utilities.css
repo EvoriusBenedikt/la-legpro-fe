@@ -1,0 +1,275 @@
+/* === utilities.css - responsive system =========================
+   Breakpoint overrides + responsive helper rules. Must stay LAST in
+   the cascade (imported after components.css). Moved verbatim from
+   index.css lines 2910-3117 + 3229-3238. Phase 5, 2026-09-24. */
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE SYSTEM — actual queries: 1024 laptop (stats wrap 2-up,
+   topbar search narrows, header padding 20×24) · 900 account-view
+   stack (lives in components.css) · 767 mobile (off-canvas drawer,
+   bottom-sheet filters, 1-column grids). Desktop-first (max-width)
+   overrides below.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Repository view padding (responsive overrides live in the mobile query) */
+.repository-view {
+  padding: 24px 32px;
+  box-sizing: border-box;
+}
+
+/* Mobile search toggle: hidden on desktop, shown on mobile (the hamburger
+   menu-btn is always visible now — it toggles the floating sidebar) */
+.search-toggle-btn,
+.topbar-search-expand { display: none; }
+
+/* Repository filter dropdown panel (desktop positioning; mobile bottom sheet) */
+.repo-filter-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 300px;
+  max-width: calc(100vw - 48px);
+  max-height: 380px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.25);
+  z-index: 500;
+  padding: 8px;
+}
+
+/* Sidebar backdrop for the mobile drawer */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-veil);
+  z-index: 90;
+}
+
+/* ── Laptop (≤1024px): floating sidebar overlays content — no rail forcing;
+      the navbar hamburger toggles it exactly like on desktop ── */
+@media (max-width: 1024px) {
+  .stats-row { flex-wrap: wrap; }
+  .stat-card { flex: 1 1 calc(50% - 8px); min-width: 0; }
+
+  .search-bar-top { width: 200px; }
+  .view-header { padding: 20px 24px; }
+}
+
+/* ── Mobile (≤767px): drawer nav, stacked everything ── */
+@media (max-width: 767px) {
+  /* Sidebar → floating off-canvas drawer (keeps the pill shape); the open
+     state shows the labeled layout directly — touch has no hover */
+  .sidebar {
+    position: fixed;
+    top: 16px; bottom: auto; left: 16px;
+    width: min(280px, 84vw);
+    transform: translateX(calc(-100% - 24px));
+    transition: transform 0.25s ease;
+    z-index: 100;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar.open .sidebar-menu { align-items: stretch; }
+  .sidebar.open .sidebar-item {
+    width: auto;
+    height: 48px;
+    margin: 0 12px;
+    padding: 0 14px;
+    justify-content: flex-start;
+  }
+  .sidebar.open .sidebar-item .item-label { display: inline; animation: none; }
+  .sidebar-backdrop.open { display: block; }
+
+  .route-inset { margin-left: 0; min-width: 0; }
+  .view-container { min-width: 0; }
+  .view-header { padding: 16px; }
+
+  /* Legal Opinion — conversation panel → off-canvas drawer (mirrors the
+     sidebar drawer above), header actions → icon-only 44px touch targets,
+     chat paddings reduced for phones (critique P2: adapt). */
+  .panel-toggle-btn { display: inline-flex; }
+  .legal-opinion-actions .btn-label { display: none; }
+  .legal-opinion-actions .secondary-action-btn {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+  .conversation-panel-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: var(--overlay-veil);
+    z-index: 90;
+  }
+  .legal-opinion-view .conversation-panel {
+    position: fixed;
+    top: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    left: 16px;
+    width: min(280px, calc(100vw - 32px));
+    min-width: 0;
+    z-index: 100;
+    transform: translateX(calc(-100% - 24px));
+    transition: transform 0.25s ease;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.25);
+  }
+  .legal-opinion-view .conversation-panel.open { transform: translateX(0); }
+  .legal-opinion-view .conversation-panel .conversation-list {
+    flex: 1;
+    min-height: 0;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+  }
+  .legal-opinion-view .conversation-menu-btn { width: 44px; height: 44px; }
+  .legal-opinion-view .chat-box { padding: 16px 12px; gap: 16px; }
+  .legal-opinion-view .message-item { max-width: 92%; }
+  .legal-opinion-view .input-area { padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); }
+  .legal-opinion-view .evidence-content button { min-height: 44px; }
+  /* Send button: the 40px size now lives in components.css (batch-4 polish
+     removed the TSX inline double-definition), so the 44px touch floor
+     overrides it by specificity — no !important needed. */
+  .legal-opinion-view .send-button { width: 44px; height: 44px; }
+
+  /* TopBar — drawer + backdrop sit above it (z-90 matches the backdrop;
+     DOM order puts the topbar first so the backdrop paints over it);
+     the brand name hides, the logo stays */
+  .topbar-brand-name { display: none; }
+  .menu-btn {
+    display: inline-flex;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .topbar { padding: 12px 16px; gap: 12px; margin: 0; z-index: 90; }
+  .topbar-left { gap: 12px; min-width: 0; }
+  .breadcrumb { gap: 8px; min-width: 0; }
+  .breadcrumb-brand, .breadcrumb-separator { display: none; }
+  .breadcrumb-current {
+    max-width: 44vw;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.85rem;
+  }
+  .search-bar-top { display: none; }
+  .search-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+  .topbar-right { gap: 8px; }
+  .topbar-role-badge { display: none; }
+  .topbar-user-pill { padding: 4px; gap: 0; }
+  .icon-btn-top {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .topbar-search-expand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: var(--bg-element);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 4px 12px;
+    margin-top: 8px;
+  }
+  .topbar-search-expand input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 1rem;
+    min-height: 44px;
+  }
+
+  /* Stat cards → 1 column */
+  .stats-row { flex-direction: column; }
+  .stat-card { flex: 1 1 auto; padding: 16px; }
+
+  /* Repository toolbar wraps; filter becomes a bottom sheet */
+  .repo-header { flex-wrap: wrap; gap: 12px; }
+  .repo-actions { flex-wrap: wrap; width: 100%; }
+  .repo-actions > * { flex: 1 1 auto; min-height: 44px; }
+  .repo-filter-panel {
+    position: fixed;
+    left: 0; right: 0; bottom: 0; top: auto;
+    width: auto;
+    max-width: none;
+    max-height: 72vh;
+    border-radius: 16px 16px 0 0;
+    z-index: 600;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
+  /* Tabs scroll horizontally everywhere they overflow */
+  .repo-tabs {
+    display: flex;
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 0 0 20px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .repo-tab { white-space: nowrap; flex-shrink: 0; }
+
+  /* Cards 3 → 1 */
+  .document-grid { grid-template-columns: 1fr; gap: 16px; }
+  .document-card { padding: 20px; }
+
+  /* Tables: horizontal scroll + sticky first column */
+  .monitoring-table { min-width: 640px; }
+  .module-card { overflow-x: auto; }
+  .monitoring-table thead th:first-child,
+  .monitoring-table tbody td:first-child,
+  .compliance-table thead th:first-child,
+  .compliance-table tbody td:first-child {
+    position: sticky;
+    left: 0;
+    background: var(--bg-card);
+    z-index: 1;
+  }
+
+  /* Touch targets ≥44px */
+  .repo-tab { padding: 12px 18px; min-height: 44px; }
+  .analyze-btn { padding: 12px; }
+  .upload-btn { padding: 12px 16px; }
+  .auth-button { min-height: 48px; }
+
+  /* View + modal padding for narrow screens */
+  .repository-view { padding: 16px 12px !important; }
+  .modal-content { max-width: calc(100vw - 24px) !important; }
+  .hero-title-row { gap: 8px; }
+  .hero-avatars { margin-left: 0; }
+  .hero-search { max-width: 100%; }
+  .compliance-summary-card { flex-direction: column; align-items: flex-start; }
+}
+
+/* ── Footer responsive grids (1024 → 2 columns, 767 → 1 column) ── */
+
+@media (max-width: 1024px) {
+  .footer-grid { padding: 40px 32px 0; grid-template-columns: 1fr 1fr; gap: 32px; }
+}
+
+@media (max-width: 767px) {
+  .footer-grid { padding: 32px 16px 0; grid-template-columns: 1fr; gap: 28px; }
+  .footer-contact-grid { grid-template-columns: 1fr; }
+  .app-footer-copyright { font-size: 0.72rem; }
+}

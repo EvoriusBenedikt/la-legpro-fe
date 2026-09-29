@@ -33,4 +33,17 @@ api.interceptors.response.use(
   }
 );
 
+export interface HttpError {
+  response: {
+    status: number;
+    data?: { detail?: string; message?: string };
+  };
+}
+
+/** True when a caught value is an axios error carrying a server response (4xx/5xx).
+    Lets call sites keep the old fetch-style split between HTTP errors and network errors. */
+export function isHttpError(e: unknown): e is HttpError {
+  return axios.isAxiosError(e) && !!e.response;
+}
+
 export default api;

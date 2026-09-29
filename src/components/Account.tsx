@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { API_BASE } from '../config';
+import api, { isHttpError } from '../services/api';
 import { User, LogOut, ShieldCheck, Mail, Calendar, Key, Award, Lock } from 'lucide-react';
 
 export default function Account() {
-  const { user, token, logout } = useAuth();
+  const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState<'general' | 'security'>('general');
 
   // Change-password form state
@@ -35,24 +35,17 @@ export default function Account() {
 
     setPwLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/change-password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ old_password: currentPassword, new_password: newPassword }),
+      await api.post('/api/auth/change-password', {
+        old_password: currentPassword,
+        new_password: newPassword,
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(typeof data.detail === 'string' ? data.detail : 'Failed to change password');
-      }
       setPwSuccess('Password updated successfully');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } catch (err: any) {
-      setPwError(err.message);
+    } catch (err) {
+      const detail = isHttpError(err) ? err.response.data?.detail : undefined;
+      setPwError(typeof detail === 'string' ? detail : 'Failed to change password');
     } finally {
       setPwLoading(false);
     }

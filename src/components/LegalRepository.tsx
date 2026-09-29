@@ -4,7 +4,7 @@ import DocumentDrawer from './DocumentDrawer';
 import { useAuth } from '../context/AuthContext';
 import ComplianceResultsViewer from './ComplianceResultsViewer';
 import ProtectedRoute from './ProtectedRoute';
-import { API_BASE } from '../config';
+import api, { isHttpError } from '../services/api';
 
 interface OJKDocument {
   id: string;
@@ -93,13 +93,8 @@ export default function LegalRepository() {
 
   const fetchPendingDocs = async () => {
     try {
-      const response = await fetch(API_BASE + '/api/repository/pending', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setPendingDocs(data.documents || []);
-      }
+      const response = await api.get('/api/repository/pending');
+      setPendingDocs(response.data.documents || []);
     } catch (error) {
       console.error("Error fetching pending docs", error);
     }
@@ -109,17 +104,10 @@ export default function LegalRepository() {
     if (!window.confirm("Apakah Anda yakin ingin menghapus dokumen ini? Semua relasi dan akses akan dihapus.")) return;
     
     try {
-      const response = await fetch(`${API_BASE}/api/repository/document/${docId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+      await api.delete(`/api/repository/document/${docId}`).catch((e) => {
+        if (e.response) throw new Error(e.response.data?.detail || 'Failed to delete document');
+        throw e;
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to delete document');
-      }
       
       alert("Dokumen berhasil dihapus!");
       fetchDocs();
@@ -131,37 +119,25 @@ export default function LegalRepository() {
 
   const handleConfirmPending = async (docId: string, klasifikasi: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/repository/pending/${docId}/confirm`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ klasifikasi })
-      });
-      if (res.ok) {
-        alert('Dokumen berhasil dikonfirmasi dan dimasukkan ke repositori!');
-        fetchPendingDocs();
-        fetchDocs();
-      } else {
-        alert('Gagal mengkonfirmasi dokumen.');
-      }
+      await api.post(`/api/repository/pending/${docId}/confirm`, { klasifikasi });
+      alert('Dokumen berhasil dikonfirmasi dan dimasukkan ke repositori!');
+      fetchPendingDocs();
+      fetchDocs();
     } catch (e) {
-      console.error(e);
-      alert('Terjadi kesalahan koneksi.');
+      if (isHttpError(e)) {
+        alert('Gagal mengkonfirmasi dokumen.');
+      } else {
+        console.error(e);
+        alert('Terjadi kesalahan koneksi.');
+      }
     }
   };
 
   const fetchDocs = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(API_BASE + '/api/repository', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setDocuments(data.documents || []);
-      }
+      const response = await api.get('/api/repository');
+      setDocuments(response.data.documents || []);
     } catch (error) {
       console.error("Error fetching repository", error);
     } finally {
@@ -171,13 +147,8 @@ export default function LegalRepository() {
 
   const fetchHistoryDocs = async () => {
     try {
-      const response = await fetch(API_BASE + '/api/compliance-history', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setHistoryDocs(data.history || []);
-      }
+      const response = await api.get('/api/compliance-history');
+      setHistoryDocs(response.data.history || []);
     } catch (error) {
       console.error("Error fetching history", error);
     }
@@ -186,15 +157,8 @@ export default function LegalRepository() {
   const handleViewHistoryDoc = async (doc: AnalyzedDocument) => {
     setLoadingReportId(doc.id);
     try {
-      const response = await fetch(`${API_BASE}/api/compliance-history/${doc.id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setSelectedHistoryDoc(data);
-      } else {
-        throw new Error('Gagal memuat detail report');
-      }
+      const response = await api.get(`/api/compliance-history/${doc.id}`);
+      setSelectedHistoryDoc(response.data);
     } catch (err) {
       console.error(err);
       alert('Gagal memuat detail hasil analisis');
@@ -205,15 +169,11 @@ export default function LegalRepository() {
 
   const fetchUsersList = async () => {
     try {
-      const res = await fetch(API_BASE + '/api/auth/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUsersList(data.users || []);
-        if (data.users && data.users.length > 0) {
-          setShareUser(data.users[0].id);
-        }
+      const res = await api.get('/api/auth/users');
+      const data = res.data;
+      setUsersList(data.users || []);
+      if (data.users && data.users.length > 0) {
+        setShareUser(data.users[0].id);
       }
     } catch (e) {
       console.error(e);
@@ -226,30 +186,22 @@ export default function LegalRepository() {
     setIsSharing(true);
     
     try {
-      const res = await fetch(`${API_BASE}/api/documents/${showShareModal.id}/grant-access`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          granted_to: shareUser,
-          reason: shareReason,
-          expires_at: shareExpiry || null
-        })
+      const res = await api.post(`/api/documents/${showShareModal.id}/grant-access`, {
+        granted_to: shareUser,
+        reason: shareReason,
+        expires_at: shareExpiry || null
       });
       
-      const data = await res.json();
-      if (res.ok) {
-        alert(data.message || 'Akses berhasil diberikan.');
-        setShowShareModal(null);
-        setShareReason('');
-        setShareExpiry('');
-      } else {
-        alert(data.detail || 'Gagal memberikan akses.');
-      }
+      alert(res.data.message || 'Akses berhasil diberikan.');
+      setShowShareModal(null);
+      setShareReason('');
+      setShareExpiry('');
     } catch (e) {
-      alert('Terjadi kesalahan saat memberikan akses.');
+      if (isHttpError(e)) {
+        alert(e.response.data?.detail || 'Gagal memberikan akses.');
+      } else {
+        alert('Terjadi kesalahan saat memberikan akses.');
+      }
     } finally {
       setIsSharing(false);
     }
@@ -257,13 +209,8 @@ export default function LegalRepository() {
 
   const fetchTemplates = async () => {
     try {
-      const response = await fetch(API_BASE + '/api/templates', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setTemplates(data.templates || []);
-      }
+      const response = await api.get('/api/templates');
+      setTemplates(response.data.templates || []);
     } catch (error) {
       console.error("Error fetching templates", error);
     }
@@ -274,14 +221,9 @@ export default function LegalRepository() {
   useEffect(() => {
     const fetchTaxonomy = async () => {
       try {
-        const res = await fetch(API_BASE + '/api/taxonomy', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          // only active
-          setTaxonomyList(data.taxonomy.filter((t: any) => t.is_active));
-        }
+        const res = await api.get('/api/taxonomy');
+        // only active
+        setTaxonomyList(res.data.taxonomy.filter((t: any) => t.is_active));
       } catch (e) {
         console.error(e);
       }
@@ -292,12 +234,12 @@ export default function LegalRepository() {
   useEffect(() => {
     if (!viewPdfDoc || !viewPdfDoc.filename) return;
     
-    const pdfUrl = `${API_BASE}/api/pdf/${encodeURIComponent(viewPdfDoc.filename)}`;
+    const pdfPath = `/api/pdf/${encodeURIComponent(viewPdfDoc.filename)}`;
     setIsPdfLoading(true);
     setPdfBlobUrl(null);
     
-    fetch(pdfUrl)
-      .then(res => res.json())
+    api.get(pdfPath)
+      .then(res => res.data)
       .then(data => {
         const binary = atob(data.data);
         const bytes = new Uint8Array(binary.length);
@@ -329,26 +271,18 @@ export default function LegalRepository() {
     setIsGenerating(true);
     setGeneratedDoc(null);
     try {
-      const response = await fetch(API_BASE + '/api/templates/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          template_id: templateId,
-          user_prompt: promptInput
-        })
+      const response = await api.post('/api/templates/generate', {
+        template_id: templateId,
+        user_prompt: promptInput
       });
-      if (response.ok) {
-        const data = await response.json();
-        setGeneratedDoc(data.generated_document);
-      } else {
-        alert('Gagal membuat dokumen dari template');
-      }
+      setGeneratedDoc(response.data.generated_document);
     } catch (e) {
-      console.error(e);
-      alert('Terjadi kesalahan koneksi');
+      if (isHttpError(e)) {
+        alert('Gagal membuat dokumen dari template');
+      } else {
+        console.error(e);
+        alert('Terjadi kesalahan koneksi');
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -400,20 +334,15 @@ export default function LegalRepository() {
   const handleClearFailedDocuments = async () => {
     if (!confirm('Apakah Anda yakin ingin menghapus semua dokumen yang gagal diproses (termasuk duplikat)?')) return;
     try {
-      const response = await fetch(API_BASE + '/api/repository/failed', {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        alert(data.message);
-        fetchDocs();
-      } else {
-        const err = await response.json();
-        alert(err.detail || 'Gagal menghapus dokumen.');
-      }
+      const response = await api.delete('/api/repository/failed');
+      alert(response.data.message);
+      fetchDocs();
     } catch (e) {
-      alert('Terjadi kesalahan koneksi.');
+      if (isHttpError(e)) {
+        alert(e.response.data?.detail || 'Gagal menghapus dokumen.');
+      } else {
+        alert('Terjadi kesalahan koneksi.');
+      }
     }
   };
 
@@ -429,7 +358,7 @@ export default function LegalRepository() {
     }
 
     setIsUploading(true);
-    const endpoint = API_BASE + '/api/upload';
+    const endpoint = '/api/upload';
 
     let successCount = 0;
     
@@ -445,15 +374,9 @@ export default function LegalRepository() {
       formData.append("klasifikasi", selectedKlasifikasi[0] ?? 'Umum');
 
       try {
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
-          body: formData,
-        });
+        await api.post(endpoint, formData);
 
-        if (response.ok) {
-          successCount++;
-        }
+        successCount++;
       } catch (error) {
         console.error("Gagal mengunggah:", file.name, error);
       }
@@ -610,7 +533,7 @@ export default function LegalRepository() {
   const chipStyle: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: '6px',
     fontSize: '0.78rem', fontWeight: 600,
-    background: 'rgba(59, 130, 246, 0.12)', color: '#60a5fa',
+    background: 'rgba(59, 130, 246, 0.12)', color: 'var(--accent-hover)',
     border: '1px solid rgba(59, 130, 246, 0.35)', borderRadius: '999px',
     padding: '3px 6px 3px 10px', cursor: 'pointer',
   };
@@ -624,7 +547,7 @@ export default function LegalRepository() {
             {uploadStatus?.includes('berhasil') ? (
               <CheckCircle2 size={48} className="success-icon" />
             ) : uploadStatus?.includes('Gagal') || uploadStatus?.includes('Duplikat') ? (
-              <Database size={48} className="error-icon" style={{ color: uploadStatus?.includes('Duplikat') ? '#f59e0b' : undefined }} />
+              <Database size={48} className="error-icon" style={{ color: uploadStatus?.includes('Duplikat') ? 'var(--warning-text)' : undefined }} />
             ) : (
               <Database size={48} className="animate-pulse processing-icon" />
             )}
@@ -691,7 +614,7 @@ export default function LegalRepository() {
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon purple">
+          <div className="stat-icon sky">
             <FolderOpen size={16} />
           </div>
           <div className="stat-info">
@@ -700,7 +623,7 @@ export default function LegalRepository() {
           </div>
         </div>
         <div className="stat-card priority" title="Documents waiting for your confirmation">
-          <div className="stat-icon orange" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '32px', height: '32px' }}>
+          <div className="stat-icon orange">
             <Clock size={16} />
           </div>
           <div className="stat-info">
@@ -768,7 +691,7 @@ export default function LegalRepository() {
                     <button
                       onClick={clearAllFilters}
                       disabled={activeFilterCount === 0}
-                      style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)', background: activeFilterCount === 0 ? 'transparent' : 'rgba(239, 68, 68, 0.1)', color: activeFilterCount === 0 ? 'var(--text-secondary)' : '#ef4444', cursor: activeFilterCount === 0 ? 'not-allowed' : 'pointer', fontSize: '0.85rem', fontWeight: 600, opacity: activeFilterCount === 0 ? 0.5 : 1 }}
+                      style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)', background: activeFilterCount === 0 ? 'transparent' : 'rgba(239, 68, 68, 0.1)', color: activeFilterCount === 0 ? 'var(--text-secondary)' : 'var(--danger-text)', cursor: activeFilterCount === 0 ? 'not-allowed' : 'pointer', fontSize: '0.85rem', fontWeight: 600, opacity: activeFilterCount === 0 ? 0.5 : 1 }}
                     >
                       Bersihkan semua filter
                     </button>
@@ -922,7 +845,7 @@ export default function LegalRepository() {
           <div className="document-grid">
             {activeTab === 'pending' && pendingDocs.map((doc, idx) => (
               <div key={idx} className="document-card" style={{ borderColor: '#f59e0b', background: 'rgba(245, 158, 11, 0.05)' }}>
-                <div className="doc-type-badge" style={{ background: '#f59e0b', color: 'white' }}>
+                <div className="doc-type-badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warning-text)' }}>
                   Menunggu Konfirmasi
                 </div>
                 <h3 className="doc-title">{doc.judul}</h3>
@@ -932,21 +855,21 @@ export default function LegalRepository() {
                 <button
                   className="analyze-btn"
                   onClick={() => setViewPdfDoc(doc)}
-                  style={{ background: 'transparent', border: '1px solid #f59e0b', color: '#f59e0b', marginTop: '12px' }}
+                  style={{ background: 'transparent', border: '1px solid #f59e0b', color: 'var(--warning-text)', marginTop: '12px' }}
                 >
                   <BookOpen size={14} /> Lihat Dokumen
                 </button>
                 <div style={{ marginTop: '12px', padding: '12px', background: 'var(--bg-element)', borderRadius: '8px' }}>
                   
                   {revealedAi[doc.id] ? (
-                    <div style={{ padding: '8px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', borderRadius: '6px', marginBottom: '12px', fontSize: '0.85rem', color: '#60a5fa' }}>
+                    <div style={{ padding: '8px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid var(--info)', borderRadius: '6px', marginBottom: '12px', fontSize: '0.85rem', color: 'var(--accent-hover)' }}>
                       <Bot size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
                       AI merekomendasikan: <strong>{(doc as any).klasifikasi || 'Umum'}</strong>
                     </div>
                   ) : (
                     <button
                       onClick={() => setRevealedAi(prev => ({ ...prev, [doc.id]: true }))}
-                      style={{ width: '100%', background: 'transparent', border: '1px solid #3b82f6', color: '#3b82f6', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '12px' }}
+                      style={{ width: '100%', background: 'transparent', border: '1px solid var(--info)', color: 'var(--accent-hover)', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '12px' }}
                     >
                       <Bot size={14} /> Tampilkan Rekomendasi AI
                     </button>
@@ -956,7 +879,7 @@ export default function LegalRepository() {
                   <select
                     defaultValue=""
                     onChange={(e) => { (doc as any).selectedKlasifikasi = e.target.value; }}
-                    style={{ width: '100%', background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '6px', padding: '8px', color: 'var(--text-primary)', marginBottom: '12px' }}
+                    style={{ width: '100%', background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', color: 'var(--text-primary)', marginBottom: '12px' }}
                   >
                     <option value="" disabled>Pilih Klasifikasi...</option>
                     <option value="Umum">Umum</option>
@@ -969,7 +892,7 @@ export default function LegalRepository() {
                       if (!finalClass) return alert("Pilih klasifikasi terlebih dahulu!");
                       handleConfirmPending(doc.id, finalClass);
                     }}
-                    style={{ width: '100%', background: '#f59e0b', color: 'white', border: 'none', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                    style={{ width: '100%', background: '#92400e', color: 'white', border: 'none', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                   >
                     Konfirmasi & Ingest
                   </button>
@@ -978,8 +901,8 @@ export default function LegalRepository() {
             ))}
             
             {activeTab === 'templates' && templates.map((tpl) => (
-              <div key={tpl.id} className="document-card internal-card" style={{ borderTopColor: '#a855f7' }}>
-                <div className="doc-type-badge internal-badge" style={{ color: '#a855f7', background: 'rgba(168, 85, 247, 0.1)' }}>
+              <div key={tpl.id} className="document-card internal-card" style={{ borderTopColor: 'var(--accent-color)' }}>
+                <div className="doc-type-badge internal-badge">
                   {tpl.category} Template
                 </div>
                 <h3 className="doc-title">{tpl.title}</h3>
@@ -988,7 +911,7 @@ export default function LegalRepository() {
                 </p>
                 <button
                   className="analyze-btn"
-                  style={{ background: '#a855f7', color: 'white' }}
+                  style={{ background: 'var(--accent-color)', color: 'white' }}
                   onClick={() => setShowPromptModal(tpl.id)}
                 >
                   <File size={14} /> Gunakan Template
@@ -1007,9 +930,9 @@ export default function LegalRepository() {
                   <span className="doc-sektor">{doc.sektor}</span>
                 </div>
                 <div className="doc-status" style={{ display: 'flex', gap: '8px' }}>
-                  <span style={{ color: doc.status === 'Tidak Berlaku' ? '#ef4444' : undefined }}>Status: {doc.status}</span>
+                  <span style={{ color: doc.status === 'Tidak Berlaku' ? 'var(--danger-text)' : undefined }}>Status: {doc.status}</span>
                   {(doc as any).klasifikasi && (doc as any).klasifikasi !== 'Umum' && (
-                    <span style={{ color: (doc as any).klasifikasi === 'Rahasia' ? '#ef4444' : '#f59e0b', fontWeight: 600 }}>
+                    <span style={{ color: (doc as any).klasifikasi === 'Rahasia' ? 'var(--danger-text)' : 'var(--warning-text)', fontWeight: 600 }}>
                       [{(doc as any).klasifikasi}]
                     </span>
                   )}
@@ -1028,7 +951,7 @@ export default function LegalRepository() {
                   {user?.role?.toLowerCase() === 'sekretaris perusahaan' && (
                     <button
                       onClick={() => handleDeleteDocument(doc.id)}
-                      style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '0 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+                      style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger-text)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '0 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
                       title="Hapus Dokumen"
                       onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
                       onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
@@ -1040,7 +963,7 @@ export default function LegalRepository() {
                 {(doc as any).klasifikasi && (doc as any).klasifikasi !== 'Umum' && ['direktur', 'manajer', 'admin', 'sekretaris perusahaan'].includes(user?.role?.toLowerCase() || '') && (
                   <button
                     className="analyze-btn"
-                    style={{ background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', marginTop: '8px', border: '1px solid #3b82f6' }}
+                    style={{ background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-hover)', marginTop: '8px', border: '1px solid var(--info)' }}
                     onClick={() => { setShowShareModal(doc); fetchUsersList(); }}
                   >
                     <FolderOpen size={14} /> Beri Akses
@@ -1102,18 +1025,18 @@ export default function LegalRepository() {
       {/* Document Drawer */}
       {/* Centered PDF Modal for Pending Documents */}
       {viewPdfDoc && (
-        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyItems: 'center', padding: '24px', justifyContent: 'center' }}>
-          <div className="modal-content" style={{ background: 'var(--bg-card)', width: '100%', maxWidth: '900px', height: '90vh', borderRadius: '12px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', background: 'var(--bg-dark)', borderBottom: '1px solid #334155' }}>
+        <div className="modal-overlay" style={{ zIndex: 1100, padding: '24px' }}>
+          <div className="modal-content" style={{ background: 'var(--bg-card)', width: '100%', maxWidth: '900px', height: '90vh', borderRadius: '12px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', background: 'var(--bg-base)', borderBottom: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ background: '#f59e0b', color: '#fff', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>Menunggu Konfirmasi</div>
+                <div style={{ background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warning-text)', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>Menunggu Konfirmasi</div>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{viewPdfDoc.judul}</h3>
               </div>
-              <button onClick={() => { setViewPdfDoc(null); setPdfBlobUrl(null); }} style={{ background: 'rgba(0,0,0,0.1)', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button onClick={() => { setViewPdfDoc(null); setPdfBlobUrl(null); }} style={{ background: 'var(--bg-element)', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={20} />
               </button>
             </div>
-            <div style={{ flex: 1, position: 'relative', background: 'var(--bg-dark)' }}>
+            <div style={{ flex: 1, position: 'relative', background: 'var(--bg-base)' }}>
               {isPdfLoading ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
                   <File size={48} style={{ opacity: 0.5, marginBottom: '16px' }} />
@@ -1122,7 +1045,7 @@ export default function LegalRepository() {
               ) : pdfBlobUrl ? (
                 <iframe src={pdfBlobUrl} title="PDF Viewer" style={{ width: '100%', height: '100%', border: 'none' }} />
               ) : (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#ef4444' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--danger-text)' }}>
                   <p>Gagal memuat PDF.</p>
                 </div>
               )}
@@ -1138,15 +1061,15 @@ export default function LegalRepository() {
 
       {/* Share Modal (FR-21 & FR-22) */}
       {showShareModal && (
-        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="modal-overlay">
           <div className="modal-content" style={{ background: 'var(--bg-card)', width: '90%', maxWidth: '500px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
               <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Beri Akses Dokumen</h3>
               <button onClick={() => setShowShareModal(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
             </div>
-            <p style={{ color: '#cbd5e1', fontSize: '0.95rem' }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
               Anda akan memberikan akses dokumen <strong>{showShareModal.judul}</strong> ({(showShareModal as any).klasifikasi}).
             </p>
             <form onSubmit={handleShareSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1158,7 +1081,7 @@ export default function LegalRepository() {
                   value={shareUser}
                   onChange={(e) => setShareUser(e.target.value)}
                   placeholder="Ketik ID, Username, atau Email..."
-                  style={{ background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)' }}
+                  style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)' }}
                 />
                 <datalist id="users-list">
                   {usersList.map(u => (
@@ -1173,7 +1096,7 @@ export default function LegalRepository() {
                   value={shareReason}
                   onChange={(e) => setShareReason(e.target.value)}
                   placeholder="Alasan wajib diisi..."
-                  style={{ background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)', height: '80px', resize: 'none' }}
+                  style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)', height: '80px', resize: 'none' }}
                 />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1182,7 +1105,7 @@ export default function LegalRepository() {
                   type="date"
                   value={shareExpiry}
                   onChange={(e) => setShareExpiry(e.target.value)}
-                  style={{ background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)', colorScheme: 'dark' }}
+                  style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)' }}
                 />
               </div>
               <button 
@@ -1199,9 +1122,9 @@ export default function LegalRepository() {
 
       {/* Prompt Modal */}
       {showPromptModal && (
-        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="modal-overlay">
           <div className="modal-content" style={{ background: 'var(--bg-card)', width: '90%', maxWidth: '700px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
               <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Generate Dokumen</h3>
               <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 <X size={20} />
@@ -1210,18 +1133,18 @@ export default function LegalRepository() {
             
             {!generatedDoc ? (
               <>
-                <p style={{ color: '#cbd5e1', fontSize: '0.95rem' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
                   Berikan instruksi untuk menyesuaikan template ini. Contoh: "Buat PKS untuk PT Bank Sumut mengenai pengadaan E-KYC."
                 </p>
                 <textarea 
                   value={promptInput}
                   onChange={(e) => setPromptInput(e.target.value)}
                   placeholder="Masukkan instruksi kustomisasi dokumen..."
-                  style={{ width: '100%', height: '120px', background: 'var(--bg-dark)', border: '1px solid #334155', borderRadius: '8px', padding: '12px', color: 'var(--text-primary)', fontSize: '0.95rem', resize: 'none' }}
+                  style={{ width: '100%', height: '120px', background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px', color: 'var(--text-primary)', fontSize: '0.95rem', resize: 'none' }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
-                  <button onClick={() => { setShowPromptModal(null); setPromptInput(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', cursor: 'pointer' }}>Batal</button>
-                  <button onClick={() => handleGenerateTemplate(showPromptModal)} disabled={isGenerating || !promptInput.trim()} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: '#a855f7', color: 'white', cursor: isGenerating || !promptInput.trim() ? 'not-allowed' : 'pointer', opacity: isGenerating || !promptInput.trim() ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button onClick={() => { setShowPromptModal(null); setPromptInput(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #475569', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Batal</button>
+                  <button onClick={() => handleGenerateTemplate(showPromptModal)} disabled={isGenerating || !promptInput.trim()} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'var(--accent-color)', color: 'white', cursor: isGenerating || !promptInput.trim() ? 'not-allowed' : 'pointer', opacity: isGenerating || !promptInput.trim() ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {isGenerating ? <Database size={16} className="animate-pulse" /> : <Zap size={16} />}
                     {isGenerating ? 'Menyusun...' : 'Generate Dokumen'}
                   </button>
@@ -1229,17 +1152,17 @@ export default function LegalRepository() {
               </>
             ) : (
               <>
-                <div style={{ background: 'var(--bg-dark)', padding: '16px', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.95rem', whiteSpace: 'pre-wrap', lineHeight: '1.6', flex: 1, overflowY: 'auto' }}>
+                <div style={{ background: 'var(--bg-base)', padding: '16px', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.95rem', whiteSpace: 'pre-wrap', lineHeight: '1.6', flex: 1, overflowY: 'auto' }}>
                   {generatedDoc}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', flexWrap: 'wrap' }}>
-                  <button onClick={() => navigator.clipboard.writeText(generatedDoc!)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', cursor: 'pointer' }}>
+                  <button onClick={() => navigator.clipboard.writeText(generatedDoc!)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #475569', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                     Copy Teks
                   </button>
-                  <button onClick={() => handleExportWord(generatedDoc!)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #3b82f6', background: 'rgba(59, 130, 246, 0.15)', color: '#93c5fd', cursor: 'pointer', fontWeight: 600 }}>
+                  <button onClick={() => handleExportWord(generatedDoc!)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #3b82f6', background: 'rgba(59, 130, 246, 0.15)', color: 'var(--accent-hover)', cursor: 'pointer', fontWeight: 600 }}>
                     ↓ Export to Word
                   </button>
-                  <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: '#a855f7', color: 'white', cursor: 'pointer' }}>Selesai</button>
+                  <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'var(--accent-color)', color: 'white', cursor: 'pointer' }}>Selesai</button>
                 </div>
               </>
             )}

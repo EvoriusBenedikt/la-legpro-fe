@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Lock, User, LogIn, UserPlus, Mail, Scale, Eye, EyeOff, ShieldCheck, Brain } from 'lucide-react';
-import { API_BASE } from '../config';
+import api, { isHttpError } from '../services/api';
 import { Link } from 'react-router-dom';
 
 export default function Auth() {
@@ -42,21 +42,12 @@ export default function Auth() {
     const payload = isLogin ? { username, password } : { username, email, password };
     
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const response = await api.post(endpoint, payload);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Authentication failed');
-      }
-
-      login(data.access_token, data.user);
-    } catch (err: any) {
-      setError(err.message);
+      login(response.data.access_token, response.data.user);
+    } catch (err) {
+      const detail = isHttpError(err) ? err.response.data?.detail : undefined;
+      setError(detail ? String(detail) : 'Authentication failed');
     } finally {
       setLoading(false);
     }
@@ -77,32 +68,32 @@ export default function Auth() {
 
           <div className="auth-features" style={{ marginTop: '40px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-              <div style={{ padding: '10px', background: 'rgba(0,0,0,0.05)', borderRadius: '12px' }}>
+              <div style={{ padding: '10px', background: 'rgba(255,255,255,0.06)', borderRadius: '12px' }}>
                 <ShieldCheck size={24} color="var(--accent-color)" />
               </div>
               <div>
-                <h3 style={{ margin: '0 0 4px', fontSize: '1rem', color: 'var(--text-primary)' }}>Hybrid RAG Retrieval</h3>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Combines exact keyword search (BM25) with semantic vector search for 99% recall precision.</p>
+                <h3 style={{ margin: '0 0 4px', fontSize: '1rem', color: '#fff' }}>Hybrid RAG Retrieval</h3>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#a8a2c2' }}>Combines exact keyword search (BM25) with semantic vector search for 99% recall precision.</p>
               </div>
             </div>
             
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-              <div style={{ padding: '10px', background: 'rgba(0,0,0,0.05)', borderRadius: '12px' }}>
+              <div style={{ padding: '10px', background: 'rgba(255,255,255,0.06)', borderRadius: '12px' }}>
                 <Brain size={24} color="#38BDF8" />
               </div>
               <div>
-                <h3 style={{ margin: '0 0 4px', fontSize: '1rem', color: 'var(--text-primary)' }}>Cross-Encoder Reranking</h3>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Neural-network based second-pass filtering ensures only highly relevant clauses reach the LLM.</p>
+                <h3 style={{ margin: '0 0 4px', fontSize: '1rem', color: '#fff' }}>Cross-Encoder Reranking</h3>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#a8a2c2' }}>Neural-network based second-pass filtering ensures only highly relevant clauses reach the LLM.</p>
               </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-              <div style={{ padding: '10px', background: 'rgba(0,0,0,0.05)', borderRadius: '12px' }}>
+              <div style={{ padding: '10px', background: 'rgba(255,255,255,0.06)', borderRadius: '12px' }}>
                 <Scale size={24} color="#10B981" />
               </div>
               <div>
-                <h3 style={{ margin: '0 0 4px', fontSize: '1rem', color: 'var(--text-primary)' }}>Contextual Legal Analysis</h3>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Pre-computed document summaries eliminate isolated chunks and hallucination.</p>
+                <h3 style={{ margin: '0 0 4px', fontSize: '1rem', color: '#fff' }}>Contextual Legal Analysis</h3>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#a8a2c2' }}>Pre-computed document summaries eliminate isolated chunks and hallucination.</p>
               </div>
             </div>
           </div>

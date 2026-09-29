@@ -43,44 +43,46 @@ export default function Footer() {
         <div className="footer-brand-col">
           <img src="/LegalAnalyzerLogo.png" alt="Legal Analyzer" className="footer-brand-logo" />
           <p className="footer-address">
-            Placeholder address line 1<br />
-            Placeholder address line 2
+            Jakarta Pusat Menara Thamrin 12th Floor Jl. M.H.<br />
+            Thamrin Kav.3 Jakarta 10250
           </p>
           <div className="footer-contact-grid">
             <div className="footer-contact-item">
               <Phone size={18} />
               <div>
                 <strong>Telepon (Hunting)</strong>
-                <span>Placeholder</span>
+                <span>+6221 230 2345</span>
               </div>
             </div>
             <div className="footer-contact-item">
               <Phone size={18} />
               <div>
                 <strong>Informasi Produk</strong>
-                <span>Placeholder</span>
+                <span>14052</span>
               </div>
             </div>
             <div className="footer-contact-item">
               <Printer size={18} />
               <div>
                 <strong>Fax</strong>
-                <span>Placeholder</span>
+                <span>+6221 230 3567</span>
               </div>
             </div>
             <div className="footer-contact-item">
               <Mail size={18} />
               <div>
                 <strong>Email</strong>
-                <span>Placeholder</span>
+                <span>info@lintasarta.co.id</span>
               </div>
             </div>
             <div className="footer-contact-item">
               <Headphones size={18} />
               <div>
                 <strong>Layanan Pelanggan</strong>
-                <span>Placeholder</span>
-                <span>Placeholder</span>
+                <span>14052 / +6221 80669499</span>
+                <span>Email: support@lintasarta.co.id</span>
+                <span>Whatsapp: 08561114052</span>
+                <span>Customer Portal: Ultima by Lintasarta</span>
               </div>
             </div>
           </div>
@@ -90,7 +92,7 @@ export default function Footer() {
           <div className="footer-col" key={i}>
             {column.map(section => (
               <div className="footer-section" key={section.title}>
-                <h4>{section.title}</h4>
+                <h3>{section.title}</h3>
                 {Array.from({ length: section.items }, (_, j) => (
                   <a key={j} href="#" className="footer-link">Placeholder</a>
                 ))}

@@ -1,0 +1,49 @@
+/* === tokens.css - design tokens ===============================
+   Font imports + :root custom properties: the single source of truth
+   for the Glass Chancery visual system. Normative record: /DESIGN.md
+   (workspace root). Moved verbatim from index.css lines 1-37
+   (Phase 5, 2026-09-24). */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --bg-base: #f8fafc;   /* lightest solid base surface; renamed from --bg-dark (dark-theme misnomer) 2026-09-25 */
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-element: rgba(241, 245, 249, 0.8);
+  --bg-footer: #eaeef2;
+  --border-color: rgba(15, 23, 42, 0.08);
+  --border-highlight: rgba(37, 99, 235, 0.3);
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  
+  --accent-glow: rgba(37, 99, 235, 0.15);
+  --accent-color: #2563EB;
+  --accent-hover: #1D4ED8;
+  --gradient-brand: linear-gradient(135deg, #1E40AF, #3B82F6);
+  
+  --success: #10B981;
+  --success-bg: rgba(16, 185, 129, 0.1);
+  --success-border: rgba(16, 185, 129, 0.3);  /* matching border tint (chip grammar ≈25–30%); adopted by rerank-badge 2026-09-28 */
+  --success-text: #047857;   /* AA-hardened variant for small text on light glass */
+  --warning: #F59E0B;
+  --warning-bg: rgba(245, 158, 11, 0.1);
+  --warning-text: #92400e;   /* AA-hardened variant for small text on light glass */
+  --danger: #EF4444;
+  --danger-bg: rgba(239, 68, 68, 0.1);
+  --danger-text: #b91c1c;    /* AA-hardened variant for small text on light glass */
+  --info: #3B82F6;
+  --info-bg: rgba(59, 130, 246, 0.1);
+  
+  --user-bubble: rgba(37, 99, 235, 0.15);
+  --ai-bubble: rgba(255, 255, 255, 0.9);
+  --overlay-veil: rgba(15, 23, 42, 0.55);  /* shared ink-navy veil for modal/drawer backdrops */
+
+  --sidebar-width: 240px;
+  --sidebar-rail: 60px;
+  --topbar-height: 64px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}

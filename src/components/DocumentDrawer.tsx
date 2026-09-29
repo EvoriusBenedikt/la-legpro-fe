@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, FileText, List, Eye, AlertCircle, BookOpen, ChevronRight, BarChart2, Layers } from 'lucide-react';
-import { API_BASE } from '../config';
+import api from '../services/api';
 
 interface OutlineItem {
   type: 'bab' | 'pasal';
@@ -59,8 +59,8 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
   const [deepError, setDeepError] = useState<string | null>(null);
 
   // Use /api/pdf/ route (not StaticFiles /pdfs/) so CORS headers are applied correctly
-  const pdfUrl = doc?.filename
-    ? `${API_BASE}/api/pdf/${encodeURIComponent(doc.filename)}`
+  const pdfPath = doc?.filename
+    ? `/api/pdf/${encodeURIComponent(doc.filename)}`
     : null;
 
   // Effect 1: Run overview analysis when doc changes
@@ -73,26 +73,20 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
     setPasalData([]);
     setDeepError(null);
 
-    fetch(API_BASE + '/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        reg_id: doc.id ? String(doc.id) : null,
-        nomor: String(doc.nomor),
-        judul: String(doc.judul),
-        filename: doc.filename ?? null,
-      }),
+    api.post('/api/analyze', {
+      reg_id: doc.id ? String(doc.id) : null,
+      nomor: String(doc.nomor),
+      judul: String(doc.judul),
+      filename: doc.filename ?? null,
     })
-      .then(r => {
-        if (!r.ok) throw new Error(`Server error: ${r.status}`);
-        return r.json();
-      })
+      .then(r => r.data)
       .then(data => setAnalysis(data))
       .catch(err => {
         console.error('Analyze error:', err);
+        const msg = err?.response ? `Server error: ${err.response.status}` : err.message;
         setAnalysis({
           total_pasal: 0,
-          overview: `Gagal menganalisis dokumen. ${err.message}`,
+          overview: `Gagal menganalisis dokumen. ${msg}`,
           status: { dicabut: [], diubah_dengan: [] },
           outline: [],
         });
@@ -102,14 +96,11 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
 
   // Effect 2: Fetch PDF as JSON (base64) then decode to blob - bypasses IDM completely
   useEffect(() => {
-    if (activeTab !== 'pdf' || !pdfUrl || pdfBlobUrl) return;
+    if (activeTab !== 'pdf' || !pdfPath || pdfBlobUrl) return;
 
     setIsPdfLoading(true);
-    fetch(pdfUrl)
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
+    api.get(pdfPath)
+      .then(r => r.data)
       .then(({ data }: { data: string }) => {
         const binary = atob(data);
         const bytes = new Uint8Array(binary.length);
@@ -121,7 +112,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
       })
       .catch(err => console.error('PDF load error:', err))
       .finally(() => setIsPdfLoading(false));
-  }, [activeTab, pdfUrl]);
+  }, [activeTab, pdfPath]);
 
   // Effect 3: Deep per-pasal analysis when "analisis" tab is opened
   useEffect(() => {
@@ -131,27 +122,21 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
     setIsDeepAnalyzing(true);
     setDeepError(null);
 
-    fetch(API_BASE + '/api/analyze-pasals', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        reg_id: doc.id ? String(doc.id) : null,
-        nomor: String(doc.nomor),
-        judul: String(doc.judul),
-        filename: doc.filename ?? null,
-      }),
+    api.post('/api/analyze-pasals', {
+      reg_id: doc.id ? String(doc.id) : null,
+      nomor: String(doc.nomor),
+      judul: String(doc.judul),
+      filename: doc.filename ?? null,
     })
-      .then(r => {
-        if (!r.ok) throw new Error(`Server error: ${r.status}`);
-        return r.json();
-      })
+      .then(r => r.data)
       .then(data => {
         if (data.error) setDeepError(data.error);
         setPasalData(data.pasals || []);
       })
       .catch(err => {
         console.error('Deep analysis error:', err);
-        setDeepError(`Gagal menganalisis. ${err.message}`);
+        const msg = err?.response ? `Server error: ${err.response.status}` : err.message;
+        setDeepError(`Gagal menganalisis. ${msg}`);
       })
       .finally(() => setIsDeepAnalyzing(false));
   }, [activeTab, doc?.id]);
@@ -276,7 +261,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
           {/* ── PDF TAB ── */}
           {activeTab === 'pdf' && (
             <div className="pdf-viewer-area">
-              {!pdfUrl ? (
+              {!pdfPath ? (
                 <div className="empty-pdf">
                   <FileText size={48} style={{ opacity: 0.3 }} />
                   <p>File PDF tidak tersedia untuk dokumen ini.</p>
@@ -342,8 +327,8 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
                 </div>
               ) : deepError ? (
                 <div className="empty-pdf">
-                  <AlertCircle size={40} style={{ opacity: 0.5, color: '#f87171' }} />
-                  <p style={{ color: '#f87171' }}>{deepError}</p>
+                  <AlertCircle size={40} style={{ opacity: 0.5, color: 'var(--danger)' }} />
+                  <p style={{ color: 'var(--danger-text)' }}>{deepError}</p>
                 </div>
               ) : pasalData.length === 0 ? (
                 <div className="empty-pdf">

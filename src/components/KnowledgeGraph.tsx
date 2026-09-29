@@ -2,8 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Network } from 'vis-network/standalone';
 import { DataSet } from 'vis-data';
 import { toPng } from 'html-to-image';
-import { useAuth } from '../context/AuthContext';
-import { API_BASE } from '../config';
+import api from '../services/api';
 import {
   GitFork, Search, RefreshCw, Info, X, Filter, Loader2,
   Database, Building2, Tag, FileText, ZoomIn, ZoomOut, Maximize2,
@@ -68,6 +67,26 @@ const RELATION_COLORS: Record<string, string> = {
   DITERBITKAN_OLEH: '#A855F7',
 };
 
+/* AA-hardened deep variants of the two neon palettes above, for TEXT and thin
+   borders on LIGHT surfaces (sidebar, list cards, legend, selected-node panel).
+   The vis-network canvas keeps its neon palette — node fills are dark navy,
+   so neon borders/edges read against the node bodies (canvas identity,
+   approved scope). Rule: the -700 shade of the same hue, mirroring the
+   --success-text/--warning-text/--danger-text pattern in tokens.css. */
+const NODE_COLORS_DEEP: Record<string, string> = {
+  regulasi: '#0369a1', // sky-700    ← canvas border #38BDF8
+  entitas:  '#7e22ce', // purple-700 ← canvas border #A855F7
+  topik:    '#0e7490', // cyan-700   ← canvas border #22D3EE
+};
+
+const RELATION_COLORS_DEEP: Record<string, string> = {
+  MENCABUT:         '#be123c', // rose-700
+  MENGUBAH:         '#92400e', // amber-deep (= --warning-text)
+  MERUJUK:          '#0369a1', // sky-700
+  MENGATUR:         '#0e7490', // cyan-700
+  DITERBITKAN_OLEH: '#7e22ce', // purple-700
+};
+
 const TYPE_LABELS: Record<string, string> = {
   regulasi: 'Regulasi',
   entitas: 'Entitas',
@@ -90,7 +109,7 @@ const NodeListCard = ({ node, kgData, onNavigate }: { node: KGNode, kgData: KGDa
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
           <strong style={{ color: 'var(--text-primary)', fontSize: '1rem' }}>{node.label}</strong>
-          <span style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', background: node.type === 'regulasi' ? 'rgba(56,189,248,0.1)' : node.type === 'entitas' ? 'rgba(168,85,247,0.1)' : 'rgba(52,211,153,0.1)', color: node.type === 'regulasi' ? '#38bdf8' : node.type === 'entitas' ? '#a855f7' : '#34d399' }}>
+          <span style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: '4px', background: node.type === 'regulasi' ? 'rgba(56,189,248,0.1)' : node.type === 'entitas' ? 'rgba(168,85,247,0.1)' : 'rgba(52,211,153,0.1)', color: NODE_COLORS_DEEP[node.type] ?? 'var(--text-secondary)' }}>
             {node.type.toUpperCase()}
           </span>
         </div>
@@ -100,10 +119,10 @@ const NodeListCard = ({ node, kgData, onNavigate }: { node: KGNode, kgData: KGDa
       </div>
       
       {connectedEdges.length > 0 && (
-        <div style={{ marginTop: '12px', borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: '12px' }}>
+        <div style={{ marginTop: '12px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
           <button 
             onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
-            style={{ background: 'transparent', border: 'none', color: '#38bdf8', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}
+            style={{ background: 'transparent', border: 'none', color: 'var(--accent-hover)', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', padding: 0 }}
           >
             {isExpanded ? 'Sembunyikan Relasi ▲' : 'Lihat Daftar Regulasi/Entitas ▼'}
           </button>
@@ -111,11 +130,11 @@ const NodeListCard = ({ node, kgData, onNavigate }: { node: KGNode, kgData: KGDa
           {isExpanded && (
             <div style={{ marginTop: '12px', maxHeight: '200px', overflowY: 'auto', background: 'var(--bg-element)', borderRadius: '6px', padding: '8px' }} className="custom-scrollbar">
               {connectedNodes.map((cn, i) => (
-                <div key={i} style={{ padding: '8px', borderBottom: i < connectedNodes.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ fontSize: '0.7rem', color: '#cbd5e1' }}><span style={{ color: '#a855f7', fontWeight: 600 }}>{cn.rel}</span> • {cn.node?.type.toUpperCase()}</div>
+                <div key={i} style={{ padding: '8px', borderBottom: i < connectedNodes.length - 1 ? '1px solid var(--border-color)' : 'none', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}><span style={{ color: RELATION_COLORS_DEEP[cn.rel] ?? 'var(--text-secondary)', fontWeight: 600 }}>{cn.rel}</span> • {cn.node?.type.toUpperCase()}</div>
                   <div 
                     onClick={() => onNavigate(cn.node!.id)}
-                    style={{ fontSize: '0.85rem', color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }}
+                    style={{ fontSize: '0.85rem', color: 'var(--accent-hover)', cursor: 'pointer', textDecoration: 'underline' }}
                   >
                     {cn.node?.label}
                   </div>
@@ -130,7 +149,6 @@ const NodeListCard = ({ node, kgData, onNavigate }: { node: KGNode, kgData: KGDa
 };
 
 export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (docId: string) => void }) {
-  const { token } = useAuth();
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const nodesDataset = useRef<DataSet<any>>(new DataSet([]));
@@ -181,13 +199,10 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
     setScenarioNodes([]);
 
     try {
-      const res = await fetch(`${API_BASE}/api/knowledge-graph/analyze-scenario`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenario })
-      });
+      // HTTP/network errors degrade to the keyword fallback below, like the old json-parse path did
+      const res = await api.post('/api/knowledge-graph/analyze-scenario', { scenario }).catch(() => null);
       
-      const data = await res.json();
+      const data = res?.data ?? {};
       const matchedNodeIds = new Set<string>(data.matchedNodeIds || []);
 
       // Fallback
@@ -284,20 +299,16 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
       const params = new URLSearchParams();
       if (s) params.set('search', s);
       if (t) params.set('node_type', t);
-      const res = await fetch(`${API_BASE}/api/knowledge-graph?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data: KGData = await res.json();
-        setKgData(data);
-        renderGraph(data);
-      }
+      const res = await api.get(`/api/knowledge-graph?${params}`);
+      const data: KGData = res.data;
+      setKgData(data);
+      renderGraph(data);
     } catch (e) {
       console.error('KG fetch error:', e);
     } finally {
       setLoading(false);
     }
-  }, [token, search, filterType]);
+  }, [search, filterType]);
 
   const renderGraph = (data: KGData) => {
     // 1. Calculate degree (number of connections) for each node
@@ -484,7 +495,8 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
 
   const exportToPng = useCallback(() => {
     if (containerRef.current === null) return;
-    toPng(containerRef.current, { cacheBust: true, backgroundColor: 'var(--bg-dark)' })
+    // backgroundColor must be a literal: canvas fillStyle cannot resolve CSS var() strings.
+    toPng(containerRef.current, { cacheBust: true, backgroundColor: '#f8fafc' })
       .then((dataUrl) => {
         const link = document.createElement('a');
         link.download = `knowledge-graph.png`;
@@ -498,11 +510,8 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
 
   const exportData = async (format: 'json' | 'csv') => {
     try {
-      const res = await fetch(`${API_BASE}/api/knowledge-graph/export?format=${format}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error('Failed to export data');
-      const blob = await res.blob();
+      const res = await api.get(`/api/knowledge-graph/export?format=${format}`, { responseType: 'blob' });
+      const blob = res.data as Blob;
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -528,7 +537,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
           <div style={{
-            background: 'linear-gradient(135deg, #38BDF8, #A855F7)',
+            background: 'var(--gradient-brand)',
             borderRadius: '10px', padding: '8px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
@@ -549,10 +558,10 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
         {/* Search Form */}
         <form onSubmit={handleSearch} style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', background: 'var(--bg-lighter)', borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
-            <button type="button" onClick={() => setViewMode('graph')} style={{ padding: '6px 12px', background: viewMode === 'graph' ? 'rgba(56, 189, 248, 0.15)' : 'transparent', color: viewMode === 'graph' ? '#38bdf8' : 'var(--text-secondary)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
+            <button type="button" onClick={() => setViewMode('graph')} style={{ padding: '6px 12px', background: viewMode === 'graph' ? 'var(--accent-glow)' : 'transparent', color: viewMode === 'graph' ? 'var(--accent-hover)' : 'var(--text-secondary)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
               <NetworkIcon size={14} /> Graph
             </button>
-            <button type="button" onClick={() => setViewMode('list')} style={{ padding: '6px 12px', background: viewMode === 'list' ? 'rgba(56, 189, 248, 0.15)' : 'transparent', color: viewMode === 'list' ? '#38bdf8' : 'var(--text-secondary)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
+            <button type="button" onClick={() => setViewMode('list')} style={{ padding: '6px 12px', background: viewMode === 'list' ? 'var(--accent-glow)' : 'transparent', color: viewMode === 'list' ? 'var(--accent-hover)' : 'var(--text-secondary)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
               <List size={14} /> List
             </button>
           </div>
@@ -589,7 +598,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
           </select>
 
           <button type="submit" style={{
-            background: 'linear-gradient(135deg, #38BDF8, #A855F7)',
+            background: 'var(--accent-color)',
             border: 'none', borderRadius: '10px', padding: '8px 16px',
             color: 'white', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
           }}>Cari</button>
@@ -677,8 +686,9 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
               alignItems: 'center', justifyContent: 'center', zIndex: 10,
               background: 'rgba(22,18,43,0.85)', backdropFilter: 'blur(4px)',
             }}>
+              {/* Dark loading wash (dimmer over the graph area): neon icon + light text, like .upload-overlay */}
               <GitFork size={40} color="#38BDF8" style={{ opacity: 0.6, marginBottom: '16px' }} />
-              <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Memuat knowledge graph...</p>
+              <p style={{ color: '#cbd5e1', margin: 0 }}>Memuat knowledge graph...</p>
             </div>
           )}
           {!loading && kgData?.nodes.length === 0 && (
@@ -686,7 +696,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
               position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center',
             }}>
-              <GitFork size={48} color="#38BDF8" style={{ opacity: 0.3, marginBottom: '16px' }} />
+              <GitFork size={48} color="var(--accent-color)" style={{ opacity: 0.3, marginBottom: '16px' }} />
               <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '1rem' }}>
                 Belum ada data graph.
               </p>
@@ -696,7 +706,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
             </div>
           )}
           <div style={{ display: viewMode === 'graph' ? 'block' : 'none', width: '100%', height: '100%', position: 'relative' }}>
-            <div ref={containerRef} style={{ width: '100%', height: '100%', background: 'var(--bg-dark)' }} />
+            <div ref={containerRef} style={{ width: '100%', height: '100%', background: 'var(--bg-base)' }} />
             <div style={{
               position: 'absolute', bottom: '20px', right: '20px',
               display: 'flex', flexDirection: 'column', gap: '8px',
@@ -717,7 +727,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
             </div>
           </div>
 
-          <div style={{ display: viewMode === 'list' ? 'block' : 'none', width: '100%', height: '100%', background: 'var(--bg-dark)', padding: '20px', overflowY: 'auto' }} className="custom-scrollbar">
+          <div style={{ display: viewMode === 'list' ? 'block' : 'none', width: '100%', height: '100%', background: 'var(--bg-base)', padding: '20px', overflowY: 'auto' }} className="custom-scrollbar">
             <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
               <h3 style={{ color: 'var(--text-primary)', marginBottom: '16px' }}>List View Knowledge Graph</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -756,9 +766,9 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
                 onClick={() => handleScenarioClick('PKS')}
                 style={{
                   flex: 1, padding: '8px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
-                  background: activeScenario === 'PKS' ? 'rgba(56,189,248,0.2)' : 'var(--bg-card)',
-                  color: activeScenario === 'PKS' ? '#38BDF8' : 'var(--text-secondary)',
-                  border: `1px solid ${activeScenario === 'PKS' ? '#38BDF8' : 'var(--border-color)'}`,
+                  background: activeScenario === 'PKS' ? 'var(--accent-glow)' : 'var(--bg-card)',
+                  color: activeScenario === 'PKS' ? 'var(--accent-hover)' : 'var(--text-secondary)',
+                  border: `1px solid ${activeScenario === 'PKS' ? 'var(--accent-color)' : 'var(--border-color)'}`,
                   transition: 'all 0.2s'
                 }}>
                 {isScenarioLoading === 'PKS' ? <><Loader2 size={12} className="animate-spin" style={{ marginRight: '4px' }} /> Analisis AI...</> : 'PKS'}
@@ -767,9 +777,9 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
                 onClick={() => handleScenarioClick('NDA')}
                 style={{
                   flex: 1, padding: '8px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
-                  background: activeScenario === 'NDA' ? 'rgba(168,85,247,0.2)' : 'var(--bg-card)',
-                  color: activeScenario === 'NDA' ? '#A855F7' : 'var(--text-secondary)',
-                  border: `1px solid ${activeScenario === 'NDA' ? '#A855F7' : 'var(--border-color)'}`,
+                  background: activeScenario === 'NDA' ? 'var(--accent-glow)' : 'var(--bg-card)',
+                  color: activeScenario === 'NDA' ? 'var(--accent-hover)' : 'var(--text-secondary)',
+                  border: `1px solid ${activeScenario === 'NDA' ? 'var(--accent-color)' : 'var(--border-color)'}`,
                   transition: 'all 0.2s'
                 }}>
                 {isScenarioLoading === 'NDA' ? <><Loader2 size={12} className="animate-spin" style={{ marginRight: '4px' }} /> Analisis AI...</> : 'NDA'}
@@ -777,14 +787,14 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
             </div>
             
             {activeScenario && scenarioNodes.length > 0 && (
-              <div style={{ marginTop: '16px', background: 'rgba(15, 23, 42, 0.4)', borderRadius: '8px', padding: '12px', border: '1px solid rgba(0,0,0,0.05)' }}>
+              <div style={{ marginTop: '16px', background: 'var(--bg-element)', borderRadius: '8px', padding: '12px', border: '1px solid var(--border-color)' }}>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 600 }}>NODE TERKAIT ({activeScenario})</div>
                 <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'block', paddingRight: '4px' }} className="custom-scrollbar">
                   {scenarioNodes.map(node => (
                     <div 
                       key={node.id} 
                       onClick={() => handleRelationClick(node.id)}
-                      style={{ cursor: 'pointer', marginBottom: '6px', fontSize: '0.75rem', background: 'var(--bg-element)', padding: '6px 8px', borderRadius: '4px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.4' }} 
+                      style={{ cursor: 'pointer', marginBottom: '6px', fontSize: '0.75rem', background: 'var(--bg-card)', padding: '6px 8px', borderRadius: '4px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '1.4' }} 
                       title={node.label}
                     >
                       • {node.label}
@@ -805,9 +815,9 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {[
-                { type: 'regulasi', icon: <FileText size={14} />, color: '#38BDF8', shape: '▬' },
-                { type: 'entitas', icon: <Building2 size={14} />, color: '#A855F7', shape: '◯' },
-                { type: 'topik', icon: <Tag size={14} />, color: '#22D3EE', shape: '●' },
+                { type: 'regulasi', icon: <FileText size={14} />, color: '#0369a1', shape: '▬' },
+                { type: 'entitas', icon: <Building2 size={14} />, color: '#7e22ce', shape: '◯' },
+                { type: 'topik', icon: <Tag size={14} />, color: '#0e7490', shape: '●' },
               ].map(item => (
                 <div key={item.type} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <span style={{ color: item.color, fontSize: '1rem' }}>{item.shape}</span>
@@ -819,7 +829,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
             </div>
             <div style={{ marginTop: '16px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 600 }}>RELASI</div>
-              {Object.entries(RELATION_COLORS).map(([rel, color]) => (
+              {Object.entries(RELATION_COLORS_DEEP).map(([rel, color]) => (
                 <div key={rel} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                   <div style={{ width: '20px', height: '2px', background: color, borderRadius: '1px' }} />
                   <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{rel}</span>
@@ -843,11 +853,11 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <div style={{
                       width: '10px', height: '10px', borderRadius: '50%',
-                      background: NODE_COLORS[selectedNode.type]?.border ?? '#94A3B8',
+                      background: NODE_COLORS_DEEP[selectedNode.type] ?? '#64748b',
                     }} />
                     <span style={{
                       fontSize: '0.7rem', fontWeight: 700,
-                      color: NODE_COLORS[selectedNode.type]?.border ?? '#94A3B8',
+                      color: NODE_COLORS_DEEP[selectedNode.type] ?? '#64748b',
                       textTransform: 'uppercase', letterSpacing: '0.5px',
                     }}>
                       {TYPE_LABELS[selectedNode.type]}
@@ -869,11 +879,11 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
                 </h3>
 
                 <div style={{
-                  background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '12px',
+                  background: 'var(--bg-element)', borderRadius: '10px', padding: '12px',
                   marginBottom: '16px',
                 }}>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Koneksi</div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: 700, color: NODE_COLORS[selectedNode.type]?.border ?? '#94A3B8' }}>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 700, color: NODE_COLORS_DEEP[selectedNode.type] ?? '#64748b' }}>
                     {selectedNode.connectedCount}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>relasi terhubung</div>
@@ -892,14 +902,14 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
                           onMouseLeave={() => setHoveredRelationId(null)}
                           onClick={() => handleRelationClick(rel.id)}
                           style={{ 
-                            background: hoveredRelationId === rel.id ? 'rgba(0,0,0,0.1)' : 'rgba(15,23,42,0.4)', 
+                            background: hoveredRelationId === rel.id ? 'var(--bg-card)' : 'var(--bg-element)', 
                             borderRadius: '6px', padding: '8px',
-                            borderLeft: `2px solid ${RELATION_COLORS[rel.relation] ?? '#94A3B8'}`,
+                            borderLeft: `2px solid ${RELATION_COLORS_DEEP[rel.relation] ?? '#64748b'}`,
                             cursor: 'pointer',
                             transition: 'background 0.2s ease'
                           }}
                         >
-                          <div style={{ fontSize: '0.7rem', color: RELATION_COLORS[rel.relation] ?? '#94A3B8', fontWeight: 600, marginBottom: '4px' }}>
+                          <div style={{ fontSize: '0.7rem', color: RELATION_COLORS_DEEP[rel.relation] ?? 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>
                             {rel.direction === 'out' ? '→ ' : '← '} {rel.relation}
                           </div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-primary)', lineHeight: 1.3 }}>
@@ -915,9 +925,9 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
                   <button
                     onClick={() => onOpenDocument(selectedNode.doc_id!)}
                     style={{
-                      width: '100%', background: 'linear-gradient(135deg, rgba(56,189,248,0.15), rgba(168,85,247,0.15))',
-                      border: '1px solid rgba(56,189,248,0.3)', borderRadius: '10px',
-                      padding: '10px', cursor: 'pointer', color: '#38BDF8',
+                      width: '100%', background: 'var(--accent-glow)',
+                      border: '1px solid var(--border-highlight)', borderRadius: '10px',
+                      padding: '10px', cursor: 'pointer', color: 'var(--accent-hover)',
                       fontSize: '0.85rem', fontWeight: 600,
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                     }}

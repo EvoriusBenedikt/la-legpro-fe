@@ -3,8 +3,6 @@
   flex-direction: column;
   padding: 24px 32px;
   flex: 1;
-  min-height: 0;
-  overflow-y: auto;
 }
 
 .monitoring-header {
@@ -285,4 +283,120 @@
   text-align: center;
   color: var(--text-secondary);
   font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
+
+/* ── Alert Banners ────────────────────────────────────────── */
+.alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.alert-banner.warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.alert-banner.critical {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  animation: pulse-alert 2s infinite;
+}
+
+@keyframes pulse-alert {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.75; }
+}
+
+/* ── KPI Alert States ────────────────────────────────────── */
+.kpi-card-indicator.warning { background: #f59e0b; }
+.kpi-card-indicator.danger { background: #ef4444; }
+.kpi-icon.danger { background: rgba(239, 68, 68, 0.1); color: #f87171; }
+
+.kpi-card.kpi-alert-warn { border-color: rgba(245, 158, 11, 0.4); }
+.kpi-card.kpi-alert-critical { border-color: rgba(239, 68, 68, 0.4); }
+
+.kpi-threshold {
+  font-size: 0.7rem;
+  color: #475569;
+  margin: 6px 0 0 0;
+}
+
+.progress-fill.warning { background: #f59e0b; box-shadow: 0 0 10px rgba(245,158,11,0.8); }
+
+/* ── Active Sessions ─────────────────────────────────────── */
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  transition: background 0.15s ease;
+}
+
+.session-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.session-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: white;
+  flex-shrink: 0;
+}
+
+.role-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+/* ── API Stats ───────────────────────────────────────────── */
+.rate-pill {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.rate-pill.ok { background: rgba(16, 185, 129, 0.12); color: #34d399; }
+.rate-pill.warning { background: rgba(245, 158, 11, 0.12); color: #fbbf24; }
+.rate-pill.danger { background: rgba(239, 68, 68, 0.12); color: #f87171; }
+
+/* ── Audit Log ───────────────────────────────────────────── */
+.action-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.12);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  white-space: nowrap;
+}
+
+/* ── Modules Grid spacing ────────────────────────────────── */
+.modules-grid {
+  margin-bottom: 24px;
+}
+

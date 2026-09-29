@@ -4,11 +4,10 @@ import {
   XCircle, Clock, Edit2, Trash2, Eye, Calendar, Building,
   TrendingUp, ShieldCheck, X, Upload, RefreshCw
 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
 import { useContractUpload } from '../context/ContractUploadContext';
 import ComplianceResultsViewer from './ComplianceResultsViewer';
 import ContractUploadModal from './ContractUploadModal';
-import { API_BASE } from '../config';
+import api, { isHttpError } from '../services/api';
 
 interface AnalyzedDocument {
   id: string;
@@ -68,7 +67,6 @@ function getExpiryInfo(expiration_date: string | null): ExpiryInfo {
 }
 
 export default function ContractMonitor() {
-  const { token } = useAuth();
   const [documents, setDocuments] = useState<AnalyzedDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -85,13 +83,8 @@ export default function ContractMonitor() {
   const fetchDocs = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(API_BASE + '/api/compliance-history', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setDocuments(data.history || []);
-      }
+      const res = await api.get('/api/compliance-history');
+      setDocuments(res.data.history || []);
     } catch (err) {
       console.error('Failed to fetch', err);
     } finally {
@@ -103,7 +96,7 @@ export default function ContractMonitor() {
     fetchDocs();
     // Refresh the list whenever a background analysis job finishes
     return subscribe(() => { fetchDocs(); });
-  }, [token, subscribe]);
+  }, [subscribe]);
 
   // Edit modal: Escape closes (overlay click handled on the overlay itself)
   useEffect(() => {
@@ -115,21 +108,23 @@ export default function ContractMonitor() {
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Hapus dokumen ini dari monitoring?')) return;
-    const res = await fetch(`${API_BASE}/api/compliance-history/${id}`, {
-      method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
+    const res = await api.delete(`/api/compliance-history/${id}`).catch(err => {
+      if (!err.response) throw err; // network failure: propagate as before
+      return null;
     });
-    if (res.ok) setDocuments(prev => prev.filter(d => d.id !== id));
+    if (res) setDocuments(prev => prev.filter(d => d.id !== id));
     else alert('Gagal menghapus dokumen.');
   };
 
   const handleEditSave = async () => {
     if (!editDoc) return;
-    const res = await fetch(`${API_BASE}/api/compliance-history/${editDoc.id}`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company_name: editCompanyName || null, expiration_date: editExpirationDate || null })
+    const res = await api.put(`/api/compliance-history/${editDoc.id}`, {
+      company_name: editCompanyName || null, expiration_date: editExpirationDate || null
+    }).catch(err => {
+      if (!err.response) throw err; // network failure: propagate as before
+      return null;
     });
-    if (res.ok) {
+    if (res) {
       setDocuments(prev => prev.map(d =>
         d.id === editDoc.id ? { ...d, company_name: editCompanyName, expiration_date: editExpirationDate } : d
       ));
@@ -141,34 +136,31 @@ export default function ContractMonitor() {
     if (viewingDoc?.id === doc.id) { setViewingDoc(null); return; }
     setLoadingViewId(doc.id);
     try {
-      const res = await fetch(`${API_BASE}/api/compliance-history/${doc.id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) setViewingDoc(await res.json());
-      else alert('Gagal memuat analisis.');
-    } catch (e) { console.error(e); }
+      const res = await api.get(`/api/compliance-history/${doc.id}`);
+      setViewingDoc(res.data);
+    } catch (e) {
+      if (isHttpError(e)) alert('Gagal memuat analisis.');
+      else console.error(e);
+    }
     finally { setLoadingViewId(null); }
   };
 
   const handleDownloadCalendar = async (doc: AnalyzedDocument) => {
     try {
-      const res = await fetch(`${API_BASE}/api/compliance-history/${doc.id}/calendar`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `contract_expiry_${doc.company_name?.replace(/\s+/g, '_') || doc.id}.ics`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        window.URL.revokeObjectURL(url);
-      } else {
-        alert('Gagal mengunduh kalender.');
-      }
-    } catch (e) { console.error(e); }
+      const res = await api.get(`/api/compliance-history/${doc.id}/calendar`, { responseType: 'blob' });
+      const blob = res.data as Blob;
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `contract_expiry_${doc.company_name?.replace(/\s+/g, '_') || doc.id}.ics`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      if (isHttpError(e)) alert('Gagal mengunduh kalender.');
+      else console.error(e);
+    }
   };
 
   // Compute KPIs
@@ -192,10 +184,10 @@ export default function ContractMonitor() {
   });
 
   const filterTabs: { id: FilterTab; label: string; count: number; color: string; text: string; bg: string }[] = [
-    { id: 'all',      label: 'Semua',           count: total,    color: '#a855f7', text: '#6d28d9', bg: 'rgba(168,85,247,0.15)' },
-    { id: 'active',   label: 'Aktif',           count: active,   color: '#34d399', text: '#047857', bg: 'rgba(52,211,153,0.15)' },
-    { id: 'expiring', label: 'Segera Berakhir', count: expiring, color: '#fbbf24', text: '#92400e', bg: 'rgba(251,191,36,0.15)' },
-    { id: 'expired',  label: 'Kedaluwarsa',     count: expired,  color: '#f87171', text: '#b91c1c', bg: 'rgba(239,68,68,0.15)' },
+    { id: 'all',      label: 'Semua',           count: total,    color: 'var(--accent-color)', text: 'var(--accent-hover)', bg: 'var(--accent-glow)' },
+    { id: 'active',   label: 'Aktif',           count: active,   color: 'var(--success)', text: 'var(--success-text)', bg: 'rgba(16,185,129,0.15)' },
+    { id: 'expiring', label: 'Segera Berakhir', count: expiring, color: 'var(--warning)', text: 'var(--warning-text)', bg: 'rgba(245,158,11,0.15)' },
+    { id: 'expired',  label: 'Kedaluwarsa',     count: expired,  color: 'var(--danger)', text: 'var(--danger-text)', bg: 'rgba(239,68,68,0.15)' },
   ];
 
   return (
@@ -204,7 +196,7 @@ export default function ContractMonitor() {
       <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
-            <BarChart2 size={24} color="#a855f7" />
+            <BarChart2 size={24} color="var(--accent-color)" />
             <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 700 }}>Contracts</h2>
           </div>
           <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Pantau status dan kedaluwarsa seluruh dokumen analisis Anda.</p>
@@ -229,10 +221,10 @@ export default function ContractMonitor() {
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '28px' }}>
         {[
-          { label: 'Total Dokumen', value: total, icon: <FileCheck size={20} />, color: '#a855f7', bg: 'rgba(168,85,247,0.1)' },
-          { label: 'Aktif', value: active, icon: <ShieldCheck size={20} />, color: '#34d399', bg: 'rgba(52,211,153,0.1)' },
-          { label: 'Segera Berakhir', value: expiring, icon: <Clock size={20} />, color: '#fbbf24', bg: 'rgba(251,191,36,0.1)' },
-          { label: 'Kedaluwarsa', value: expired, icon: <XCircle size={20} />, color: '#f87171', bg: 'rgba(239,68,68,0.1)' },
+          { label: 'Total Dokumen', value: total, icon: <FileCheck size={20} />, color: 'var(--accent-color)', bg: 'rgba(37,99,235,0.1)' },
+          { label: 'Aktif', value: active, icon: <ShieldCheck size={20} />, color: 'var(--success)', bg: 'var(--success-bg)' },
+          { label: 'Segera Berakhir', value: expiring, icon: <Clock size={20} />, color: 'var(--warning)', bg: 'var(--warning-bg)' },
+          { label: 'Kedaluwarsa', value: expired, icon: <XCircle size={20} />, color: 'var(--danger)', bg: 'var(--danger-bg)' },
         ].map(kpi => (
           <div key={kpi.label} style={{
             background: 'var(--bg-element)', borderRadius: '16px', padding: '20px',
@@ -271,7 +263,7 @@ export default function ContractMonitor() {
               display: 'flex', alignItems: 'center', gap: '6px'
             }}>
               {tab.label}
-              <span style={{ fontSize: '0.75rem', padding: '1px 6px', borderRadius: '999px', background: 'rgba(0,0,0,0.08)' }}>
+              <span style={{ fontSize: '0.75rem', padding: '1px 6px', borderRadius: '999px', background: 'rgba(15,23,42,0.08)' }}>
                 {tab.count}
               </span>
             </button>
@@ -339,9 +331,9 @@ export default function ContractMonitor() {
 
                           <button onClick={() => handleView(doc)} title="Lihat Analisis" aria-expanded={isViewing} style={{
                             padding: '6px 12px', minHeight: '44px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 500,
-                            background: isViewing ? 'rgba(168,85,247,0.12)' : 'var(--bg-element)',
-                            border: isViewing ? '1px solid #a855f7' : '1px solid var(--border-color)',
-                            color: isViewing ? '#6d28d9' : 'var(--text-primary)', cursor: 'pointer',
+                            background: isViewing ? 'var(--accent-glow)' : 'var(--bg-element)',
+                            border: isViewing ? '1px solid var(--accent-color)' : '1px solid var(--border-color)',
+                            color: isViewing ? 'var(--accent-hover)' : 'var(--text-primary)', cursor: 'pointer',
                             display: 'flex', alignItems: 'center', gap: '6px'
                           }}>
                             {loadingViewId === doc.id ? '...' : <><Eye size={13} />{isViewing ? 'Tutup' : 'Lihat Analisis'}</>}
@@ -410,7 +402,8 @@ export default function ContractMonitor() {
           aria-modal="true"
           aria-label="Edit Metadata Dokumen"
           onMouseDown={(e) => { if (e.target === e.currentTarget) setEditDoc(null); }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}
+          className="modal-overlay"
+          style={{ zIndex: 100, padding: '16px' }}
         >
           <div style={{ background: 'var(--bg-card)', borderRadius: '16px', padding: '28px', width: '100%', maxWidth: '440px', border: '1px solid var(--border-color)' }}>
             <h3 style={{ margin: '0 0 20px', color: 'var(--text-primary)', fontSize: '1.1rem' }}>Edit Metadata Dokumen</h3>

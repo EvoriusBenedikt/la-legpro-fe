@@ -78,7 +78,7 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
           <div className="compliance-score-ring" style={{
             background: `conic-gradient(
               ${summary.skor_kepatuhan >= 70 ? '#10b981' : summary.skor_kepatuhan >= 40 ? '#f59e0b' : '#ef4444'} 
-              ${summary.skor_kepatuhan * 3.6}deg, rgba(255,255,255,0.05) 0deg)`
+              ${summary.skor_kepatuhan * 3.6}deg, rgba(15,23,42,0.05) 0deg)`
           }}>
             <div className="compliance-score-inner">
               <span className="compliance-score-number">{summary.skor_kepatuhan}%</span>
@@ -89,15 +89,15 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
             <div className="compliance-summary-meta">
               <span className="summary-tag">{summary.jenis_dokumen}</span>
               <span className="summary-tag">{summary.sektor_bisnis}</span>
-              <span className="summary-tag" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+              <span className="summary-tag" style={{ background: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger-text)', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
                 Kadaluarsa: {summary.tanggal_berakhir ? new Date(summary.tanggal_berakhir).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Tidak terdeteksi'}
               </span>
             </div>
             <p className="compliance-summary-parties" style={{ fontSize: '1.1rem', marginTop: '8px' }}>
-              <strong>{summary.pihak_pertama}</strong> <span style={{ color: '#64748b', margin: '0 6px' }}>&harr;</span> <strong>{summary.pihak_kedua}</strong>
+              <strong>{summary.pihak_pertama}</strong> <span style={{ color: 'var(--text-secondary)', margin: '0 6px' }}>&harr;</span> <strong>{summary.pihak_kedua}</strong>
             </p>
-            <p className="compliance-summary-subject" style={{ fontSize: '0.95rem', color: '#94a3b8', marginTop: '4px', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', background: '#64748b' }}></span>
+            <p className="compliance-summary-subject" style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', marginTop: '4px', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ display: 'inline-block', width: '4px', height: '4px', borderRadius: '50%', background: 'var(--text-secondary)' }}></span>
               {summary.pokok_perjanjian}
             </p>
             <div className="compliance-tally">
@@ -137,7 +137,7 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
                 </td>
                 <td style={{ verticalAlign: 'top', width: '50%' }}>
                   <span className={['status-chip', getStatusChipClass(item.status)].join(' ')}
-                        style={item.status === 'FATAL' ? { backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.2)' } : {}}>
+                        style={item.status === 'FATAL' ? { backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger-text)', borderColor: 'rgba(239, 68, 68, 0.2)' } : {}}>
                     {getStatusIcon(item.status)} {item.status}
                   </span>
 
@@ -158,7 +158,7 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
                       <strong className="text-slate-200 mb-1 flex items-center gap-1" style={{ fontSize: '0.85rem' }}>
                         <AlertCircle size={14} className="text-slate-300" /> AI Analysis (Dampak Bisnis)
                       </strong>
-                      <p className="compliance-recommendation mt-1 text-slate-300" style={{ color: '#cbd5e1' }}>
+                      <p className="compliance-recommendation mt-1" style={{ color: 'var(--text-secondary)' }}>
                         {item.ai_analysis}
                       </p>
                     </div>

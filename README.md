@@ -1,16 +1,30 @@
 # LA LegPro — Frontend
 
 React 19 + TypeScript + Vite SPA for the Legal Analyzer platform (Indonesian
-regulatory compliance). Talks to the FastAPI backend (`la-legpro-be`, :8000).
+regulatory compliance). Talks to the FastAPI backend (`la-legpro-be`, :8080
+in Docker).
 
-## Quick start (local dev)
+## Two run modes
+
+| | Dev mode | Deploy mode |
+|---|---|---|
+| Start | `npm run dev` | `npm run deploy` (= `docker compose up -d --build frontend`) |
+| URL | http://localhost:5173 — Vite dev server, full HMR | http://localhost — nginx serving the static bundle (host port via `FE_PORT`), no HMR |
+| API endpoint | `VITE_API_URL` from `.env`, read at dev-server start (here: `http://localhost:8080`) | baked into the bundle at image build from the compose build arg (`.env` → `VITE_API_URL`; compose default `https://legal-analyzer.lintasarta.dev`) |
+| Code changes | instantly (hot reload) | only after an image rebuild |
 
 ```bash
 npm install
-# point at your backend:
-#   .env → VITE_API_URL=http://localhost:8000
-npm run dev        # Vite dev server with HMR (default http://localhost:5173)
+npm run dev        # dev mode — http://localhost:5173, hot reload
+npm run deploy     # deploy mode — rebuild + recreate the nginx container on :80
 ```
+
+The dev server is pinned to port 5173 (`server.strictPort` in
+`vite.config.ts`): if something else holds the port it fails loudly instead
+of silently drifting to 5174. Both modes can run at the same time on their
+own ports; browser storage is per-origin, so :5173 and :80 keep separate
+logins and chat histories. The backend CORS whitelist (`ALLOWED_ORIGINS`)
+already includes `http://localhost:5173`.
 
 Other scripts: `npm run build` (type-check + production bundle → `dist/`),
 `npm run lint`, `npm run preview`.
@@ -19,11 +33,11 @@ Other scripts: `npm run build` (type-check + production bundle → `dist/`),
 
 The deployed image does **not** run the Vite dev server. `Dockerfile` is a
 multi-stage build: `vite build` → static `dist/` served by nginx on port 80
-(see `nginx.conf` for the SPA fallback).
+(see `nginx.conf` for the SPA fallback). `npm run deploy` wraps the compose
+build; the raw equivalent is:
 
 ```bash
-docker build --build-arg VITE_API_URL=https://legal-analyzer.lintasarta.dev .
-docker compose up --build
+VITE_API_URL=https://legal-analyzer.lintasarta.dev docker compose up -d --build frontend
 ```
 
 > `VITE_API_URL` is baked into the JS **at build time** — a runtime env var

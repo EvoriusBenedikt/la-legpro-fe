@@ -1,7 +1,6 @@
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle, RefreshCw, X } from 'lucide-react';
-import { useAuth } from './AuthContext';
-import { API_BASE } from '../config';
+import api from '../services/api';
 
 export interface UploadJob {
   id: string;
@@ -32,7 +31,6 @@ const MAX_JOBS = 20;
    the modal only hands the file over, the provider runs the pipeline,
    notifies via toasts, and tells subscribers (Contracts page) when done. */
 export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { token } = useAuth();
   const [jobs, setJobs] = useState<UploadJob[]>([]);
   const [toasts, setToasts] = useState<UploadToast[]>([]);
   const listenersRef = useRef<Set<(job: UploadJob) => void>>(new Set());
@@ -65,32 +63,26 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         formData.append('file', file);
         formData.append('use_ocr', useOCR.toString());
 
-        const response = await fetch(API_BASE + '/api/check-compliance', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}` },
-          body: formData,
+        // axios sets the multipart boundary for FormData automatically
+        const response = await api.post('/api/check-compliance', formData).catch((e) => {
+          if (e.response) throw new Error(e.response.data?.detail || 'Gagal memproses dokumen.');
+          throw e;
         });
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.detail || 'Gagal memproses dokumen.');
-        }
-        const data = await response.json();
+        const data = response.data;
         const results = data.report;
         const summary = data.summary || null;
 
-        const saveRes = await fetch(API_BASE + '/api/compliance-history', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({
-            filename,
-            company_name: summary?.pihak_pertama && summary?.pihak_kedua
-              ? `${summary.pihak_pertama} & ${summary.pihak_kedua}`
-              : summary?.pihak_pertama || summary?.pihak_kedua || null,
-            expiration_date: summary?.tanggal_berakhir || null,
-            results: { summary, results },
-          }),
+        await api.post('/api/compliance-history', {
+          filename,
+          company_name: summary?.pihak_pertama && summary?.pihak_kedua
+            ? `${summary.pihak_pertama} & ${summary.pihak_kedua}`
+            : summary?.pihak_pertama || summary?.pihak_kedua || null,
+          expiration_date: summary?.tanggal_berakhir || null,
+          results: { summary, results },
+        }).catch((e) => {
+          if (e.response) throw new Error('Analisis selesai, tetapi gagal menyimpan hasil analisis.');
+          throw e;
         });
-        if (!saveRes.ok) throw new Error('Analisis selesai, tetapi gagal menyimpan hasil analisis.');
 
         const doneJob: UploadJob = { id, filename, status: 'done' };
         setJobs(prev => prev.map(j => (j.id === id ? doneJob : j)));

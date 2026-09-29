@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { API_BASE } from '../config';
+import api, { isHttpError } from '../services/api';
 
 interface Taxonomy {
   id: number;
@@ -11,7 +10,6 @@ interface Taxonomy {
 }
 
 export default function TaxonomyManager() {
-  const { token } = useAuth();
   const [taxonomyList, setTaxonomyList] = useState<Taxonomy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -27,17 +25,10 @@ export default function TaxonomyManager() {
   const fetchTaxonomy = async () => {
     setLoading(true);
     try {
-      const res = await fetch(API_BASE + '/api/taxonomy', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setTaxonomyList(data.taxonomy);
-      } else {
-        setError('Gagal memuat data taksonomi.');
-      }
+      const res = await api.get('/api/taxonomy');
+      setTaxonomyList(res.data.taxonomy);
     } catch (e) {
-      setError('Kesalahan jaringan.');
+      setError(isHttpError(e) ? 'Gagal memuat data taksonomi.' : 'Kesalahan jaringan.');
     } finally {
       setLoading(false);
     }
@@ -50,21 +41,16 @@ export default function TaxonomyManager() {
   const handleAdd = async () => {
     if (!newName.trim()) return;
     try {
-      const res = await fetch(API_BASE + '/api/taxonomy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: newName })
-      });
-      if (res.ok) {
-        setNewName('');
-        setAdding(false);
-        fetchTaxonomy();
-      } else {
-        const err = await res.json();
-        alert(err.detail || 'Gagal menambahkan taksonomi');
-      }
+      await api.post('/api/taxonomy', { name: newName });
+      setNewName('');
+      setAdding(false);
+      fetchTaxonomy();
     } catch (e) {
-      console.error(e);
+      if (isHttpError(e)) {
+        alert(e.response.data?.detail || 'Gagal menambahkan taksonomi');
+      } else {
+        console.error(e);
+      }
     }
   };
 
@@ -74,33 +60,22 @@ export default function TaxonomyManager() {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/api/taxonomy/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: editName })
-      });
-      if (res.ok) {
-        setEditingId(null);
-        fetchTaxonomy();
-      } else {
-        const err = await res.json();
-        alert(err.detail || 'Gagal memperbarui taksonomi');
-      }
+      await api.put(`/api/taxonomy/${id}`, { name: editName });
+      setEditingId(null);
+      fetchTaxonomy();
     } catch (e) {
-      console.error(e);
+      if (isHttpError(e)) {
+        alert(e.response.data?.detail || 'Gagal memperbarui taksonomi');
+      } else {
+        console.error(e);
+      }
     }
   };
 
   const handleToggleActive = async (id: number, currentStatus: boolean) => {
     try {
-      const res = await fetch(`${API_BASE}/api/taxonomy/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ is_active: !currentStatus })
-      });
-      if (res.ok) {
-        fetchTaxonomy();
-      }
+      await api.put(`/api/taxonomy/${id}`, { is_active: !currentStatus });
+      fetchTaxonomy();
     } catch (e) {
       console.error(e);
     }
@@ -109,19 +84,15 @@ export default function TaxonomyManager() {
   const handleDelete = async (id: number) => {
     if (!confirm('Apakah Anda yakin ingin menghapus atau menonaktifkan taksonomi ini?')) return;
     try {
-      const res = await fetch(`${API_BASE}/api/taxonomy/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await res.json();
-      if (res.ok) {
-        alert(data.message);
-        fetchTaxonomy();
-      } else {
-        alert(data.detail || 'Gagal menghapus taksonomi');
-      }
+      const res = await api.delete(`/api/taxonomy/${id}`);
+      alert(res.data.message);
+      fetchTaxonomy();
     } catch (e) {
-      console.error(e);
+      if (isHttpError(e)) {
+        alert(e.response.data?.detail || 'Gagal menghapus taksonomi');
+      } else {
+        console.error(e);
+      }
     }
   };
 
@@ -162,15 +133,15 @@ export default function TaxonomyManager() {
               placeholder="Contoh: Peraturan Direksi"
               style={{
                 width: '100%', padding: '12px', borderRadius: '8px',
-                background: 'var(--bg-element)', border: '1px solid rgba(0,0,0,0.1)',
-                color: '#fff', fontSize: '0.95rem'
+                background: 'var(--bg-element)', border: '1px solid var(--border-color)',
+                color: 'var(--text-primary)', fontSize: '0.95rem'
               }}
             />
           </div>
           <button 
             onClick={handleAdd}
             style={{
-              padding: '12px 24px', background: '#22c55e', color: '#fff',
+              padding: '12px 24px', background: 'var(--accent-color)', color: '#fff',
               border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer'
             }}
           >
@@ -180,7 +151,7 @@ export default function TaxonomyManager() {
       )}
 
       {error && (
-        <div style={{ padding: '16px', background: 'rgba(244,63,94,0.1)', color: '#f43f5e', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div style={{ padding: '16px', background: 'var(--danger-bg)', color: 'var(--danger-text)', borderRadius: '8px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <AlertCircle size={20} />
           {error}
         </div>
@@ -188,7 +159,7 @@ export default function TaxonomyManager() {
 
       <div style={{ background: 'var(--bg-card)', borderRadius: '12px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead style={{ background: 'rgba(0,0,0,0.02)', borderBottom: '1px solid var(--border-color)' }}>
+          <thead style={{ background: 'var(--bg-element)', borderBottom: '1px solid var(--border-color)' }}>
             <tr>
               <th style={{ padding: '16px 24px', fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>NAMA JENIS DOKUMEN</th>
               <th style={{ padding: '16px 24px', fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>STATUS</th>
@@ -201,7 +172,7 @@ export default function TaxonomyManager() {
             ) : taxonomyList.length === 0 ? (
               <tr><td colSpan={3} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>Belum ada data taksonomi</td></tr>
             ) : taxonomyList.map(tax => (
-              <tr key={tax.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)', opacity: tax.is_active ? 1 : 0.6 }}>
+              <tr key={tax.id} style={{ borderBottom: '1px solid var(--border-color)', opacity: tax.is_active ? 1 : 0.6 }}>
                 <td style={{ padding: '16px 24px', color: 'var(--text-primary)' }}>
                   {editingId === tax.id ? (
                     <input 
@@ -212,8 +183,8 @@ export default function TaxonomyManager() {
                       onKeyDown={e => e.key === 'Enter' && handleUpdateName(tax.id)}
                       autoFocus
                       style={{
-                        padding: '6px 10px', borderRadius: '4px', background: 'rgba(0,0,0,0.3)',
-                        border: '1px solid var(--accent)', color: '#fff', width: '100%'
+                        padding: '6px 10px', borderRadius: '4px', background: 'var(--bg-element)',
+                        border: '1px solid var(--border-highlight)', color: 'var(--text-primary)', width: '100%'
                       }}
                     />
                   ) : (
@@ -225,7 +196,7 @@ export default function TaxonomyManager() {
                     onClick={() => handleToggleActive(tax.id, tax.is_active)}
                     style={{
                       background: tax.is_active ? 'rgba(34,197,94,0.1)' : 'rgba(148,163,184,0.1)',
-                      color: tax.is_active ? '#22c55e' : 'var(--text-secondary)',
+                      color: tax.is_active ? 'var(--success-text)' : 'var(--text-secondary)',
                       border: `1px solid ${tax.is_active ? 'rgba(34,197,94,0.2)' : 'rgba(148,163,184,0.2)'}`,
                       padding: '4px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600,
                       cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
@@ -246,7 +217,7 @@ export default function TaxonomyManager() {
                     </button>
                     <button 
                       onClick={() => handleDelete(tax.id)}
-                      style={{ background: 'transparent', border: 'none', color: '#f43f5e', cursor: 'pointer', padding: '4px' }}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--danger-text)', cursor: 'pointer', padding: '4px' }}
                       title="Hapus"
                     >
                       <Trash2 size={16} />

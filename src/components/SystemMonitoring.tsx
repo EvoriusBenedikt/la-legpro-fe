@@ -8,7 +8,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsToolti
 import { useAuth } from '../context/AuthContext';
 import './SystemMonitoring.css';
 
-import { API_BASE } from '../config';
+import api from '../services/api';
 
 interface HealthData {
   cpu: number;
@@ -71,6 +71,14 @@ function getAlertLevel(value: number, thresholds: { warn: number; critical: numb
   return 'ok';
 }
 
+/* Keeps the fetch-era res.ok semantics: an HTTP error resolves to null (that panel is
+   skipped), while a network error rethrows so the caller's catch shows the global error. */
+const getOrSkipHttpError = (url: string) =>
+  api.get(url).catch((e) => {
+    if (!e.response) throw e;
+    return null;
+  });
+
 export default function SystemMonitoring() {
   const { token } = useAuth();
   const [health, setHealth] = useState<HealthData | null>(null);
@@ -106,32 +114,31 @@ export default function SystemMonitoring() {
   const fetchData = useCallback(async () => {
     if (!token) return;
     try {
-      const headers = { Authorization: `Bearer ${token}` };
       const [healthRes, queueRes, backupRes, sessionRes, statsRes, metricsRes, backupConfigRes, userStatsRes, llmRes, kgRes, errorsRes] = await Promise.all([
-        fetch(`${API_BASE}/api/engineer/health`, { headers }),
-        fetch(`${API_BASE}/api/engineer/queue`, { headers }),
-        fetch(`${API_BASE}/api/engineer/backups`, { headers }),
-        fetch(`${API_BASE}/api/engineer/active-sessions`, { headers }),
-        fetch(`${API_BASE}/api/engineer/api-stats`, { headers }),
-        fetch(`${API_BASE}/api/engineer/metrics-history`, { headers }),
-        fetch(`${API_BASE}/api/engineer/backup-config`, { headers }),
-        fetch(`${API_BASE}/api/engineer/user-stats`, { headers }),
-        fetch(`${API_BASE}/api/engineer/llm-metrics`, { headers }),
-        fetch(`${API_BASE}/api/engineer/kg-history`, { headers }),
-        fetch(`${API_BASE}/api/engineer/error-rates`, { headers })
+        getOrSkipHttpError('/api/engineer/health'),
+        getOrSkipHttpError('/api/engineer/queue'),
+        getOrSkipHttpError('/api/engineer/backups'),
+        getOrSkipHttpError('/api/engineer/active-sessions'),
+        getOrSkipHttpError('/api/engineer/api-stats'),
+        getOrSkipHttpError('/api/engineer/metrics-history'),
+        getOrSkipHttpError('/api/engineer/backup-config'),
+        getOrSkipHttpError('/api/engineer/user-stats'),
+        getOrSkipHttpError('/api/engineer/llm-metrics'),
+        getOrSkipHttpError('/api/engineer/kg-history'),
+        getOrSkipHttpError('/api/engineer/error-rates')
       ]);
 
-      if (healthRes.ok) setHealth(await healthRes.json());
-      if (queueRes.ok) { const d = await queueRes.json(); setTasks(d.recent_history); setActiveTasks(d.active_tasks || []); }
-      if (backupRes.ok) { const d = await backupRes.json(); setBackups(d.backups); }
-      if (sessionRes.ok) { const d = await sessionRes.json(); setSessions(d.active_sessions); }
-      if (statsRes.ok) { const d = await statsRes.json(); setApiStats(d.stats); }
-      if (metricsRes.ok) { const d = await metricsRes.json(); setMetricsHistory(d.metrics); }
-      if (backupConfigRes.ok) { const d = await backupConfigRes.json(); setBackupConfig(d); }
-      if (userStatsRes.ok) { const d = await userStatsRes.json(); setUserStats(d.stats); }
-      if (llmRes.ok) { const d = await llmRes.json(); setLlmMetrics(d); }
-      if (kgRes.ok) { const d = await kgRes.json(); setKgHistory(d.history); }
-      if (errorsRes.ok) { const d = await errorsRes.json(); setErrorRates(d.errors); }
+      if (healthRes) setHealth(healthRes.data);
+      if (queueRes) { const d = queueRes.data; setTasks(d.recent_history); setActiveTasks(d.active_tasks || []); }
+      if (backupRes) { const d = backupRes.data; setBackups(d.backups); }
+      if (sessionRes) { const d = sessionRes.data; setSessions(d.active_sessions); }
+      if (statsRes) { const d = statsRes.data; setApiStats(d.stats); }
+      if (metricsRes) { const d = metricsRes.data; setMetricsHistory(d.metrics); }
+      if (backupConfigRes) { setBackupConfig(backupConfigRes.data); }
+      if (userStatsRes) { const d = userStatsRes.data; setUserStats(d.stats); }
+      if (llmRes) { setLlmMetrics(llmRes.data); }
+      if (kgRes) { const d = kgRes.data; setKgHistory(d.history); }
+      if (errorsRes) { const d = errorsRes.data; setErrorRates(d.errors); }
     } catch {
       setError("Gagal mengambil data dari server. Pastikan backend aktif.");
     }
@@ -146,15 +153,11 @@ export default function SystemMonitoring() {
     if (auditSearch) params.set('search', auditSearch);
     if (auditAction) params.set('action', auditAction);
     try {
-      const res = await fetch(`${API_BASE}/api/engineer/audit-logs?${params}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const d = await res.json();
-        setAuditLogs(d.logs);
-        setAuditTotal(d.total);
-        setAuditActionTypes(d.action_types);
-      }
+      const res = await api.get(`/api/engineer/audit-logs?${params}`);
+      const d = res.data;
+      setAuditLogs(d.logs);
+      setAuditTotal(d.total);
+      setAuditActionTypes(d.action_types);
     } catch { /* silent */ }
   }, [token, auditSearch, auditAction, auditPage]);
 
@@ -171,11 +174,11 @@ export default function SystemMonitoring() {
   const triggerBackup = async () => {
     setLoadingBackup(true);
     try {
-      const res = await fetch(`${API_BASE}/api/engineer/backup`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` }
+      const res = await api.post('/api/engineer/backup').catch(err => {
+        if (!err.response) throw err;
+        return null;
       });
-      if (res.ok) await fetchData();
+      if (res) await fetchData();
       else alert("Gagal membuat backup");
     } catch (err) { alert("Error: " + err); }
     setLoadingBackup(false);
@@ -184,12 +187,11 @@ export default function SystemMonitoring() {
   const saveBackupConfig = async () => {
     setSavingBackupConfig(true);
     try {
-      const res = await fetch(`${API_BASE}/api/engineer/backup-config`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(backupConfig)
+      const res = await api.post('/api/engineer/backup-config', backupConfig).catch(err => {
+        if (!err.response) throw err;
+        return null;
       });
-      if (res.ok) alert("Konfigurasi jadwal backup berhasil disimpan.");
+      if (res) alert("Konfigurasi jadwal backup berhasil disimpan.");
       else alert("Gagal menyimpan konfigurasi.");
     } catch (err) { alert("Error: " + err); }
     setSavingBackupConfig(false);

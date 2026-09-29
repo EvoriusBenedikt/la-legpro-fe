@@ -1,8 +1,9 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { Send, ChevronDown, Bot, User, Search, Plus, Trash2, MoreHorizontal, Pencil, FileText, Loader2, Link2, Sparkles } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo, useId } from 'react';
+import { Send, ChevronDown, Bot, User, Search, Plus, Trash2, MoreHorizontal, Pencil, FileText, Loader2, Link2, MessagesSquare, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { API_BASE } from '../config';
+import api from '../services/api';
+import DocumentDrawer from './DocumentDrawer';
 
 interface Source {
   id: string;
@@ -29,12 +30,27 @@ interface Conversation {
   messages: Message[];
 }
 
+/* Glass-dialog state — replaces native window.confirm/prompt/alert with a
+   system-consistent modal (see AppDialog at the bottom of this file). */
+type DialogState =
+  | { kind: 'confirm'; title: string; body?: string; confirmLabel: string; danger?: boolean; onConfirm: () => void }
+  | { kind: 'prompt'; title: string; label: string; initialValue: string; onSubmit: (value: string) => void }
+  | { kind: 'alert'; title: string; body: string };
+
+type DrawerDoc = {
+  id: string;
+  nomor: string;
+  judul: string;
+  jenis: string;
+  sektor: string;
+};
+
 const STORAGE_KEY = 'legal_analyzer_conversations';
 const ACTIVE_STORAGE_KEY = 'legal_analyzer_active_conversation';
 const INITIAL_AI_MESSAGE: Message = {
   id: 1,
   role: 'ai',
-  content: 'Halo! Saya adalah OJK Legal Analyzer. Anda dapat bertanya mengenai Peraturan Otoritas Jasa Keuangan (Perbankan, IKNB, atau Pasar Modal), dan saya akan merangkum sanksi atau ketentuannya dari database kami.'
+  content: 'Halo! Saya adalah asisten legal LA LegPro. Anda dapat bertanya mengenai regulasi sektor keuangan Indonesia — peraturan OJK serta 15 lembaga sumber JDIH (Bank Indonesia, Kemenkeu, Kominfo, Kemnaker, LPS, PPATK, dan lainnya) — maupun dokumen internal organisasi yang tersimpan di platform. Setiap jawaban disertai kutipan dari dokumen sumber agar dapat Anda verifikasi langsung.'
 };
 
 function createConversation(title = 'Percakapan Baru'): Conversation {
@@ -48,10 +64,7 @@ function createConversation(title = 'Percakapan Baru'): Conversation {
   };
 }
 
-import { useAuth } from '../context/AuthContext';
-
 export default function LegalOpinion() {
-  const { token } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [createConversation()];
@@ -69,9 +82,13 @@ export default function LegalOpinion() {
   });
   const [conversationSearch, setConversationSearch] = useState('');
   const [menuConversationId, setMenuConversationId] = useState<string | null>(null);
+  /* Mobile only: at ≤767px the conversation panel becomes an off-canvas
+     drawer (styles in utilities.css); desktop ignores this state. */
+  const [panelOpen, setPanelOpen] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingStep, setLoadingStep] = useState(0);
+  const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [drawerDoc, setDrawerDoc] = useState<DrawerDoc | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -108,6 +125,36 @@ export default function LegalOpinion() {
       localStorage.setItem(ACTIVE_STORAGE_KEY, activeConversationId);
     }
   }, [activeConversationId]);
+
+  // Dismiss the conversation menu on Escape or any click outside its wrap.
+  useEffect(() => {
+    if (!menuConversationId) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuConversationId(null);
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest('.conversation-menu-wrap')) {
+        setMenuConversationId(null);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onMouseDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onMouseDown);
+    };
+  }, [menuConversationId]);
+
+  // Close the mobile conversation drawer on Escape — skipped while a dialog
+  // or the document drawer is open, so Escape unwinds one layer at a time.
+  useEffect(() => {
+    if (!panelOpen || dialog || drawerDoc) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPanelOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [panelOpen, dialog, drawerDoc]);
 
   const activeConversation = useMemo(
     () => conversations.find(c => c.id === activeConversationId) ?? conversations[0],
@@ -159,43 +206,68 @@ export default function LegalOpinion() {
 
   const handleClearChat = () => {
     if (!activeConversation) return;
-    updateConversation(activeConversation.id, (c) => ({
-      ...c,
-      updatedAt: Date.now(),
-      messages: [{ ...INITIAL_AI_MESSAGE, id: Date.now() }],
-    }));
+    setDialog({
+      kind: 'confirm',
+      title: 'Bersihkan percakapan ini?',
+      body: 'Semua pesan dalam percakapan aktif akan dihapus. Tindakan ini tidak dapat dibatalkan.',
+      confirmLabel: 'Bersihkan',
+      danger: true,
+      onConfirm: () => {
+        updateConversation(activeConversation.id, (c) => ({
+          ...c,
+          updatedAt: Date.now(),
+          messages: [{ ...INITIAL_AI_MESSAGE, id: Date.now() }],
+        }));
+      },
+    });
   };
 
   const handleRenameConversation = (conversationId: string) => {
     const target = conversations.find((c) => c.id === conversationId);
     if (!target) return;
-    const renamed = window.prompt('Nama percakapan baru:', target.title);
-    if (!renamed) return;
-    const cleanTitle = renamed.trim();
-    if (!cleanTitle) return;
-    updateConversation(conversationId, (c) => ({
-      ...c,
-      title: cleanTitle,
-      updatedAt: Date.now(),
-    }));
+    setDialog({
+      kind: 'prompt',
+      title: 'Ubah nama percakapan',
+      label: 'Nama percakapan',
+      initialValue: target.title,
+      onSubmit: (value) => {
+        const cleanTitle = value.trim();
+        if (!cleanTitle) return;
+        updateConversation(conversationId, (c) => ({
+          ...c,
+          title: cleanTitle,
+          updatedAt: Date.now(),
+        }));
+      },
+    });
   };
 
   const handleDeleteConversation = (conversationId: string) => {
     if (conversations.length <= 1) {
-      window.alert('Minimal harus ada satu percakapan.');
+      setDialog({
+        kind: 'alert',
+        title: 'Tidak dapat dihapus',
+        body: 'Minimal harus ada satu percakapan.',
+      });
       return;
     }
 
     const target = conversations.find((c) => c.id === conversationId);
     if (!target) return;
-    const confirmed = window.confirm(`Hapus percakapan "${target.title}"?`);
-    if (!confirmed) return;
-
-    const remaining = conversations.filter((c) => c.id !== conversationId);
-    setConversations(remaining);
-    if (activeConversationId === conversationId) {
-      setActiveConversationId(remaining[0]?.id ?? '');
-    }
+    setDialog({
+      kind: 'confirm',
+      title: 'Hapus percakapan?',
+      body: `"${target.title}" akan dihapus secara permanen.`,
+      confirmLabel: 'Hapus',
+      danger: true,
+      onConfirm: () => {
+        const remaining = conversations.filter((c) => c.id !== conversationId);
+        setConversations(remaining);
+        if (activeConversationId === conversationId) {
+          setActiveConversationId(remaining[0]?.id ?? '');
+        }
+      },
+    });
   };
 
   const handleSend = async () => {
@@ -221,7 +293,6 @@ export default function LegalOpinion() {
     }));
     setInput('');
     setIsLoading(true);
-    setLoadingStep(1);
     if (textareaRef.current) textareaRef.current.style.height = '50px';
 
     try {
@@ -230,23 +301,9 @@ export default function LegalOpinion() {
         content: msg.content
       }));
 
-      setTimeout(() => { setIsLoading((loading) => { if (loading) setLoadingStep(2); return loading; }); }, 1500);
-      setTimeout(() => { setIsLoading((loading) => { if (loading) setLoadingStep(3); return loading; }); }, 3000);
+      const response = await api.post('/api/chat', { messages: apiMessages });
 
-      const response = await fetch(API_BASE + '/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ messages: apiMessages }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Gagal menghubungi server API.');
-      }
-
-      const data = await response.json();
+      const data = response.data;
 
       updateConversation(activeConversation.id, (c) => ({
         ...c,
@@ -272,7 +329,7 @@ export default function LegalOpinion() {
           {
             id: Date.now() + 1,
             role: 'ai',
-            content: 'Maaf, terjadi kesalahan saat menghubungi server. Pastikan FastAPI sedang berjalan dan kredensial GLM API sudah diatur dengan benar.'
+            content: 'Maaf, terjadi gangguan saat menghubungi server sehingga jawaban tidak dapat ditampilkan. Silakan coba lagi beberapa saat; jika masalah berlanjut, hubungi administrator sistem Anda.'
           }
         ]
       }));
@@ -284,26 +341,46 @@ export default function LegalOpinion() {
 
 
   return (
-    <div className="view-container no-scroll">
+    <div className="view-container no-scroll legal-opinion-view">
       <div className="view-header">
         <div>
           <h2>Legal Opinion Chatbot</h2>
           <p>Tanya AI mengenai regulasi keuangan dan perbankan</p>
         </div>
         <div className="legal-opinion-actions">
-          <button className="secondary-action-btn" onClick={handleCreateConversation}>
-            <Plus size={16} />
-            Percakapan Baru
+          <button
+            className="panel-toggle-btn secondary-action-btn"
+            onClick={() => setPanelOpen(true)}
+            aria-label="Daftar percakapan"
+            aria-expanded={panelOpen}
+            aria-controls="conversation-panel"
+          >
+            <MessagesSquare size={16} />
           </button>
-          <button className="secondary-action-btn danger" onClick={handleClearChat} disabled={isLoading}>
+          <button className="secondary-action-btn" onClick={handleCreateConversation} aria-label="Percakapan Baru">
+            <Plus size={16} />
+            <span className="btn-label">Percakapan Baru</span>
+          </button>
+          <button className="secondary-action-btn danger" onClick={handleClearChat} disabled={isLoading} aria-label="Bersihkan Percakapan">
             <Trash2 size={16} />
-            Clear Chat
+            <span className="btn-label">Bersihkan Percakapan</span>
           </button>
         </div>
       </div>
 
       <div className="legal-opinion-body">
-        <aside className="conversation-panel">
+        {panelOpen && (
+          <div
+            className="conversation-panel-backdrop"
+            onClick={() => setPanelOpen(false)}
+            aria-hidden="true"
+          />
+        )}
+        <aside
+          className={`conversation-panel ${panelOpen ? 'open' : ''}`}
+          id="conversation-panel"
+          aria-label="Daftar percakapan"
+        >
           <div className="conversation-search">
             <Search size={16} />
             <input
@@ -324,6 +401,7 @@ export default function LegalOpinion() {
                   onClick={() => {
                     setActiveConversationId(conv.id);
                     setMenuConversationId(null);
+                    setPanelOpen(false);
                   }}
                 >
                   <div className="conversation-title">{conv.title}</div>
@@ -337,6 +415,8 @@ export default function LegalOpinion() {
                     className="conversation-menu-btn"
                     onClick={() => setMenuConversationId((prev) => (prev === conv.id ? null : conv.id))}
                     aria-label="Buka menu percakapan"
+                    aria-haspopup="true"
+                    aria-expanded={menuConversationId === conv.id}
                   >
                     <MoreHorizontal size={16} />
                   </button>
@@ -349,7 +429,7 @@ export default function LegalOpinion() {
                           setMenuConversationId(null);
                         }}
                       >
-                        <Pencil size={14} /> Rename
+                        <Pencil size={14} /> Ubah Nama
                       </button>
                       <button
                         className="danger"
@@ -358,7 +438,7 @@ export default function LegalOpinion() {
                           setMenuConversationId(null);
                         }}
                       >
-                        <Trash2 size={14} /> Delete
+                        <Trash2 size={14} /> Hapus
                       </button>
                     </div>
                   )}
@@ -372,7 +452,7 @@ export default function LegalOpinion() {
         </aside>
 
         <div className="chat-main">
-          <div className="chat-box">
+          <div className="chat-box" role="log" aria-live="polite" aria-label="Riwayat percakapan">
             {messages.map((msg) => (
               <div key={msg.id} className={`message-item ${msg.role}`}>
                 <div className="bubble">
@@ -393,9 +473,15 @@ export default function LegalOpinion() {
 
                   {msg.sources && msg.sources.length > 0 && (
                     <div className="sources-container">
-                      <div style={{ fontSize: '0.75rem', marginTop: '16px', color: 'var(--text-secondary)', fontWeight: 600 }}>SUMBER DOKUMEN YANG DITEMUKAN:</div>
+                      <div className="sources-label">Sumber Dokumen yang Ditemukan:</div>
                       {msg.sources.map((source, index) => (
-                        <SourceAccordion key={source.id + index} source={source} />
+                        <SourceAccordion
+                          key={source.id + index}
+                          source={source}
+                          onOpenDocument={(s) =>
+                            setDrawerDoc({ id: s.id, nomor: s.nomor, judul: s.judul, jenis: s.jenis, sektor: s.sektor })
+                          }
+                        />
                       ))}
                     </div>
                   )}
@@ -406,13 +492,8 @@ export default function LegalOpinion() {
               <div className="message-item ai">
                 <div className="bubble" style={{ background: 'transparent', border: 'none', padding: 0 }}>
                   <div className="multi-loader">
-                    <Loader2 size={16} className="multi-loader-icon" color="var(--accent-color)" />
-                    <span>
-                      {loadingStep === 1 && "Running Hybrid Search (BM25 + Dense)..."}
-                      {loadingStep === 2 && "Cross-Encoder Reranking chunks..."}
-                      {loadingStep >= 3 && "Generating Contextual Analysis..."}
-                      {loadingStep === 0 && "Memproses..."}
-                    </span>
+                    <Loader2 size={16} className="multi-loader-icon animate-spin-slow" color="var(--accent-color)" aria-hidden="true" />
+                    <span>Menelusuri dokumen regulasi…</span>
                   </div>
                 </div>
               </div>
@@ -421,7 +502,7 @@ export default function LegalOpinion() {
           </div>
 
           <div className="input-area">
-            <div className="input-container" style={{ alignItems: 'flex-end', background: 'var(--bg-dark)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '8px', transition: 'border-color 0.2s' }}>
+            <div className="input-container">
               <textarea
                 ref={textareaRef}
                 className="chat-input"
@@ -436,81 +517,171 @@ export default function LegalOpinion() {
                   }
                 }}
                 disabled={isLoading}
-                style={{ 
-                  resize: 'none', 
-                  minHeight: '50px', 
-                  maxHeight: '200px', 
-                  overflowY: 'auto',
-                  border: 'none',
-                  background: 'transparent',
-                  padding: '12px',
-                  lineHeight: '1.5'
-                }}
               />
               <button
                 className="send-button btn-primary"
                 onClick={handleSend}
                 disabled={!input.trim() || isLoading}
-                style={{ height: '40px', width: '40px', padding: 0, borderRadius: 'var(--radius-sm)', marginBottom: '4px', marginRight: '4px' }}
+                aria-label="Kirim pesan"
               >
                 <Send size={18} />
               </button>
             </div>
             <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              AI can make mistakes. Please verify important information with original documents.
+              AI dapat membuat kesalahan. Verifikasi informasi penting pada dokumen sumber aslinya.
             </div>
           </div>
         </div>
       </div>
+
+      <DocumentDrawer doc={drawerDoc} onClose={() => setDrawerDoc(null)} />
+      {dialog && <AppDialog dialog={dialog} onClose={() => setDialog(null)} />}
     </div>
   );
 }
 
-function SourceAccordion({ source }: { source: Source }) {
+function SourceAccordion({ source, onOpenDocument }: { source: Source; onOpenDocument: (source: Source) => void }) {
   const [isOpen, setIsOpen] = useState(false);
+  const contentId = useId();
 
   const rawScore = source.rerank_score ?? 0;
   const percentScore = Math.min(100, Math.max(10, (rawScore + 5) * 10));
 
   return (
     <div className={`evidence-card ${isOpen ? 'open' : ''}`}>
-      <div className="evidence-card-header" onClick={() => setIsOpen(!isOpen)}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+      <button
+        type="button"
+        className="evidence-card-header"
+        aria-expanded={isOpen}
+        aria-controls={contentId}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <FileText size={14} color="var(--text-secondary)" />
             <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-primary)' }}>
               {source.judul || `${source.jenis} ${source.nomor}`}
             </span>
-          </div>
-          <div className="evidence-badges">
+          </span>
+          <span className="evidence-badges">
             <span className={`jenis-badge ${source.jenis}`}>{source.jenis}</span>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{source.sektor}</span>
             {source.rerank_score != null && (
               <span className="rerank-badge">
                 <Sparkles size={12} />
-                Reranked: {source.rerank_score.toFixed(2)}
+                Skor: {source.rerank_score.toFixed(2)}
               </span>
             )}
-          </div>
-        </div>
+          </span>
+        </span>
         <ChevronDown size={18} color="var(--text-secondary)" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.3s' }} />
-      </div>
+      </button>
       
       {source.rerank_score != null && (
-        <div className="relevance-bar-container">
+        <div className="relevance-bar-container" aria-hidden="true">
           <div className="relevance-bar" style={{ width: `${percentScore}%` }} />
         </div>
       )}
 
-      <div className="evidence-content">
+      <div className="evidence-content" id={contentId}>
         <div className="evidence-snippet">
           {source.snippet}
         </div>
         <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
-          <button style={{ background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '6px 12px', fontSize: '0.75rem', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button
+            type="button"
+            onClick={() => onOpenDocument(source)}
+            style={{ background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '6px 12px', fontSize: '0.75rem', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
             <Link2 size={12} />
             Buka Dokumen
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Glass confirm/prompt/alert dialog — the system-consistent replacement for
+   native window.confirm/prompt/alert. Escape closes; backdrop click closes;
+   destructive confirms focus the cancel button first. */
+function AppDialog({ dialog, onClose }: { dialog: DialogState; onClose: () => void }) {
+  const [promptValue, setPromptValue] = useState(dialog.kind === 'prompt' ? dialog.initialValue : '');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const defaultBtnRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    if (dialog.kind === 'prompt') {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    } else {
+      defaultBtnRef.current?.focus();
+    }
+  }, [dialog.kind]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  const submitPrompt = () => {
+    if (dialog.kind !== 'prompt') return;
+    dialog.onSubmit(promptValue);
+    onClose();
+  };
+
+  return (
+    <div
+      className="modal-overlay"
+      style={{ zIndex: 1200 }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <h3 className="confirm-modal-title" id={titleId}>{dialog.title}</h3>
+        {dialog.kind === 'prompt' ? (
+          <>
+            <label className="confirm-modal-label" htmlFor={`${titleId}-input`}>{dialog.label}</label>
+            <input
+              id={`${titleId}-input`}
+              ref={inputRef}
+              className="confirm-modal-input"
+              type="text"
+              value={promptValue}
+              onChange={(e) => setPromptValue(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') submitPrompt(); }}
+            />
+          </>
+        ) : (
+          <p className="confirm-modal-body">{dialog.body}</p>
+        )}
+        <div className="confirm-modal-actions">
+          {dialog.kind === 'alert' ? (
+            <button ref={defaultBtnRef} type="button" className="btn btn-primary" onClick={onClose}>
+              OK
+            </button>
+          ) : dialog.kind === 'prompt' ? (
+            <>
+              <button type="button" className="btn btn-secondary" onClick={onClose}>Batal</button>
+              <button type="button" className="btn btn-primary" onClick={submitPrompt} disabled={!promptValue.trim()}>
+                Simpan
+              </button>
+            </>
+          ) : (
+            <>
+              <button ref={defaultBtnRef} type="button" className="btn btn-secondary" onClick={onClose}>Batal</button>
+              <button
+                type="button"
+                className={`btn ${dialog.danger ? 'btn-danger' : 'btn-primary'}`}
+                onClick={() => { dialog.onConfirm(); onClose(); }}
+              >
+                {dialog.confirmLabel}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

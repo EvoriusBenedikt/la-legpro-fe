@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { MessageSquare, ShieldCheck, ChevronDown } from 'lucide-react';
-import { API_BASE } from '../config';
+import api from '../services/api';
 
 interface Activity {
   id: string;
@@ -12,24 +12,21 @@ interface Activity {
 }
 
 export default function ActivityFeed() {
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const [activities, setActivities] = useState<Activity[]>([]);
 
   useEffect(() => {
     // Fetch real data from backend to populate this list
     const fetchHistory = async () => {
       try {
-        const chatRes = await fetch(API_BASE + '/api/chat-sessions', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const compRes = await fetch(API_BASE + '/api/compliance-history', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
+        // Per-call catches keep partial results: one failing endpoint still renders the other's data
+        const chatRes = await api.get('/api/chat-sessions').catch(() => null);
+        const compRes = await api.get('/api/compliance-history').catch(() => null);
 
         let newActivities: Activity[] = [];
 
-        if (chatRes.ok) {
-          const chatsData = await chatRes.json();
+        if (chatRes) {
+          const chatsData = chatRes.data;
           const chats = chatsData.sessions || [];
           const chatActivities = chats.map((c: any) => ({
             id: c.id,
@@ -41,8 +38,8 @@ export default function ActivityFeed() {
           newActivities = [...newActivities, ...chatActivities];
         }
 
-        if (compRes.ok) {
-          const compsData = await compRes.json();
+        if (compRes) {
+          const compsData = compRes.data;
           const comps = compsData.history || [];
           const compActivities = comps.map((c: any) => ({
             id: c.id,
@@ -63,7 +60,7 @@ export default function ActivityFeed() {
     };
 
     fetchHistory();
-  }, [token]);
+  }, []);
 
   return (
     <div className="activity-feed">
