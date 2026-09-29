@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Environment — dev-only, never tracked. Production builds get the API URL from
+# the compose build arg (FE_API_URL), not from this file; shipping it is what
+# leaked localhost into the deployed bundle (bug_reports.md 2026-09-29).
+.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
