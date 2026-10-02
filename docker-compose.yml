@@ -11,9 +11,18 @@ services:
         # VITE_API_URL here leaked the dev URL into production builds and end
         # users' browsers hit ERR_CONNECTION_REFUSED on their own localhost.
         # Override per environment, e.g. FE_API_URL=https://api.example.com docker compose up --build
-        VITE_API_URL: ${FE_API_URL:-https://legal-analyzer.lintasarta.dev}
+        # Default is EMPTY: the bundle then uses a same-origin relative API base
+        # (src/config.ts) and nginx.conf reverse-proxies /api/ to the backend, so
+        # a co-located FE+BE stack works with zero configuration and no build can
+        # ever bake a wrong-host URL again (the 2026-10-02 deployed-login 405).
+        VITE_API_URL: ${FE_API_URL:-}
     container_name: legpro-frontend
     restart: always
+    extra_hosts:
+      # nginx's /api/ proxy targets host.docker.internal:8080 (the backend's
+      # published port). Docker Desktop resolves that name natively; Linux
+      # hosts need the host-gateway mapping, and it is harmless on Desktop.
+      - "host.docker.internal:host-gateway"
     ports:
       # nginx inside the container listens on 80 (see Dockerfile EXPOSE / nginx.conf).
       # Map the host port to 80 — NEVER to 5173; that was the old Vite dev-server

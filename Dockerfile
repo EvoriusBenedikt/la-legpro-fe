@@ -9,9 +9,11 @@ RUN npm ci
 COPY . .
 
 # Vite bakes VITE_* vars into the bundle AT BUILD TIME (runtime env cannot change them).
-# Pass the production API URL here, e.g.:
-#   docker build --build-arg VITE_API_URL=https://legal-analyzer.lintasarta.dev .
-ARG VITE_API_URL=https://legal-analyzer.lintasarta.dev
+# Default is EMPTY: production bundles then use a same-origin relative API base
+# (src/config.ts) and nginx.conf reverse-proxies /api/ to the backend. Pass an
+# absolute URL only for split-host deployments, e.g.:
+#   docker build --build-arg VITE_API_URL=https://api.example.com .
+ARG VITE_API_URL=
 ENV VITE_API_URL=$VITE_API_URL
 
 RUN npm run build

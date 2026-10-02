@@ -10,7 +10,7 @@ in Docker).
 |---|---|---|
 | Start | `npm run dev` | `npm run deploy` (= `docker compose up -d --build frontend`) |
 | URL | http://localhost:5173 — Vite dev server, full HMR | http://localhost — nginx serving the static bundle (host port via `FE_PORT`), no HMR |
-| API endpoint | `VITE_API_URL` from `.env`, read at dev-server start (here: `http://localhost:8080`) | baked into the bundle at image build from the compose build arg (`FE_API_URL` shell var; compose default `https://legal-analyzer.lintasarta.dev`). The compose var is deliberately NOT named `VITE_API_URL` — Compose would otherwise read the dev value from this directory's `.env` and leak it into the production bundle |
+| API endpoint | `VITE_API_URL` from `.env`, read at dev-server start (here: `http://localhost:8080`) | **same-origin by default**: the bundle's API base bakes empty when `FE_API_URL` is unset (`src/config.ts` falls back to `''`), so the browser calls `/api/` on its own origin and nginx reverse-proxies it to the backend's published port (`host.docker.internal:8080`). Set `FE_API_URL` at image build **only** for split-host deploys. The compose var is deliberately NOT named `VITE_API_URL` — Compose would otherwise read the dev value from this directory's `.env` and leak it into the production bundle |
 | Code changes | instantly (hot reload) | only after an image rebuild |
 
 ```bash
@@ -37,16 +37,22 @@ multi-stage build: `vite build` → static `dist/` served by nginx on port 80
 build; the raw equivalent is:
 
 ```bash
-FE_API_URL=https://legal-analyzer.lintasarta.dev docker compose up -d --build frontend
+docker compose up -d --build frontend     # same-origin /api/ proxy — no env needed
+# split-host deploys only (API on another origin):
+# FE_API_URL=https://api.example.com docker compose up -d --build frontend
 ```
 
 > `VITE_API_URL` is baked into the JS **at build time** — a runtime env var
-> cannot change it. Rebuild per environment. The override var is `FE_API_URL`
-> (not `VITE_API_URL`) on purpose: Compose interpolates `${VITE_API_URL}` from
-> this directory's `.env` — the dev file — which would bake `localhost` into
-> the production bundle. `.dockerignore` additionally keeps `.env` out of the
-> image. `nginx.conf` marks `index.html` no-cache so redeployed bundles reach
-> browsers immediately instead of lingering behind heuristic caching.
+> cannot change it. Default builds bake an EMPTY base, so all `/api/*` calls go
+> to the page's own origin, where `nginx.conf` proxies them to the backend
+> (before that proxy existed, every deployed POST returned 405 — see
+> `la-legpro-doc/bug_reports.md`, 2026-10-02). Set `FE_API_URL` (not
+> `VITE_API_URL`) only when the API truly lives on another origin: Compose
+> interpolates `${VITE_API_URL}` from this directory's `.env` — the dev file —
+> which would bake `localhost` into the production bundle. `.dockerignore`
+> additionally keeps `.env` out of the image. `nginx.conf` marks `index.html`
+> no-cache so redeployed bundles reach browsers immediately instead of
+> lingering behind heuristic caching.
 
 ## Conventions
 
