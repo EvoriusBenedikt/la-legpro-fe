@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import api from '../services/api';
 import { getSettings } from '../settings';
 import { useStrings, getLocale, fill, STRINGS } from '../i18n';
+import { useAuth } from '../context/AuthContext';
 import DocumentDrawer from './DocumentDrawer';
 import LoadingOrb from './LoadingOrb';
 import BotIdentity from './BotIdentity';
@@ -55,8 +56,23 @@ type DrawerDoc = {
   sektor: string;
 };
 
-const STORAGE_KEY = 'legal_analyzer_conversations';
-const ACTIVE_STORAGE_KEY = 'legal_analyzer_active_conversation';
+/* Chat history is per-account data: both keys carry the logged-in username as
+   a suffix, so a second account on the same browser can never see the first
+   one's conversations (2026-10-02 auth bug: the old origin-wide key leaked
+   history across accounts on every register/login). The unsuffixed names are
+   kept as LEGACY_* and migrated once, into whichever account opens Legal
+   Opinion first after the upgrade. */
+const STORAGE_KEY_BASE = 'legal_analyzer_conversations';
+const ACTIVE_STORAGE_KEY_BASE = 'legal_analyzer_active_conversation';
+const LEGACY_STORAGE_KEY = 'legal_analyzer_conversations';
+const LEGACY_ACTIVE_STORAGE_KEY = 'legal_analyzer_active_conversation';
+function storageKeysFor(username?: string): { list: string; active: string } {
+  const suffix = username || 'anon';
+  return {
+    list: `${STORAGE_KEY_BASE}:${suffix}`,
+    active: `${ACTIVE_STORAGE_KEY_BASE}:${suffix}`,
+  };
+}
 /* Desktop-only history-panel collapse (handle on the panel seam,
    2026-10-01 review); same single-key localStorage pattern as the
    dashboard sidebar rail. Mobile keeps the off-canvas drawer. */
@@ -113,8 +129,24 @@ function createConversation(title?: string): Conversation {
 
 export default function LegalOpinion() {
   const t = useStrings();
+  const { user } = useAuth();
+  const storageKeys = useMemo(() => storageKeysFor(user?.username), [user?.username]);
   const [conversations, setConversations] = useState<Conversation[]>(() => {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    // One-time migration: adopt the pre-fix origin-wide history for the
+    // account that opens the view first, then retire the legacy key.
+    if (!localStorage.getItem(storageKeys.list)) {
+      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacy) {
+        localStorage.setItem(storageKeys.list, legacy);
+        localStorage.removeItem(LEGACY_STORAGE_KEY);
+        const legacyActive = localStorage.getItem(LEGACY_ACTIVE_STORAGE_KEY);
+        if (legacyActive) {
+          localStorage.setItem(storageKeys.active, legacyActive);
+          localStorage.removeItem(LEGACY_ACTIVE_STORAGE_KEY);
+        }
+      }
+    }
+    const raw = localStorage.getItem(storageKeys.list);
     if (!raw) return [createConversation()];
     try {
       const parsed = JSON.parse(raw) as Conversation[];
@@ -125,7 +157,7 @@ export default function LegalOpinion() {
     }
   });
   const [activeConversationId, setActiveConversationId] = useState<string>(() => {
-    const raw = localStorage.getItem(ACTIVE_STORAGE_KEY);
+    const raw = localStorage.getItem(storageKeys.active);
     return raw || '';
   });
   const [conversationSearch, setConversationSearch] = useState('');
@@ -215,14 +247,14 @@ export default function LegalOpinion() {
   }, [activeConversationId, conversations]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
-  }, [conversations]);
+    localStorage.setItem(storageKeys.list, JSON.stringify(conversations));
+  }, [conversations, storageKeys]);
 
   useEffect(() => {
     if (activeConversationId) {
-      localStorage.setItem(ACTIVE_STORAGE_KEY, activeConversationId);
+      localStorage.setItem(storageKeys.active, activeConversationId);
     }
-  }, [activeConversationId]);
+  }, [activeConversationId, storageKeys]);
 
   // Dismiss the conversation menu on Escape, any click outside its wrap
   // AND outside the portaled menu, and on any scroll/resize (the fixed
