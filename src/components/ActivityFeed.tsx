@@ -7,6 +7,7 @@ interface Activity {
   id: string;
   type: 'chat' | 'compliance';
   title: string;
+  /** Raw ISO timestamp — never displayed; used only for sorting below. */
   date: string;
   detail: string;
 }
@@ -32,7 +33,7 @@ export default function ActivityFeed() {
             id: c.id,
             type: 'chat',
             title: c.title,
-            date: new Date(c.created_at).toLocaleDateString(),
+            date: c.created_at,
             detail: 'started a new legal analysis chat'
           }));
           newActivities = [...newActivities, ...chatActivities];
@@ -45,7 +46,7 @@ export default function ActivityFeed() {
             id: c.id,
             type: 'compliance',
             title: c.filename,
-            date: new Date(c.created_at).toLocaleDateString(),
+            date: c.created_at,
             detail: 'uploaded a document for compliance check'
           }));
           newActivities = [...newActivities, ...compActivities];

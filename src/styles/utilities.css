@@ -104,6 +104,7 @@
     background: var(--overlay-veil);
     z-index: 90;
   }
+  .legal-opinion-view { margin: 8px 8px calc(8px + env(safe-area-inset-bottom)); }
   .legal-opinion-view .conversation-panel {
     position: fixed;
     top: 16px;
@@ -272,4 +273,44 @@
   .footer-grid { padding: 32px 16px 0; grid-template-columns: 1fr; gap: 28px; }
   .footer-contact-grid { grid-template-columns: 1fr; }
   .app-footer-copyright { font-size: 0.72rem; }
+}
+
+/* Settings dialog: stack the category nav above the content pane and
+   let rows wrap their control under the text on narrow screens. */
+@media (max-width: 767px) {
+  .settings-window {
+    width: calc(100vw - 24px);
+    height: calc(100vh - 48px);
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .settings-nav {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    max-height: 38vh;
+    padding: 12px 10px;
+  }
+  .settings-content { padding: 20px 16px 40px; }
+  .settings-row { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .settings-close { top: 8px; right: 10px; }
+}
+
+/* ── Admin Dashboard (≤767px): single-column grids, 44px touch targets,
+      stacked form rows (2026-09-30 critique remediation — the screen was
+      100% inline styles before, unreachable by any media query) ── */
+@media (max-width: 767px) {
+  .admin-view { padding: 16px 12px 32px; }
+  .admin-status-grid { grid-template-columns: 1fr; }
+  .admin-panel { padding: 20px 16px; }
+  .admin-exclusion-form { flex-direction: column; }
+  .admin-exclusion-form .btn { width: 100%; min-height: 44px; }
+  .admin-toolbar { flex-direction: column; align-items: stretch; }
+  .admin-toolbar .admin-input,
+  .admin-toolbar .admin-select { width: 100%; min-height: 44px; box-sizing: border-box; }
+  .admin-icon-btn { width: 44px; height: 44px; }
+  .admin-page-btn { width: 44px; height: 44px; }
+  .admin-hero-row { gap: 12px; }
+  .btn-hero { min-height: 44px; padding: 10px 16px; }
+  .admin-card-search input { min-height: 44px; }
+  .admin-search-clear { width: 32px; height: 32px; }
 }

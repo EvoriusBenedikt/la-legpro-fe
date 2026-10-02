@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, FileText, List, Eye, AlertCircle, BookOpen, ChevronRight, BarChart2, Layers } from 'lucide-react';
+import { X, FileText, List, Eye, AlertCircle, BookOpen, ChevronRight, BarChart2 } from 'lucide-react';
 import api from '../services/api';
+import { useDialogA11y } from '../hooks/useDialogA11y';
+import LoadingOrb from './LoadingOrb';
 
 interface OutlineItem {
   type: 'bab' | 'pasal';
@@ -34,6 +36,7 @@ interface DocumentDrawerProps {
     judul: string;
     jenis: string;
     sektor: string;
+    status?: string;
     filename?: string;
   } | null;
   onClose: () => void;
@@ -83,7 +86,11 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
       .then(data => setAnalysis(data))
       .catch(err => {
         console.error('Analyze error:', err);
-        const msg = err?.response ? `Server error: ${err.response.status}` : err.message;
+        // Indonesian user-facing copy; technical detail stays in the console
+        // (critique re-score P1 copy pass).
+        const msg = err?.response
+          ? `Kesalahan server (kode ${err.response.status}).`
+          : 'Periksa koneksi Anda lalu coba lagi.';
         setAnalysis({
           total_pasal: 0,
           overview: `Gagal menganalisis dokumen. ${msg}`,
@@ -135,7 +142,9 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
       })
       .catch(err => {
         console.error('Deep analysis error:', err);
-        const msg = err?.response ? `Server error: ${err.response.status}` : err.message;
+        const msg = err?.response
+          ? `Kesalahan server (kode ${err.response.status}).`
+          : 'Periksa koneksi Anda lalu coba lagi.';
         setDeepError(`Gagal menganalisis. ${msg}`);
       })
       .finally(() => setIsDeepAnalyzing(false));
@@ -148,22 +157,34 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
     };
   }, [pdfBlobUrl]);
 
+  // Dialog a11y (Esc, focus move/restore, Tab trap) — registered before the
+  // early return so hook order stays stable (critique remediation P2, 2026-09-29).
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDialogA11y(!!doc, onClose, panelRef);
+
   if (!doc) return null;
 
   const tabs = [
-    { id: 'overview' as DrawerTab, label: 'Overview', icon: <Eye size={14} /> },
+    { id: 'overview' as DrawerTab, label: 'Ikhtisar', icon: <Eye size={14} /> },
     { id: 'pdf' as DrawerTab, label: 'PDF', icon: <FileText size={14} /> },
-    { id: 'outline' as DrawerTab, label: 'Outline', icon: <List size={14} /> },
+    { id: 'outline' as DrawerTab, label: 'Kerangka', icon: <List size={14} /> },
     { id: 'analisis' as DrawerTab, label: 'Analisis', icon: <BarChart2 size={14} /> },
   ];
 
   return createPortal(
     <>
       {/* Backdrop */}
-      <div className="drawer-backdrop" onClick={onClose} />
+      <div className="drawer-backdrop" onClick={onClose} aria-hidden="true" />
 
       {/* Drawer Panel — wider for the Analisis tab */}
-      <div className={`drawer-panel${activeTab === 'analisis' ? ' drawer-panel--wide' : ''}`}>
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={doc.judul}
+        tabIndex={-1}
+        className={`drawer-panel${activeTab === 'analisis' ? ' drawer-panel--wide' : ''}`}
+      >
         {/* Header */}
         <div className="drawer-header">
           <div className="drawer-title-area">
@@ -171,7 +192,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
             <h3 className="drawer-title">{doc.judul}</h3>
             <span className="drawer-sub">{doc.sektor} · Nomor {doc.nomor}</span>
           </div>
-          <button className="drawer-close" onClick={onClose}>
+          <button className="drawer-close" onClick={onClose} aria-label="Tutup detail dokumen">
             <X size={20} />
           </button>
         </div>
@@ -192,9 +213,18 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
         {/* Tab Content */}
         <div className={`drawer-content${activeTab === 'pdf' ? ' drawer-content--pdf' : ''}`}>
 
-          {/* ── OVERVIEW TAB ── */}
+          {/* ── IKHTISAR TAB ── */}
           {activeTab === 'overview' && (
             <div className="drawer-section-list">
+              {/* Qualified-status caveat repeated where the decision is made
+                  (critique re-score P1): the card tooltip must not be the only
+                  place this surfaces. */}
+              {doc.status?.startsWith('Berlaku (') && (
+                <div className="drawer-status-note" role="note">
+                  <AlertCircle size={16} />
+                  <span>Status berlaku dengan catatan — periksa tab Analisis untuk pasal yang dicabut/diubah.</span>
+                </div>
+              )}
               <div className="stat-card">
                 <span className="stat-label">Total Pasal</span>
                 {isAnalyzing
@@ -273,7 +303,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
                 </div>
               ) : pdfBlobUrl ? (
                 <>
-                  <iframe src={pdfBlobUrl} title="PDF Viewer" className="pdf-object" />
+                  <iframe src={pdfBlobUrl} title="Penampil PDF" className="pdf-object" />
                   <a href={pdfBlobUrl} target="_blank" rel="noopener noreferrer" className="pdf-open-link">
                     ↗ Buka PDF di Tab Baru
                   </a>
@@ -287,7 +317,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
             </div>
           )}
 
-          {/* ── OUTLINE TAB ── */}
+          {/* ── KERANGKA TAB ── */}
           {activeTab === 'outline' && (
             <div className="outline-list">
               {isAnalyzing ? (
@@ -305,7 +335,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
               ) : (
                 <div className="empty-pdf">
                   <List size={48} style={{ opacity: 0.3 }} />
-                  <p>Tidak ada outline yang dapat diekstrak dari dokumen ini.</p>
+                  <p>Tidak ada kerangka yang dapat diekstrak dari dokumen ini.</p>
                 </div>
               )}
             </div>
@@ -316,9 +346,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
             <div className="pasal-analysis-view">
               {isDeepAnalyzing ? (
                 <div className="deep-loading">
-                  <div className="deep-loading-icon">
-                    <Layers size={40} />
-                  </div>
+                  <LoadingOrb state="solving" size={64} />
                   <h4>Menganalisis Setiap Pasal...</h4>
                   <p>LLM sedang membaca dan menganalisis setiap pasal secara mendalam.<br />Ini memerlukan waktu 1–3 menit.</p>
                   <div className="deep-loading-bar">

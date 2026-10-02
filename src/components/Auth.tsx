@@ -3,8 +3,10 @@ import { useAuth } from '../context/AuthContext';
 import { Lock, User, LogIn, UserPlus, Mail, Scale, Eye, EyeOff, ShieldCheck, Brain } from 'lucide-react';
 import api, { isHttpError } from '../services/api';
 import { Link } from 'react-router-dom';
+import { useStrings } from '../i18n';
 
 export default function Auth() {
+  const t = useStrings();
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -21,17 +23,17 @@ export default function Auth() {
     setError('');
 
     if (!isLogin && password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError(t.authErrMismatch);
       return;
     }
 
     if (!isLogin) {
       if (!/\d/.test(password)) {
-        setError("Password must contain at least one number");
+        setError(t.authErrNeedNumber);
         return;
       }
       if (!/[^A-Za-z0-9]/.test(password)) {
-        setError("Password must contain at least one symbol");
+        setError(t.authErrNeedSymbol);
         return;
       }
     }
@@ -47,7 +49,7 @@ export default function Auth() {
       login(response.data.access_token, response.data.user);
     } catch (err) {
       const detail = isHttpError(err) ? err.response.data?.detail : undefined;
-      setError(detail ? String(detail) : 'Authentication failed');
+      setError(detail ? String(detail) : t.authErrFailed);
     } finally {
       setLoading(false);
     }
@@ -59,47 +61,47 @@ export default function Auth() {
       <div className="auth-brand-side">
         <div className="brand-content">
           <div className="brand-logo-container">
-            <Scale size={64} />
+            <img src="/LegalAnalyzerLogo.png" alt="" className="brand-logo-img" />
           </div>
           <h1>Legal Analyzer</h1>
-          <p>
-            Elevate your compliance workflow. The intelligent legal repository and opinion generator for enterprise regulatory alignment.
+          <p className="brand-tagline">
+            {t.authTagline}
           </p>
 
-          <div className="auth-features" style={{ marginTop: '40px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-              <div style={{ padding: '10px', background: 'rgba(255,255,255,0.06)', borderRadius: '12px' }}>
+          <div className="auth-features">
+            <div className="auth-feature">
+              <div className="auth-feature-icon">
                 <ShieldCheck size={24} color="var(--accent-color)" />
               </div>
               <div>
-                <h3 style={{ margin: '0 0 4px', fontSize: '1rem', color: '#fff' }}>Hybrid RAG Retrieval</h3>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: '#a8a2c2' }}>Combines exact keyword search (BM25) with semantic vector search for 99% recall precision.</p>
-              </div>
-            </div>
-            
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-              <div style={{ padding: '10px', background: 'rgba(255,255,255,0.06)', borderRadius: '12px' }}>
-                <Brain size={24} color="#38BDF8" />
-              </div>
-              <div>
-                <h3 style={{ margin: '0 0 4px', fontSize: '1rem', color: '#fff' }}>Cross-Encoder Reranking</h3>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: '#a8a2c2' }}>Neural-network based second-pass filtering ensures only highly relevant clauses reach the LLM.</p>
+                <h3>{t.authFeat1Title}</h3>
+                <p>{t.authFeat1Desc}</p>
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-              <div style={{ padding: '10px', background: 'rgba(255,255,255,0.06)', borderRadius: '12px' }}>
+            <div className="auth-feature">
+              <div className="auth-feature-icon">
+                <Brain size={24} color="#38BDF8" />
+              </div>
+              <div>
+                <h3>{t.authFeat2Title}</h3>
+                <p>{t.authFeat2Desc}</p>
+              </div>
+            </div>
+
+            <div className="auth-feature">
+              <div className="auth-feature-icon">
                 <Scale size={24} color="#10B981" />
               </div>
               <div>
-                <h3 style={{ margin: '0 0 4px', fontSize: '1rem', color: '#fff' }}>Contextual Legal Analysis</h3>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: '#a8a2c2' }}>Pre-computed document summaries eliminate isolated chunks and hallucination.</p>
+                <h3>{t.authFeat3Title}</h3>
+                <p>{t.authFeat3Desc}</p>
               </div>
             </div>
           </div>
           
-          <div style={{ marginTop: 'auto', paddingTop: '40px', opacity: 0.5, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 10px var(--success)' }} />
+          <div className="auth-credit">
+            <div className="auth-credit-dot" />
             Powered by LA Lintasarta Core
           </div>
         </div>
@@ -109,26 +111,28 @@ export default function Auth() {
       <div className="auth-form-side">
         <div className="auth-card">
           <div className="auth-header">
-            <h2>{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
-            <p>{isLogin ? 'Sign in to access your dashboard' : 'Register to get started'}</p>
+            <h2>{isLogin ? t.authWelcome : t.authRegisterTitle}</h2>
+            <p>{isLogin ? t.authWelcomeSub : t.authRegisterSub}</p>
           </div>
 
           {error && (
-            <div className="auth-error animate-pulse">
+            <div className="auth-error animate-pulse" role="alert">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="input-group">
-              <label>Username</label>
+              <label htmlFor="auth-username">{t.authUsername}</label>
               <div className="input-wrapper">
                 <User size={18} />
                 <input 
+                  id="auth-username"
                   type="text" 
                   required
                   className="auth-input"
-                  placeholder="Enter your username"
+                  placeholder={t.authUsernamePh}
+                  autoComplete="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                 />
@@ -137,14 +141,16 @@ export default function Auth() {
 
             {!isLogin && (
               <div className="input-group">
-                <label>Email</label>
+                <label htmlFor="auth-email">{t.authEmail}</label>
                 <div className="input-wrapper">
                   <Mail size={18} />
                   <input 
+                    id="auth-email"
                     type="email" 
                     required
                     className="auth-input"
-                    placeholder="Enter your email"
+                    placeholder={t.authEmailPh}
+                    autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
@@ -153,49 +159,55 @@ export default function Auth() {
             )}
 
             <div className="input-group">
-              <label>Password</label>
+              <label htmlFor="auth-password">{t.authPassword}</label>
               <div className="input-wrapper">
                 <Lock size={18} />
                 <input 
+                  id="auth-password"
                   type={showPassword ? "text" : "password"}
                   required
                   className="auth-input"
-                  placeholder="Enter your password"
+                  placeholder={t.authPasswordPh}
+                  autoComplete={isLogin ? "current-password" : "new-password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
                 <button 
                   type="button" 
+                  className="auth-eye"
+                  aria-label={showPassword ? t.authHidePassword : t.authShowPassword}
                   onClick={() => setShowPassword(!showPassword)}
-                  style={{ position: 'absolute', right: '12px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
               {!isLogin && (
-                <small style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
-                  Password must contain at least one number and one symbol.
+                <small className="auth-hint">
+                  {t.authPasswordRules}
                 </small>
               )}
             </div>
 
             {!isLogin && (
               <div className="input-group">
-                <label>Confirm Password</label>
+                <label htmlFor="auth-confirm">{t.authConfirm}</label>
                 <div className="input-wrapper">
                   <Lock size={18} />
                   <input 
+                    id="auth-confirm"
                     type={showConfirmPassword ? "text" : "password"}
                     required
                     className="auth-input"
-                    placeholder="Confirm your password"
+                    placeholder={t.authConfirmPh}
+                    autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                   />
                   <button 
                     type="button" 
+                    className="auth-eye"
+                    aria-label={showConfirmPassword ? t.authHidePassword : t.authShowPassword}
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    style={{ position: 'absolute', right: '12px', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
                   >
                     {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
@@ -209,20 +221,20 @@ export default function Auth() {
               className="auth-button btn-primary"
             >
               {isLogin ? <LogIn size={18} /> : <UserPlus size={18} />}
-              {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Sign Up')}
+              {loading ? t.authProcessing : (isLogin ? t.authSignIn : t.authSignUp)}
             </button>
           </form>
 
           <div className="auth-toggle">
-            {isLogin ? "Don't have an account? " : "Already have an account? "}
+            {isLogin ? t.authNoAccount : t.authHaveAccount}
             <button type="button" onClick={() => { setIsLogin(!isLogin); setError(''); }}>
-              {isLogin ? 'Register here' : 'Login here'}
+              {isLogin ? t.authRegisterHere : t.authLoginHere}
             </button>
           </div>
 
           <div className="auth-toggle" style={{ marginTop: '8px' }}>
             <Link to="/" style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-              ← Back to overview
+              {t.authBack}
             </Link>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import api, { isHttpError } from '../services/api';
+import LoadingOrb from './LoadingOrb';
 
 interface Taxonomy {
   id: number;
@@ -168,7 +169,7 @@ export default function TaxonomyManager() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={3} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>Memuat taksonomi...</td></tr>
+              <tr><td colSpan={3} style={{ padding: '32px', textAlign: 'center' }}><LoadingOrb size={32} label="Memuat taksonomi..." /></td></tr>
             ) : taxonomyList.length === 0 ? (
               <tr><td colSpan={3} style={{ padding: '32px', textAlign: 'center', color: 'var(--text-secondary)' }}>Belum ada data taksonomi</td></tr>
             ) : taxonomyList.map(tax => (

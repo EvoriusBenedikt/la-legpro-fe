@@ -8,6 +8,7 @@ import {
   Database, Building2, Tag, FileText, ZoomIn, ZoomOut, Maximize2,
   List, Network as NetworkIcon, Download
 } from 'lucide-react';
+import LoadingOrb from './LoadingOrb';
 
 interface KGNode {
   id: string;
@@ -527,7 +528,13 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+    /* view-container no-scroll: same fill-the-scroller pattern as LegalOpinion.
+       A bare height:'100%' here resolves against the indefinite .route-inset
+       (flex:1 0 auto), making the vis-network container content-sized — its
+       autoResize poller then ratchets canvas→container→canvas and the page
+       grows forever. The .no-scroll cap (:has() rule in components.css) gives
+       the chain a definite height, so vis sizes once and stays stable. */
+    <div className="view-container no-scroll">
       {/* Header */}
       <div style={{
         padding: '20px 28px 16px',
@@ -686,9 +693,10 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
               alignItems: 'center', justifyContent: 'center', zIndex: 10,
               background: 'rgba(22,18,43,0.85)', backdropFilter: 'blur(4px)',
             }}>
-              {/* Dark loading wash (dimmer over the graph area): neon icon + light text, like .upload-overlay */}
-              <GitFork size={40} color="#38BDF8" style={{ opacity: 0.6, marginBottom: '16px' }} />
-              <p style={{ color: '#cbd5e1', margin: 0 }}>Memuat knowledge graph...</p>
+              {/* Dark loading wash (dimmer over the graph area): the orb is
+                  pinned to dark ink + light label because this surface does
+                  not follow the app theme. */}
+              <LoadingOrb theme="dark" className="loading-orb--on-dark" label="Memuat knowledge graph..." />
             </div>
           )}
           {!loading && kgData?.nodes.length === 0 && (

@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import './SystemMonitoring.css';
 
 import api from '../services/api';
+import { useDateFormatters } from '../format';
 
 interface HealthData {
   cpu: number;
@@ -81,6 +82,7 @@ const getOrSkipHttpError = (url: string) =>
 
 export default function SystemMonitoring() {
   const { token } = useAuth();
+  const { formatDateTime } = useDateFormatters();
   const [health, setHealth] = useState<HealthData | null>(null);
   const [tasks, setTasks] = useState<TaskData[]>([]);
   const [backups, setBackups] = useState<BackupData[]>([]);
@@ -593,7 +595,7 @@ export default function SystemMonitoring() {
                 {auditLogs.map((log, i) => (
                   <tr key={i}>
                     <td style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                      {new Date(log.timestamp).toLocaleString('id-ID')}
+                      {formatDateTime(log.timestamp)}
                     </td>
                     <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{log.user_id || '-'}</td>
                     <td>

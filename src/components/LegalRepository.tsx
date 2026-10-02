@@ -1,10 +1,15 @@
-import { useState, useEffect, useRef } from 'react';
-import { Search, Database, File, Upload, CheckCircle2, BookOpen, FolderOpen, Zap, FileCheck, X, Trash2, Clock, Bot, Scale } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Search, Database, File, Upload, CheckCircle2, BookOpen, FolderOpen, Zap, FileCheck, X, Trash2, Clock, Bot, Scale, AlertCircle, Loader2, History } from 'lucide-react';
 import DocumentDrawer from './DocumentDrawer';
+import LoadingOrb from './LoadingOrb';
+import WorkBeam from './WorkBeam';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import { useAuth } from '../context/AuthContext';
 import ComplianceResultsViewer from './ComplianceResultsViewer';
 import ProtectedRoute from './ProtectedRoute';
 import api, { isHttpError } from '../services/api';
+import { useDateFormatters } from '../format';
 
 interface OJKDocument {
   id: string;
@@ -14,7 +19,54 @@ interface OJKDocument {
   sektor: string;
   status: string;
   filename?: string;
+  klasifikasi?: string;
+  /** VLM classification verdict (2026-09-30, migration 005); null on rows
+      that predate the confidence-gated classifier. */
+  ai_confidence?: number | null;
+  ai_jenis?: string | null;
+  ai_reasoning?: string | null;
+  /** 'auto' = confidence >= threshold, ingested without human review;
+      'manual' = confirmed through the pending tab; null = legacy row. */
+  approval_mode?: 'auto' | 'manual' | null;
+  /** Pending-first queue (2026-09-30): 'scanning' = AI pass still running,
+      'awaiting_approval' = needs the sekretaris decision. */
+  stage?: 'scanning' | 'awaiting_approval';
+  /** 'Memproses' with no RUNNING backend task (e.g. backend restarted mid-scan). */
+  stale?: boolean;
+  uploaded_at?: string | null;
 }
+
+/** One row of the Riwayat Unggahan trail (GET /api/repository/uploads/history). */
+interface UploadHistoryEntry {
+  id: number;
+  doc_id: string;
+  filename: string;
+  judul: string;
+  uploaded_by_name: string;
+  uploaded_at: string | null;
+  outcome: string;
+  ai_klasifikasi: string;
+  ai_jenis: string;
+  ai_confidence: number | null;
+  final_klasifikasi: string;
+  final_jenis: string;
+  resolved_at: string | null;
+  resolved_by_name: string;
+  detail: string;
+}
+
+/** Outcome badge vocabulary + tones (see DESIGN.md: processing/provenance stays
+    neutral; resolved outcomes reuse the status triad like document statuses). */
+const OUTCOME_META: Record<string, { label: string; cls: string }> = {
+  processing:        { label: 'Diproses',            cls: 'status-chip--neutral' },
+  awaiting_approval: { label: 'Menunggu Konfirmasi', cls: 'status-chip--warning' },
+  auto_approved:     { label: 'Otomatis disetujui',  cls: 'status-chip--success' },
+  confirmed:         { label: 'Dikonfirmasi',        cls: 'status-chip--success' },
+  rejected:          { label: 'Ditolak',             cls: 'status-chip--danger' },
+  failed_duplicate:  { label: 'Gagal - Duplikat',    cls: 'status-chip--danger' },
+  failed_error:      { label: 'Gagal - Error',       cls: 'status-chip--danger' },
+  deleted:           { label: 'Dihapus',             cls: 'status-chip--neutral' },
+};
 
 interface AnalyzedDocument {
   id: string;
@@ -37,22 +89,51 @@ interface DocumentTemplate {
   category: string;
 }
 
-type ActiveTab = 'regulations' | 'internal' | 'analyzed' | 'templates' | 'pending';
+type ActiveTab = 'regulations' | 'internal' | 'analyzed' | 'templates' | 'pending' | 'history';
 
 export default function LegalRepository() {
+  const { user, token } = useAuth();
+  const { formatDate, formatDateTime } = useDateFormatters();
+  // URL state (critique re-score P1): search/filters/sort/page restore from the
+  // query string on mount and mirror back (debounced, replace) on change, so a
+  // narrowed view is bookmarkable, shareable, and survives refresh.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const roleLower = user?.role?.toLowerCase() || '';
+  // Riwayat Unggahan visibility (decision B, 2026-09-30): sekretaris sees all
+  // uploads, manajer/direktur see only their own (enforced backend-side too).
+  const canSeeHistory = ['sekretaris perusahaan', 'manajer', 'direktur'].includes(roleLower);
+  const initialTab = (): ActiveTab => {
+    const t = searchParams.get('tab');
+    if (t === 'pending' && roleLower !== 'sekretaris perusahaan') return 'regulations';
+    if (t === 'history' && !canSeeHistory) return 'regulations';
+    return (['regulations', 'internal', 'analyzed', 'templates', 'pending', 'history'].includes(t || '') ? t : 'regulations') as ActiveTab;
+  };
+  const initialList = (key: string) => searchParams.get(key)?.split(',').filter(Boolean) ?? [];
+  const initialSort = (): 'default' | 'tahun-desc' | 'judul-asc' | 'instansi-asc' => {
+    const s = searchParams.get('sort');
+    return (['tahun-desc', 'judul-asc', 'instansi-asc'].includes(s || '') ? s : 'default') as 'default' | 'tahun-desc' | 'judul-asc' | 'instansi-asc';
+  };
+  const initialRows = () => {
+    const n = Number(searchParams.get('rows'));
+    return [24, 48, 96].includes(n) ? n : 12;
+  };
+
   const [documents, setDocuments] = useState<OJKDocument[]>([]);
   const [historyDocs, setHistoryDocs] = useState<AnalyzedDocument[]>([]);
   const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [pendingDocs, setPendingDocs] = useState<OJKDocument[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchParams.get('q') || '');
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
-  const [, setTaxonomyList] = useState<{id: number, name: string}[]>([]);
+  const [taxonomyList, setTaxonomyList] = useState<{id: number, name: string}[]>([]);
   const [selectedTaxonomy] = useState<string>('');
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('regulations');
+  const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
   const [revealedAi, setRevealedAi] = useState<Record<string, boolean>>({});
+  // Pending-tab approver selections (2026-09-30): per-doc klasifikasi/jenis
+  // picks, pre-filled from the AI verdict via ?? fallbacks at render time.
+  const [pendingSel, setPendingSel] = useState<Record<string, { klass?: string; jenis?: string }>>({});
   const [selectedDoc, setSelectedDoc] = useState<OJKDocument | null>(null);
   const [viewPdfDoc, setViewPdfDoc] = useState<OJKDocument | null>(null);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
@@ -65,14 +146,36 @@ export default function LegalRepository() {
   const [promptInput, setPromptInput] = useState('');
   // --- Multi-select filters (regulations + internal tabs) ---
   // Empty array = "all". Klasifikasi options stay role-gated like before.
-  const [selectedKlasifikasi, setSelectedKlasifikasi] = useState<string[]>([]);
-  const [selectedJenis, setSelectedJenis] = useState<string[]>([]);
-  const [selectedStatus, setSelectedStatus] = useState<string[]>([]);
+  const [selectedKlasifikasi, setSelectedKlasifikasi] = useState<string[]>(() => initialList('klas'));
+  const [selectedJenis, setSelectedJenis] = useState<string[]>(() => initialList('jenis'));
+  const [selectedStatus, setSelectedStatus] = useState<string[]>(() => initialList('status'));
+  const [selectedSektor, setSelectedSektor] = useState<string[]>(() => initialList('instansi'));
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  // Sort control + facet-panel progressive disclosure (critique remediation P1)
+  const [sortBy, setSortBy] = useState<'default' | 'tahun-desc' | 'judul-asc' | 'instansi-asc'>(initialSort);
+  const [jenisShowAll, setJenisShowAll] = useState(false);
+  const [sektorQuery, setSektorQuery] = useState('');
+  const [sektorShowAll, setSektorShowAll] = useState(false);
+  // Per-source load errors: a failed fetch must never render as an empty
+  // result set (critique remediation P1)
+  const [repoError, setRepoError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const [pendingError, setPendingError] = useState<string | null>(null);
+  // Riwayat Unggahan (2026-09-30): upload-trail state (migration 006).
+  const [uploadHistory, setUploadHistory] = useState<UploadHistoryEntry[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyOutcome, setHistoryOutcome] = useState('');
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  const [uploadHistoryError, setUploadHistoryError] = useState<string | null>(null);
+  // Post-upload watch window: keeps lists fresh while the backend scans and
+  // classifies a just-uploaded doc (the pending-first flow hides in-flight
+  // docs from the designated tabs until they resolve).
+  const [uploadWatchUntil, setUploadWatchUntil] = useState(0);
   // --- Pagination ---
-  const [rowsPerPage, setRowsPerPage] = useState(12);
-  const [page, setPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(initialRows);
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get('page')) || 1));
 
   const toggleInList = (list: string[], v: string) =>
     list.includes(v) ? list.filter(x => x !== v) : [...list, v];
@@ -80,6 +183,7 @@ export default function LegalRepository() {
     setSelectedKlasifikasi([]);
     setSelectedJenis([]);
     setSelectedStatus([]);
+    setSelectedSektor([]);
     setPage(1);
   };
   const [showShareModal, setShowShareModal] = useState<OJKDocument | null>(null);
@@ -89,14 +193,44 @@ export default function LegalRepository() {
   const [shareExpiry, setShareExpiry] = useState('');
   const [isSharing, setIsSharing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { user, token } = useAuth();
+  const pdfModalRef = useRef<HTMLDivElement>(null);
+  const shareModalRef = useRef<HTMLDivElement>(null);
+  const promptModalRef = useRef<HTMLDivElement>(null);
+
+  // Shared dialog a11y: Esc closes, focus moves in on open and is restored
+  // on close, Tab is trapped (critique remediation P2)
+  useDialogA11y(!!viewPdfDoc, () => { setViewPdfDoc(null); setPdfBlobUrl(null); }, pdfModalRef);
+  useDialogA11y(!!showShareModal, () => setShowShareModal(null), shareModalRef);
+  useDialogA11y(!!showPromptModal, () => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }, promptModalRef);
 
   const fetchPendingDocs = async () => {
     try {
+      setPendingError(null);
       const response = await api.get('/api/repository/pending');
       setPendingDocs(response.data.documents || []);
     } catch (error) {
       console.error("Error fetching pending docs", error);
+      setPendingError('Gagal memuat dokumen pending. Periksa koneksi Anda lalu coba lagi.');
+    }
+  };
+
+  const fetchUploadHistory = async (opts?: { append?: boolean; outcome?: string; offset?: number }) => {
+    const append = opts?.append ?? false;
+    try {
+      const res = await api.get('/api/repository/uploads/history', {
+        params: {
+          limit: 50,
+          offset: opts?.offset ?? 0,
+          ...(opts?.outcome ? { outcome: opts.outcome } : {}),
+        },
+      });
+      setUploadHistoryError(null);
+      setHistoryTotal(res.data.total ?? 0);
+      const entries: UploadHistoryEntry[] = res.data.entries || [];
+      setUploadHistory(prev => (append ? [...prev, ...entries] : entries));
+    } catch (error) {
+      console.error("Error fetching upload history", error);
+      setUploadHistoryError('Gagal memuat riwayat unggahan. Periksa koneksi Anda lalu coba lagi.');
     }
   };
 
@@ -105,7 +239,7 @@ export default function LegalRepository() {
     
     try {
       await api.delete(`/api/repository/document/${docId}`).catch((e) => {
-        if (e.response) throw new Error(e.response.data?.detail || 'Failed to delete document');
+        if (e.response) throw new Error(e.response.data?.detail || 'Gagal menghapus dokumen');
         throw e;
       });
       
@@ -117,15 +251,32 @@ export default function LegalRepository() {
     }
   };
 
-  const handleConfirmPending = async (docId: string, klasifikasi: string) => {
+  const handleConfirmPending = async (docId: string, klasifikasi: string, jenis?: string) => {
     try {
-      await api.post(`/api/repository/pending/${docId}/confirm`, { klasifikasi });
+      await api.post(`/api/repository/pending/${docId}/confirm`, { klasifikasi, jenis });
       alert('Dokumen berhasil dikonfirmasi dan dimasukkan ke repositori!');
       fetchPendingDocs();
       fetchDocs();
     } catch (e) {
       if (isHttpError(e)) {
-        alert('Gagal mengkonfirmasi dokumen.');
+        alert(e.response?.data?.detail || 'Gagal mengkonfirmasi dokumen.');
+      } else {
+        console.error(e);
+        alert('Terjadi kesalahan koneksi.');
+      }
+    }
+  };
+
+  // Reject = delete the pending doc (file + row) before it ever reaches the
+  // repository; reuses the audited DELETE endpoint (log_audit DELETE_DOCUMENT).
+  const handleRejectPending = async (doc: OJKDocument) => {
+    if (!window.confirm(`Tolak "${doc.judul}"? Dokumen akan dihapus permanen dari antrean dan tidak masuk ke repositori.`)) return;
+    try {
+      await api.delete(`/api/repository/document/${doc.id}`);
+      fetchPendingDocs();
+    } catch (e) {
+      if (isHttpError(e)) {
+        alert(e.response?.data?.detail || 'Gagal menolak dokumen.');
       } else {
         console.error(e);
         alert('Terjadi kesalahan koneksi.');
@@ -136,10 +287,12 @@ export default function LegalRepository() {
   const fetchDocs = async () => {
     setIsLoading(true);
     try {
+      setRepoError(null);
       const response = await api.get('/api/repository');
       setDocuments(response.data.documents || []);
     } catch (error) {
       console.error("Error fetching repository", error);
+      setRepoError('Gagal memuat repositori. Periksa koneksi Anda lalu coba lagi.');
     } finally {
       setIsLoading(false);
     }
@@ -147,10 +300,12 @@ export default function LegalRepository() {
 
   const fetchHistoryDocs = async () => {
     try {
+      setHistoryError(null);
       const response = await api.get('/api/compliance-history');
       setHistoryDocs(response.data.history || []);
     } catch (error) {
       console.error("Error fetching history", error);
+      setHistoryError('Gagal memuat riwayat analisis. Periksa koneksi Anda lalu coba lagi.');
     }
   };
 
@@ -209,10 +364,12 @@ export default function LegalRepository() {
 
   const fetchTemplates = async () => {
     try {
+      setTemplatesError(null);
       const response = await api.get('/api/templates');
       setTemplates(response.data.templates || []);
     } catch (error) {
       console.error("Error fetching templates", error);
+      setTemplatesError('Gagal memuat template dokumen. Periksa koneksi Anda lalu coba lagi.');
     }
   };
 
@@ -261,10 +418,43 @@ export default function LegalRepository() {
     fetchDocs();
     fetchHistoryDocs();
     fetchTemplates();
-    if (user?.role?.toLowerCase() === 'sekretaris perusahaan') {
+    const role = user?.role?.toLowerCase() || '';
+    if (role === 'sekretaris perusahaan') {
       fetchPendingDocs();
     }
+    // Riwayat Unggahan (2026-09-30): eligible roles prefetch so the tab
+    // badge count is real on first paint.
+    if (['sekretaris perusahaan', 'manajer', 'direktur'].includes(role)) {
+      fetchUploadHistory();
+    }
   }, [user]);
+
+  // Pending-first queue (2026-09-30): poll while the queue tab is open so new
+  // uploads appear without a manual refresh and scanning cards transition in
+  // place (scanning → approval card, or out to the designated tab when the AI
+  // auto-approves). The endpoint is cheap (few rows, no joins beyond history).
+  useEffect(() => {
+    if (activeTab !== 'pending') return;
+    const t = setInterval(() => { fetchPendingDocs(); }, 5000);
+    return () => clearInterval(t);
+  }, [activeTab]);
+
+  // Post-upload watch window: after an upload, refresh the lists every 5 s for
+  // two minutes so the uploader (any role) sees the doc land without manual
+  // refreshes — in-flight docs are hidden from the designated tabs now.
+  useEffect(() => {
+    if (!uploadWatchUntil) return;
+    const t = setInterval(() => {
+      if (Date.now() >= uploadWatchUntil) {
+        setUploadWatchUntil(0);
+        return;
+      }
+      fetchDocs();
+      if (roleLower === 'sekretaris perusahaan') fetchPendingDocs();
+      if (['sekretaris perusahaan', 'manajer', 'direktur'].includes(roleLower)) fetchUploadHistory();
+    }, 5000);
+    return () => clearInterval(t);
+  }, [uploadWatchUntil, roleLower]);
 
   const handleGenerateTemplate = async (templateId: string) => {
     if (!promptInput.trim()) return;
@@ -383,6 +573,12 @@ export default function LegalRepository() {
     }
 
     setUploadStatus(`Selesai! Berhasil mengantrekan ${successCount} dari ${validFiles.length} dokumen.`);
+    if (successCount > 0) {
+      // Pending-first flow (2026-09-30): in-flight docs stay hidden from the
+      // designated tabs, so keep the lists refreshing for two minutes while
+      // the backend scans and classifies the uploads.
+      setUploadWatchUntil(Date.now() + 120000);
+    }
     setTimeout(() => {
       setUploadStatus(null);
       setIsUploading(false);
@@ -404,7 +600,6 @@ export default function LegalRepository() {
   const activeDocuments = activeTab === 'regulations' ? regulationDocs : internalDocs;
 
   // --- Filter option sources ---
-  const roleLower = user?.role?.toLowerCase() || '';
   const klasifikasiOptions = [
     'Umum',
     ...(['manajer', 'direktur', 'admin', 'sekretaris perusahaan'].includes(roleLower) ? ['Rahasia'] : []),
@@ -417,6 +612,48 @@ export default function LegalRepository() {
   const docKlas = (d: OJKDocument) => (d as any).klasifikasi || 'Umum';
   const normStatus = (d: OJKDocument) => isDup(d) ? 'Duplikat' : d.status;
 
+  // Structured citation parsed from the judul ("... Nomor 55/POJK.03/2016
+  // tentang ...", "... Nomor 71 Tahun 2019 tentang ..."): the bare nomor
+  // column often holds only a digit or an ingest slug, so the citable
+  // reference lives in the title prose (critique remediation P1).
+  const citationInfo = useMemo(() => {
+    const map = new Map<string, { citation: string | null; year: number | null }>();
+    for (const d of documents) {
+      const t = d.judul || '';
+      const m1 = t.match(/Nomor\s+([0-9]+(?:\/[A-Za-z0-9.]+)+\/(?:19|20)\d{2})/i);
+      if (m1) {
+        const y = m1[1].match(/(?:19|20)\d{2}$/);
+        map.set(d.id, { citation: m1[1], year: y ? Number(y[0]) : null });
+        continue;
+      }
+      const m2 = t.match(/Nomor\s+([0-9]+)\s+Tahun\s+((?:19|20)\d{2})/i);
+      if (m2) {
+        map.set(d.id, { citation: `${m2[1]} Tahun ${m2[2]}`, year: Number(m2[2]) });
+        continue;
+      }
+      const y2 = t.match(/(?:19|20)\d{2}/);
+      map.set(d.id, { citation: null, year: y2 ? Number(y2[0]) : null });
+    }
+    return map;
+  }, [documents]);
+  const docYear = (d: OJKDocument) => citationInfo.get(d.id)?.year ?? null;
+
+  const fmtSektor = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+  // Status -> chip tone. Qualified statuses ("Berlaku (Dicabut Sebagian)",
+  // "Berlaku (Perubahan) (Diubah)") must never read as plain success green
+  // (critique remediation P0).
+  const statusTone = (status: string): { cls: string; hint?: string } => {
+    if (status.includes('Gagal')) return { cls: 'status-chip--danger' };
+    if (status === 'Tidak Berlaku') return { cls: 'status-chip--danger' };
+    if (status.startsWith('Berlaku (')) {
+      return { cls: 'status-chip--warning', hint: 'Status berlaku dengan catatan — periksa tab Analisis untuk pasal yang dicabut/diubah.' };
+    }
+    if (status === 'Berlaku') return { cls: 'status-chip--success' };
+    return { cls: 'status-chip--neutral' };
+  };
+  const klasTone = (k: string) => (k === 'Rahasia' ? 'status-chip--danger' : 'status-chip--warning');
+
   const matchesSearch = (d: OJKDocument) => {
     const q = search.toLowerCase();
     return d.judul.toLowerCase().includes(q) ||
@@ -427,6 +664,7 @@ export default function LegalRepository() {
 
   const jenisOptions = [...new Set(activeDocuments.map(d => d.jenis))].sort();
   const statusOptions = [...new Set(activeDocuments.map(normStatus))].sort();
+  const sektorOptions = [...new Set(activeDocuments.map(d => d.sektor))];
 
   // Live per-option counts: respect search + the OTHER two filter groups
   const countKlas = (k: string) => activeDocuments.filter(d =>
@@ -447,11 +685,19 @@ export default function LegalRepository() {
     (selectedJenis.length === 0 || selectedJenis.includes(d.jenis)) &&
     normStatus(d) === s
   ).length;
+  const countSektor = (s: string) => activeDocuments.filter(d =>
+    matchesSearch(d) &&
+    (visibleKlasifikasi.length === 0 || visibleKlasifikasi.includes(docKlas(d))) &&
+    (selectedJenis.length === 0 || selectedJenis.includes(d.jenis)) &&
+    (selectedStatus.length === 0 || selectedStatus.includes(normStatus(d))) &&
+    d.sektor === s
+  ).length;
 
   const filteredDocs = activeDocuments.filter(d => {
     if (!matchesSearch(d)) return false;
     if (visibleKlasifikasi.length > 0 && !visibleKlasifikasi.includes(docKlas(d))) return false;
     if (selectedJenis.length > 0 && !selectedJenis.includes(d.jenis)) return false;
+    if (selectedSektor.length > 0 && !selectedSektor.includes(d.sektor)) return false;
     if (selectedStatus.length > 0) {
       if (!selectedStatus.includes(normStatus(d))) return false;
     } else if (isDup(d)) {
@@ -460,12 +706,25 @@ export default function LegalRepository() {
     return true;
   });
 
-  const activeFilterCount = visibleKlasifikasi.length + selectedJenis.length + selectedStatus.length;
+  const activeFilterCount = visibleKlasifikasi.length + selectedJenis.length + selectedStatus.length + selectedSektor.length;
+
+  // Sort applied after filtering, before pagination (critique remediation P1)
+  const sortedDocs = useMemo(() => {
+    const arr = [...filteredDocs];
+    if (sortBy === 'tahun-desc') arr.sort((a, b) => (docYear(b) ?? -1) - (docYear(a) ?? -1));
+    else if (sortBy === 'judul-asc') arr.sort((a, b) => a.judul.localeCompare(b.judul, 'id'));
+    else if (sortBy === 'instansi-asc') arr.sort((a, b) => fmtSektor(a.sektor).localeCompare(fmtSektor(b.sektor), 'id'));
+    return arr;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredDocs.length, sortBy, documents, selectedKlasifikasi, selectedJenis, selectedStatus, selectedSektor, search, activeTab]);
+
+  // Duplicates currently hidden by the default filter (for the empty-state hint)
+  const hiddenDups = activeDocuments.filter(isDup).length;
 
   // --- Pagination (regulations + internal) ---
-  const totalPages = Math.max(1, Math.ceil(filteredDocs.length / rowsPerPage));
+  const totalPages = Math.max(1, Math.ceil(sortedDocs.length / rowsPerPage));
   const safePage = Math.min(page, totalPages);
-  const pagedDocs = filteredDocs.slice((safePage - 1) * rowsPerPage, safePage * rowsPerPage);
+  const pagedDocs = sortedDocs.slice((safePage - 1) * rowsPerPage, safePage * rowsPerPage);
 
   const filteredHistoryDocs = historyDocs.filter(doc =>
     doc.filename.toLowerCase().includes(search.toLowerCase())
@@ -481,7 +740,7 @@ export default function LegalRepository() {
   const showPagerTab = activeTab === 'regulations' || activeTab === 'internal' || isAnalyzedTab;
   const pagerPages = isAnalyzedTab ? historyTotalPages : totalPages;
   const pagerCur = isAnalyzedTab ? safeHistoryPage : safePage;
-  const pagerTotal = isAnalyzedTab ? filteredHistoryDocs.length : filteredDocs.length;
+  const pagerTotal = isAnalyzedTab ? filteredHistoryDocs.length : sortedDocs.length;
   const pagerStart = Math.max(1, Math.min(pagerCur - 3, pagerPages - 6));
   const pagerNums: number[] = [];
   for (let i = pagerStart; i <= Math.min(pagerPages, pagerStart + 6); i++) pagerNums.push(i);
@@ -495,8 +754,32 @@ export default function LegalRepository() {
     cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
   };
 
-  // Reset to first page whenever the result set definition changes
-  useEffect(() => { setPage(1); }, [search, activeTab, rowsPerPage, selectedKlasifikasi, selectedJenis, selectedStatus]);
+  // Keep a URL-restored ?page= on mount; afterwards reset to the first page
+  // whenever the result set definition changes.
+  const firstStateRender = useRef(true);
+  useEffect(() => {
+    if (firstStateRender.current) { firstStateRender.current = false; return; }
+    setPage(1);
+  }, [search, activeTab, rowsPerPage, selectedKlasifikasi, selectedJenis, selectedStatus, selectedSektor, sortBy]);
+
+  // Mirror state into the query string (critique re-score P1). replace: no
+  // history-entry spam; debounced so typing does not rewrite the URL per key.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const p = new URLSearchParams();
+      if (activeTab !== 'regulations') p.set('tab', activeTab);
+      if (search) p.set('q', search);
+      if (selectedKlasifikasi.length) p.set('klas', selectedKlasifikasi.join(','));
+      if (selectedJenis.length) p.set('jenis', selectedJenis.join(','));
+      if (selectedStatus.length) p.set('status', selectedStatus.join(','));
+      if (selectedSektor.length) p.set('instansi', selectedSektor.join(','));
+      if (sortBy !== 'default') p.set('sort', sortBy);
+      if (rowsPerPage !== 12) p.set('rows', String(rowsPerPage));
+      if (page > 1) p.set('page', String(page));
+      if (p.toString() !== searchParams.toString()) setSearchParams(p, { replace: true });
+    }, 400);
+    return () => clearTimeout(t);
+  }, [activeTab, search, selectedKlasifikasi, selectedJenis, selectedStatus, selectedSektor, sortBy, rowsPerPage, page, searchParams, setSearchParams]);
 
   // Close filter dropdown on outside click / Escape
   useEffect(() => {
@@ -513,14 +796,35 @@ export default function LegalRepository() {
     };
   }, [filterOpen]);
 
+  // Which load error (if any) belongs to the active tab, and its retry action
+  const activeTabError =
+    activeTab === 'analyzed' ? historyError :
+    activeTab === 'templates' ? templatesError :
+    activeTab === 'pending' ? pendingError :
+    activeTab === 'history' ? uploadHistoryError :
+    repoError;
+  const activeTabRetry =
+    activeTab === 'analyzed' ? fetchHistoryDocs :
+    activeTab === 'templates' ? fetchTemplates :
+    activeTab === 'pending' ? fetchPendingDocs :
+    activeTab === 'history' ? () => fetchUploadHistory() :
+    fetchDocs;
+
+  // Riwayat Unggahan table cell styles
+  const thStyle: React.CSSProperties = { padding: '8px 10px', fontWeight: 600, whiteSpace: 'nowrap' };
+  const tdStyle: React.CSSProperties = { padding: '8px 10px', verticalAlign: 'top', color: 'var(--text-primary)' };
+
   const tabs = [
-    { id: 'regulations' as ActiveTab, label: 'Regulations', icon: <BookOpen size={16} />, count: regulationDocs.length },
-    { id: 'internal' as ActiveTab, label: 'Internal Documents', icon: <FolderOpen size={16} />, count: internalDocs.length },
-    { id: 'analyzed' as ActiveTab, label: 'Analyzed Documents', icon: <FileCheck size={16} />, count: historyDocs.length },
-    { id: 'templates' as ActiveTab, label: 'Document Templates', icon: <File size={16} />, count: templates.length },
+    { id: 'regulations' as ActiveTab, label: 'Regulasi', icon: <BookOpen size={16} />, count: regulationDocs.length },
+    { id: 'internal' as ActiveTab, label: 'Dokumen Internal', icon: <FolderOpen size={16} />, count: internalDocs.length },
+    { id: 'analyzed' as ActiveTab, label: 'Dokumen Teranalisis', icon: <FileCheck size={16} />, count: historyDocs.length },
+    { id: 'templates' as ActiveTab, label: 'Template Dokumen', icon: <File size={16} />, count: templates.length },
   ];
   if (user?.role?.toLowerCase() === 'sekretaris perusahaan') {
-    tabs.push({ id: 'pending' as ActiveTab, label: 'Pending Documents', icon: <Clock size={16} />, count: pendingDocs.length });
+    tabs.push({ id: 'pending' as ActiveTab, label: 'Dokumen Pending', icon: <Clock size={16} />, count: pendingDocs.length });
+  }
+  if (canSeeHistory) {
+    tabs.push({ id: 'history' as ActiveTab, label: 'Riwayat Unggahan', icon: <History size={16} />, count: historyTotal });
   }
 
   const gotoPage = (p: number) => {
@@ -543,17 +847,25 @@ export default function LegalRepository() {
       {/* Upload Overlay */}
       {isUploading && (
         <div className="upload-overlay">
-          <div className="upload-card">
-            {uploadStatus?.includes('berhasil') ? (
-              <CheckCircle2 size={48} className="success-icon" />
-            ) : uploadStatus?.includes('Gagal') || uploadStatus?.includes('Duplikat') ? (
-              <Database size={48} className="error-icon" style={{ color: uploadStatus?.includes('Duplikat') ? 'var(--warning-text)' : undefined }} />
-            ) : (
-              <Database size={48} className="animate-pulse processing-icon" />
-            )}
-            <h3>{uploadStatus?.includes('Duplikat') ? 'Peringatan Duplikasi' : 'Memproses Knowledge Base'}</h3>
-            <p>{uploadStatus}</p>
-          </div>
+          <WorkBeam
+            active={
+              !uploadStatus?.includes('berhasil') &&
+              !uploadStatus?.includes('Gagal') &&
+              !uploadStatus?.includes('Duplikat')
+            }
+          >
+            <div className="upload-card">
+              {uploadStatus?.includes('berhasil') ? (
+                <CheckCircle2 size={48} className="success-icon" />
+              ) : uploadStatus?.includes('Gagal') || uploadStatus?.includes('Duplikat') ? (
+                <Database size={48} className="error-icon" style={{ color: uploadStatus?.includes('Duplikat') ? 'var(--warning-text)' : undefined }} />
+              ) : (
+                <LoadingOrb state="weaving" size={64} />
+              )}
+              <h3>{uploadStatus?.includes('Duplikat') ? 'Peringatan Duplikasi' : 'Memproses Basis Pengetahuan'}</h3>
+              <p>{uploadStatus}</p>
+            </div>
+          </WorkBeam>
         </div>
       )}
 
@@ -564,27 +876,19 @@ export default function LegalRepository() {
             <span className="hero-icon-tile" aria-hidden="true">
               <Scale size={22} strokeWidth={1.75} />
             </span>
-            <h2>Legal Repository <span>☆</span></h2>
-            <span className="hero-stat-chip" title="Total documents indexed in this repository">
-              <Database size={13} /> {documents.length} documents indexed
-            </span>
-            <div className="hero-avatars" title="Team members with documents in this repository">
-              <div className="add-avatar" title="Invite a contributor">+</div>
-              <div className="avatar" title="Contributor U1">U1</div>
-              <div className="avatar" title="Contributor U2">U2</div>
-              <div className="avatar-count" title="18 more contributors">+18</div>
-              <span className="avatar-caption">Contributors</span>
-            </div>
+            <h2>Legal Repository</h2>
           </div>
-          <p>Manage all your regulatory and internal documents in one place!</p>
+          <p>Kelola seluruh dokumen regulasi dan internal Anda di satu tempat.</p>
           {!selectedHistoryDoc && (
             <div className="search-bar hero-search">
               <Search size={20} className="search-icon" />
+              <label htmlFor="repo-search" className="visually-hidden">Cari dokumen</label>
               <input
+                id="repo-search"
                 type="text"
                 placeholder={activeTab === 'regulations'
-                  ? "Search regulations by title, number, or sector..."
-                  : activeTab === 'analyzed' ? "Search analyzed documents..." : "Search internal documents by name..."}
+                  ? "Cari regulasi berdasarkan judul, nomor, atau instansi..."
+                  : activeTab === 'analyzed' ? "Cari dokumen teranalisis..." : "Cari dokumen internal berdasarkan nama..."}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -601,7 +905,7 @@ export default function LegalRepository() {
           </div>
           <div className="stat-info">
             <h4>{documents.length} Total</h4>
-            <p>Documents indexed</p>
+            <p>Dokumen terindeks</p>
           </div>
         </div>
         <div className="stat-card">
@@ -609,8 +913,8 @@ export default function LegalRepository() {
             <Database size={16} />
           </div>
           <div className="stat-info">
-            <h4>{regulationDocs.length} Public</h4>
-            <p>Regulations</p>
+            <h4>{regulationDocs.length} Publik</h4>
+            <p>Regulasi</p>
           </div>
         </div>
         <div className="stat-card">
@@ -619,31 +923,33 @@ export default function LegalRepository() {
           </div>
           <div className="stat-info">
             <h4>{internalDocs.length} Internal</h4>
-            <p>Your private documents</p>
+            <p>Dokumen privat Anda</p>
           </div>
         </div>
-        <div className="stat-card priority" title="Documents waiting for your confirmation">
-          <div className="stat-icon orange">
-            <Clock size={16} />
+        {roleLower === 'sekretaris perusahaan' && (
+          <div className="stat-card priority" title="Dokumen yang menunggu konfirmasi Anda">
+            <div className="stat-icon orange">
+              <Clock size={16} />
+            </div>
+            <div className="stat-info">
+              <h4>{pendingDocs.length} Pending</h4>
+              <p>Menunggu konfirmasi</p>
+            </div>
           </div>
-          <div className="stat-info">
-            <h4>{pendingDocs.length} Pending</h4>
-            <p>Awaiting confirmation</p>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Header / Actions */}
       <div className="view-header repo-header" style={{ marginTop: '24px' }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Repository Details</h3>
+          <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Rincian Repositori</h3>
         </div>
         <ProtectedRoute minRole="manajer">
           <div className="repo-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <button
               className="btn-danger-outline"
               onClick={handleClearFailedDocuments}
-              title="Permanently delete all failed and duplicate documents"
+              title="Hapus permanen semua dokumen yang gagal diproses dan duplikat"
             >
               <Trash2 size={16} /> Bersihkan Duplikat
             </button>
@@ -659,18 +965,49 @@ export default function LegalRepository() {
               {filterOpen && (
                 <div className="repo-filter-panel">
                   {[
-                    { title: 'Klasifikasi', options: klasifikasiOptions, selected: selectedKlasifikasi, set: setSelectedKlasifikasi, count: countKlas },
-                    { title: 'Kategori (Jenis)', options: jenisOptions, selected: selectedJenis, set: setSelectedJenis, count: countJenis },
-                    { title: 'Status', options: statusOptions, selected: selectedStatus, set: setSelectedStatus, count: countStatus },
-                  ].map(group => (
-                    <div key={group.title} style={{ padding: '8px 8px 4px' }}>
+                    { key: 'klasifikasi', title: 'Klasifikasi', options: klasifikasiOptions, selected: selectedKlasifikasi, set: setSelectedKlasifikasi, count: countKlas, label: (o: string) => o },
+                    { key: 'jenis', title: 'Kategori (Jenis)', options: jenisOptions, selected: selectedJenis, set: setSelectedJenis, count: countJenis, label: (o: string) => o },
+                    { key: 'status', title: 'Status', options: statusOptions, selected: selectedStatus, set: setSelectedStatus, count: countStatus, label: (o: string) => o },
+                    { key: 'sektor', title: 'Instansi', options: sektorOptions, selected: selectedSektor, set: setSelectedSektor, count: countSektor, label: fmtSektor },
+                  ].map(group => {
+                    // Progressive disclosure: rare jenis options and the long
+                    // instansi tail hide behind a "Lainnya (n)" toggle; the
+                    // instansi group also gets an in-panel search (critique
+                    // remediation P1).
+                    const sektorCollapsed = group.key === 'sektor' && !sektorShowAll && !sektorQuery.trim();
+                    let opts = group.options;
+                    if (group.key === 'sektor') {
+                      if (sektorQuery.trim()) {
+                        const q = sektorQuery.trim().toLowerCase();
+                        opts = opts.filter(o => group.label(o).toLowerCase().includes(q));
+                      }
+                      opts = [...opts].sort((a, b) => group.count(b) - group.count(a));
+                    }
+                    let hidden: string[] = [];
+                    if (group.key === 'jenis' && !jenisShowAll) {
+                      hidden = opts.filter(o => group.count(o) <= 2 && !group.selected.includes(o));
+                    } else if (sektorCollapsed) {
+                      hidden = opts.filter(o => !group.selected.includes(o)).slice(6);
+                    }
+                    const visible = opts.filter(o => !hidden.includes(o));
+                    return (
+                    <div key={group.key} style={{ padding: '8px 8px 4px' }}>
+                      {group.key === 'sektor' && group.options.length > 6 && (
+                        <input
+                          value={sektorQuery}
+                          onChange={e => setSektorQuery(e.target.value)}
+                          placeholder="Cari instansi..."
+                          aria-label="Cari instansi"
+                          style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '6px 8px', color: 'var(--text-primary)', fontSize: '0.82rem', marginBottom: '6px' }}
+                        />
+                      )}
                       <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '6px' }}>
                         {group.title}
                       </div>
-                      {group.options.length === 0 && (
+                      {visible.length === 0 && (
                         <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', padding: '2px 4px' }}>Tidak ada opsi.</div>
                       )}
-                      {group.options.map(opt => {
+                      {visible.map(opt => {
                         const n = group.count(opt);
                         return (
                           <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 4px', minHeight: '44px', boxSizing: 'border-box', fontSize: '0.88rem', color: 'var(--text-primary)', cursor: n === 0 && !group.selected.includes(opt) ? 'not-allowed' : 'pointer', opacity: n === 0 && !group.selected.includes(opt) ? 0.45 : 1 }}>
@@ -680,13 +1017,30 @@ export default function LegalRepository() {
                               disabled={n === 0 && !group.selected.includes(opt)}
                               onChange={() => group.set(toggleInList(group.selected, opt))}
                             />
-                            <span style={{ flex: 1 }}>{opt}</span>
+                            <span style={{ flex: 1 }}>{group.label(opt)}</span>
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'var(--bg-element)', borderRadius: '10px', padding: '1px 8px' }}>{n}</span>
                           </label>
                         );
                       })}
+                      {hidden.length > 0 && (
+                        <button
+                          onClick={() => (group.key === 'jenis' ? setJenisShowAll(v => !v) : setSektorShowAll(v => !v))}
+                          style={{ background: 'none', border: 'none', color: 'var(--accent-color)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, padding: '4px 4px 8px', textDecoration: 'underline' }}
+                        >
+                          Lainnya ({hidden.length})
+                        </button>
+                      )}
+                      {group.key === 'sektor' && (sektorShowAll || sektorQuery.trim()) && group.options.length > 6 && (
+                        <button
+                          onClick={() => { setSektorShowAll(false); setSektorQuery(''); }}
+                          style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, padding: '4px 4px 8px', textDecoration: 'underline' }}
+                        >
+                          Sembunyikan instansi lain
+                        </button>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                   <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '6px', padding: '8px' }}>
                     <button
                       onClick={clearAllFilters}
@@ -721,9 +1075,9 @@ export default function LegalRepository() {
             onClick={() => setSelectedHistoryDoc(null)}
             style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.95rem', fontWeight: 500 }}
           >
-            ← Kembali ke Repository
+            ← Kembali ke Repositori
           </button>
-          <div className="bg-slate-900 border border-slate-700 rounded-xl" style={{ padding: '0 8px 32px 8px' }}>
+          <div style={{ padding: '0 8px 32px 8px' }}>
             <ComplianceResultsViewer
               filename={selectedHistoryDoc.filename}
               summary={selectedHistoryDoc.results?.summary}
@@ -784,6 +1138,11 @@ export default function LegalRepository() {
                     {v} <X size={12} />
                   </button>
                 ))}
+                {selectedSektor.map(v => (
+                  <button key={'sek-' + v} onClick={() => setSelectedSektor(toggleInList(selectedSektor, v))} style={chipStyle} title="Hapus filter">
+                    {fmtSektor(v)} <X size={12} />
+                  </button>
+                ))}
                 {activeFilterCount > 0 && (
                   <button onClick={clearAllFilters} style={{ ...chipStyle, background: 'transparent', color: 'var(--text-secondary)', borderColor: 'var(--border-color)' }}>
                     Bersihkan semua
@@ -792,6 +1151,18 @@ export default function LegalRepository() {
               </>
             )}
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              <label htmlFor="repo-sort">Urutkan:</label>
+              <select
+                id="repo-sort"
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value as typeof sortBy)}
+                style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem' }}
+              >
+                <option value="default">Urutan default</option>
+                <option value="tahun-desc">Tahun terbaru</option>
+                <option value="judul-asc">Judul A–Z</option>
+                <option value="instansi-asc">Instansi A–Z</option>
+              </select>
               <label htmlFor="repo-rows">Baris per halaman:</label>
               <select
                 id="repo-rows"
@@ -809,14 +1180,19 @@ export default function LegalRepository() {
 
         {/* Document Grid */}
         {isLoading ? (
-          <div className="loading-state">
-            <Database className="animate-pulse" size={48} />
-            <p>Memuat database regulasi...</p>
+          <LoadingOrb className="loading-orb--padded" state="searching" label="Memuat database regulasi..." />
+        ) : activeTabError ? (
+          <div className="empty-state" role="alert">
+            <AlertCircle size={48} style={{ opacity: 0.6, color: 'var(--danger-text)' }} />
+            <p>{activeTabError}</p>
+            <button className="btn btn-primary" onClick={activeTabRetry}>Coba lagi</button>
           </div>
-        ) : (activeTab === 'regulations' && filteredDocs.length === 0) || 
-            (activeTab === 'internal' && filteredDocs.length === 0) || 
+        ) : (activeTab === 'regulations' && sortedDocs.length === 0) || 
+            (activeTab === 'internal' && sortedDocs.length === 0) || 
             (activeTab === 'analyzed' && filteredHistoryDocs.length === 0) ||
-            (activeTab === 'templates' && templates.length === 0) ? (
+            (activeTab === 'templates' && templates.length === 0) ||
+            (activeTab === 'pending' && pendingDocs.length === 0) ||
+            (activeTab === 'history' && uploadHistory.length === 0 && !historyOutcome) ? (
           <div className="empty-state">
             {activeTab === 'internal' && internalDocs.length === 0 ? (
               <>
@@ -836,21 +1212,201 @@ export default function LegalRepository() {
                 <p>Belum ada template dokumen.</p>
                 <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>Template akan ditambahkan oleh administrator.</p>
               </>
+            ) : activeTab === 'pending' && pendingDocs.length === 0 ? (
+              <>
+                <Clock size={48} style={{ opacity: 0.3 }} />
+                <p>Antrean dokumen kosong.</p>
+                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>Dokumen yang baru diunggah dipindai dan diklasifikasikan di antrean ini terlebih dahulu.</p>
+              </>
+            ) : activeTab === 'history' && uploadHistory.length === 0 ? (
+              <>
+                <History size={48} style={{ opacity: 0.3 }} />
+                <p>Belum ada riwayat unggahan.</p>
+                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>Setiap dokumen yang diunggah tercatat di sini beserta vonis AI dan penyelesaiannya.</p>
+              </>
             ) : (
-              <p>Tidak ada dokumen yang sesuai dengan pencarian Anda.</p>
+              <>
+                <Search size={48} style={{ opacity: 0.3 }} />
+                <p>
+                  {search
+                    ? <>Tidak ada hasil untuk <strong>"{search}"</strong>.</>
+                    : 'Tidak ada dokumen yang sesuai dengan filter aktif.'}
+                </p>
+                {(search || activeFilterCount > 0) && (
+                  <button className="btn btn-primary" onClick={() => { setSearch(''); clearAllFilters(); }}>
+                    Bersihkan pencarian & filter
+                  </button>
+                )}
+                {(activeTab === 'regulations' || activeTab === 'internal') && hiddenDups > 0 && selectedStatus.length === 0 && (
+                  <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>
+                    {hiddenDups} dokumen disembunyikan karena berstatus Duplikat.{' '}
+                    <button
+                      onClick={() => setSelectedStatus(['Duplikat'])}
+                      style={{ background: 'none', border: 'none', color: 'var(--accent-color)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, padding: 0, textDecoration: 'underline' }}
+                    >
+                      Tampilkan duplikat
+                    </button>
+                  </p>
+                )}
+              </>
             )}
           </div>
         ) : (
           <>
           <div className="document-grid">
-            {activeTab === 'pending' && pendingDocs.map((doc, idx) => (
-              <div key={idx} className="document-card" style={{ borderColor: '#f59e0b', background: 'rgba(245, 158, 11, 0.05)' }}>
+            {activeTab === 'history' && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                  {['', 'processing', 'awaiting_approval', 'auto_approved', 'confirmed', 'rejected', 'failed_duplicate', 'failed_error', 'deleted'].map(o => (
+                    <button
+                      key={o || 'all'}
+                      onClick={() => { setHistoryOutcome(o); fetchUploadHistory({ outcome: o }); }}
+                      style={historyOutcome === o
+                        ? { ...chipStyle, background: 'var(--accent-color)', color: 'white', borderColor: 'var(--accent-color)' }
+                        : chipStyle}
+                    >
+                      {o === '' ? `Semua${historyTotal > 0 ? ` (${historyTotal})` : ''}` : (OUTCOME_META[o]?.label || o)}
+                    </button>
+                  ))}
+                </div>
+                {uploadHistory.length === 0 ? (
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', padding: '12px 0' }}>
+                    Tidak ada riwayat dengan hasil tersebut.
+                  </p>
+                ) : (
+                  <div style={{ overflowX: 'auto', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                      <thead>
+                        <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)' }}>
+                          <th style={thStyle}>Berkas</th>
+                          <th style={thStyle}>Pengunggah</th>
+                          <th style={thStyle}>Waktu Unggah</th>
+                          <th style={thStyle}>Vonis AI</th>
+                          <th style={thStyle}>Hasil</th>
+                          <th style={thStyle}>Penyelesaian</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {uploadHistory.map(h => (
+                          <tr key={h.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={tdStyle}>
+                              <strong>{h.filename}</strong>
+                              {h.judul && h.judul !== h.filename && (
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>{h.judul}</div>
+                              )}
+                              {h.detail && (
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }} title={h.detail}>
+                                  {h.detail.length > 60 ? h.detail.slice(0, 60) + '…' : h.detail}
+                                </div>
+                              )}
+                            </td>
+                            <td style={tdStyle}>{h.uploaded_by_name || '—'}</td>
+                            <td style={tdStyle}>{h.uploaded_at ? formatDateTime(h.uploaded_at) : '—'}</td>
+                            <td style={tdStyle}>
+                              {h.ai_jenis || h.ai_klasifikasi ? (
+                                <>
+                                  {h.ai_jenis && <div>{h.ai_jenis}</div>}
+                                  {h.ai_klasifikasi && (
+                                    <div style={{ color: 'var(--text-secondary)' }}>
+                                      {h.ai_klasifikasi}{h.ai_confidence != null ? ` · ${h.ai_confidence}%` : ''}
+                                    </div>
+                                  )}
+                                </>
+                              ) : '—'}
+                            </td>
+                            <td style={tdStyle}>
+                              <span className={`status-chip ${OUTCOME_META[h.outcome]?.cls || 'status-chip--neutral'}`}>
+                                {OUTCOME_META[h.outcome]?.label || h.outcome}
+                              </span>
+                            </td>
+                            <td style={tdStyle}>
+                              {h.final_jenis && (
+                                <div>{h.final_jenis}{h.final_klasifikasi ? ` · ${h.final_klasifikasi}` : ''}</div>
+                              )}
+                              {(h.resolved_at || h.resolved_by_name) && (
+                                <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                                  {h.resolved_at ? formatDateTime(h.resolved_at) : ''}
+                                  {h.resolved_by_name ? ` · ${h.resolved_by_name}` : ''}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {uploadHistory.length < historyTotal && (
+                  <div style={{ textAlign: 'center', margin: '16px 0 8px' }}>
+                    <button
+                      className="btn btn-primary"
+                      disabled={historyLoadingMore}
+                      onClick={() => {
+                        setHistoryLoadingMore(true);
+                        fetchUploadHistory({ append: true, outcome: historyOutcome, offset: uploadHistory.length })
+                          .finally(() => setHistoryLoadingMore(false));
+                      }}
+                    >
+                      {historyLoadingMore ? 'Memuat…' : `Muat lebih banyak (${historyTotal - uploadHistory.length} tersisa)`}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            {activeTab === 'pending' && pendingDocs.map((doc) => doc.stage === 'scanning' ? (
+              <div key={doc.id} className="document-card" style={{ borderColor: 'var(--border-color)' }}>
+                <div className="doc-type-badge" style={{ background: 'rgba(59, 130, 246, 0.12)', color: 'var(--accent-hover)' }}>
+                  <Loader2 size={12} className="animate-spin-slow" style={{ marginRight: '4px', verticalAlign: '-2px' }} />
+                  Sedang Dipindai
+                </div>
+                <h3 className="doc-title">{doc.judul}</h3>
+                <div className="doc-meta">
+                  <span>Nomor: {doc.nomor}</span>
+                  {doc.uploaded_at && <span>Diunggah: {formatDateTime(doc.uploaded_at)}</span>}
+                </div>
+                <p style={{ margin: '12px 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  Dokumen sedang dipindai dan diklasifikasikan oleh AI. Bila keyakinan di atas ambang batas, dokumen langsung masuk ke tab tujuannya; bila di bawahnya, kartu ini berubah menjadi formulir persetujuan.
+                </p>
+                {doc.stale ? (
+                  <>
+                    <div style={{ marginTop: '12px', padding: '10px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', fontSize: '0.83rem', color: 'var(--danger-text)' }}>
+                      <AlertCircle size={14} style={{ marginRight: '6px', verticalAlign: '-2px' }} />
+                      Pemindaian tidak lagi berjalan (backend mungkin sempat dimuat ulang). Dokumen macet di antrean — Anda dapat menolaknya.
+                    </div>
+                    <button
+                      onClick={() => handleRejectPending(doc)}
+                      style={{ width: '100%', marginTop: '8px', background: 'transparent', color: 'var(--danger-text)', border: '1px solid var(--danger-text)', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      <Trash2 size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                      Tolak Dokumen
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    className="analyze-btn"
+                    onClick={() => setViewPdfDoc(doc)}
+                    style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', marginTop: '12px' }}
+                  >
+                    <BookOpen size={14} /> Lihat Dokumen
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div key={doc.id} className="document-card" style={{ borderColor: '#f59e0b', background: 'rgba(245, 158, 11, 0.05)' }}>
                 <div className="doc-type-badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warning-text)' }}>
                   Menunggu Konfirmasi
                 </div>
                 <h3 className="doc-title">{doc.judul}</h3>
                 <div className="doc-meta">
                   <span>Nomor: {doc.nomor}</span>
+                  {doc.ai_confidence != null && (
+                    <span
+                      className="status-chip status-chip--warning"
+                      title="Keyakinan hasil pemindaian & klasifikasi VLM berada di bawah ambang batas, sehingga dokumen memerlukan persetujuan manusia."
+                    >
+                      Keyakinan AI: {doc.ai_confidence}%
+                    </span>
+                  )}
                 </div>
                 <button
                   className="analyze-btn"
@@ -864,7 +1420,12 @@ export default function LegalRepository() {
                   {revealedAi[doc.id] ? (
                     <div style={{ padding: '8px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid var(--info)', borderRadius: '6px', marginBottom: '12px', fontSize: '0.85rem', color: 'var(--accent-hover)' }}>
                       <Bot size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                      AI merekomendasikan: <strong>{(doc as any).klasifikasi || 'Umum'}</strong>
+                      AI merekomendasikan: <strong>{doc.klasifikasi || 'Umum'}</strong>
+                      {doc.ai_jenis && <> · Jenis: <strong>{doc.ai_jenis}</strong></>}
+                      {doc.ai_confidence != null && <> · Keyakinan: <strong>{doc.ai_confidence}%</strong></>}
+                      {doc.ai_reasoning && (
+                        <p style={{ margin: '6px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{doc.ai_reasoning}</p>
+                      )}
                     </div>
                   ) : (
                     <button
@@ -877,8 +1438,8 @@ export default function LegalRepository() {
 
                   <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Klasifikasi Akhir:</p>
                   <select
-                    defaultValue=""
-                    onChange={(e) => { (doc as any).selectedKlasifikasi = e.target.value; }}
+                    value={pendingSel[doc.id]?.klass ?? doc.klasifikasi ?? ''}
+                    onChange={(e) => setPendingSel(prev => ({ ...prev, [doc.id]: { ...prev[doc.id], klass: e.target.value } }))}
                     style={{ width: '100%', background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', color: 'var(--text-primary)', marginBottom: '12px' }}
                   >
                     <option value="" disabled>Pilih Klasifikasi...</option>
@@ -886,15 +1447,37 @@ export default function LegalRepository() {
                     <option value="Rahasia">Rahasia</option>
                     <option value="Terbatas">Terbatas</option>
                   </select>
+
+                  <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Jenis Dokumen (Taksonomi):</p>
+                  <select
+                    value={pendingSel[doc.id]?.jenis ?? doc.ai_jenis ?? doc.jenis ?? ''}
+                    onChange={(e) => setPendingSel(prev => ({ ...prev, [doc.id]: { ...prev[doc.id], jenis: e.target.value } }))}
+                    style={{ width: '100%', background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', color: 'var(--text-primary)', marginBottom: '12px' }}
+                  >
+                    {Array.from(new Set(
+                      [doc.ai_jenis, doc.jenis, ...taxonomyList.map(t => t.name)].filter(Boolean) as string[]
+                    )).map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+
                   <button
                     onClick={() => {
-                      const finalClass = (doc as any).selectedKlasifikasi;
+                      const finalClass = pendingSel[doc.id]?.klass ?? doc.klasifikasi;
                       if (!finalClass) return alert("Pilih klasifikasi terlebih dahulu!");
-                      handleConfirmPending(doc.id, finalClass);
+                      const finalJenis = pendingSel[doc.id]?.jenis ?? doc.ai_jenis ?? doc.jenis;
+                      handleConfirmPending(doc.id, finalClass, finalJenis);
                     }}
                     style={{ width: '100%', background: '#92400e', color: 'white', border: 'none', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                   >
-                    Konfirmasi & Ingest
+                    Konfirmasi & Simpan
+                  </button>
+                  <button
+                    onClick={() => handleRejectPending(doc)}
+                    style={{ width: '100%', background: 'transparent', color: 'var(--danger-text)', border: '1px solid var(--danger-text)', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, marginTop: '8px' }}
+                  >
+                    <Trash2 size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                    Tolak Dokumen
                   </button>
                 </div>
               </div>
@@ -903,7 +1486,7 @@ export default function LegalRepository() {
             {activeTab === 'templates' && templates.map((tpl) => (
               <div key={tpl.id} className="document-card internal-card" style={{ borderTopColor: 'var(--accent-color)' }}>
                 <div className="doc-type-badge internal-badge">
-                  {tpl.category} Template
+                  Template {tpl.category}
                 </div>
                 <h3 className="doc-title">{tpl.title}</h3>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '8px 0 16px', lineHeight: '1.4' }}>
@@ -919,26 +1502,63 @@ export default function LegalRepository() {
               </div>
             ))}
             
-            {activeTab === 'regulations' || activeTab === 'internal' ? pagedDocs.map((doc, idx) => (
-              <div key={idx} className={`document-card ${activeTab === 'internal' ? 'internal-card' : ''}`}>
-                <div className={`doc-type-badge ${activeTab === 'internal' ? 'internal-badge' : ''}`}>
-                  {doc.jenis}
+            {activeTab === 'regulations' || activeTab === 'internal' ? pagedDocs.map((doc) => (
+              <div key={doc.id} className={`document-card ${activeTab === 'internal' ? 'internal-card' : ''}`}>
+                <div className="doc-card-head">
+                  <div className={`doc-type-badge ${activeTab === 'internal' ? 'internal-badge' : ''}`}>
+                    {doc.jenis}
+                  </div>
+                  <div className="doc-head-chips">
+                    {doc.approval_mode === 'auto' && (
+                      <span
+                        className="status-chip status-chip--neutral"
+                        title={`Disetujui otomatis oleh AI — keyakinan VLM ${doc.ai_confidence != null ? `${doc.ai_confidence}%` : '—'} (di atas ambang batas), tanpa antrean pending.`}
+                      >
+                        <Zap size={10} style={{ marginRight: '3px', verticalAlign: '-1px' }} />Otomatis
+                      </span>
+                    )}
+                    {doc.klasifikasi && doc.klasifikasi !== 'Umum' && (
+                      <span className={`status-chip ${klasTone(doc.klasifikasi)}`}>
+                        {doc.klasifikasi}
+                      </span>
+                    )}
+                    {(() => {
+                      // The qualified-status explanation must reach keyboard,
+                      // screen-reader, and touch users too (critique re-score
+                      // P1): the native title tooltip is hover-only, so the
+                      // hint chip is focusable and paints data-hint as a CSS
+                      // tooltip on :hover and :focus-visible, with a visually
+                      // hidden aria-describedby twin for screen readers.
+                      const tone = statusTone(doc.status);
+                      return (
+                        <span
+                          className={`status-chip ${tone.cls}`}
+                          title={tone.hint ? undefined : `Status dokumen: ${doc.status}`}
+                          {...(tone.hint ? {
+                            tabIndex: 0,
+                            'data-hint': tone.hint,
+                            'aria-describedby': `status-hint-${doc.id}`,
+                          } : {})}
+                        >
+                          {doc.status}
+                          {tone.hint && (
+                            <span id={`status-hint-${doc.id}`} className="visually-hidden">{tone.hint}</span>
+                          )}
+                        </span>
+                      );
+                    })()}
+                  </div>
                 </div>
-                <h3 className="doc-title">{doc.judul}</h3>
+                <h3 className="doc-title" title={doc.judul}>{doc.judul}</h3>
+                {citationInfo.get(doc.id)?.citation && (
+                  <div className="doc-citation">{doc.jenis} No. {citationInfo.get(doc.id)!.citation}</div>
+                )}
                 <div className="doc-meta">
                   <span>Nomor: {doc.nomor}</span>
-                  <span className="doc-sektor">{doc.sektor}</span>
-                </div>
-                <div className="doc-status" style={{ display: 'flex', gap: '8px' }}>
-                  <span style={{ color: doc.status === 'Tidak Berlaku' ? 'var(--danger-text)' : undefined }}>Status: {doc.status}</span>
-                  {(doc as any).klasifikasi && (doc as any).klasifikasi !== 'Umum' && (
-                    <span style={{ color: (doc as any).klasifikasi === 'Rahasia' ? 'var(--danger-text)' : 'var(--warning-text)', fontWeight: 600 }}>
-                      [{(doc as any).klasifikasi}]
-                    </span>
-                  )}
+                  <span className="doc-sektor">{fmtSektor(doc.sektor)}</span>
                 </div>
                 <div className="doc-footer">
-                  <File size={16} /> Disimpan dalam Database
+                  <File size={16} /> Disimpan dalam Basis Data
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
@@ -946,13 +1566,14 @@ export default function LegalRepository() {
                     onClick={() => setSelectedDoc(doc)}
                     style={{ flex: 1 }}
                   >
-                    <Zap size={14} /> Analyze
+                    <Zap size={14} /> Analisis
                   </button>
                   {user?.role?.toLowerCase() === 'sekretaris perusahaan' && (
                     <button
                       onClick={() => handleDeleteDocument(doc.id)}
                       style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger-text)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '0 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
                       title="Hapus Dokumen"
+                      aria-label="Hapus dokumen"
                       onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
                       onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
                     >
@@ -972,14 +1593,14 @@ export default function LegalRepository() {
               </div>
             )) : null}
             
-            {activeTab === 'analyzed' && pagedHistoryDocs.map((doc, idx) => (
-              <div key={idx} className="document-card internal-card">
+            {activeTab === 'analyzed' && pagedHistoryDocs.map((doc) => (
+              <div key={doc.id} className="document-card internal-card">
                 <div className="doc-type-badge internal-badge">
-                  Compliance Report
+                  Laporan Kepatuhan
                 </div>
                 <h3 className="doc-title">{doc.filename}</h3>
                 <div className="doc-meta">
-                  <span>Dianalisis: {new Date(doc.created_at).toLocaleDateString('id-ID')}</span>
+                  <span>Dianalisis: {formatDate(doc.created_at)}</span>
                 </div>
                 <div className="doc-status">Tersimpan secara lokal</div>
                 <button
@@ -994,7 +1615,7 @@ export default function LegalRepository() {
           </div>
           {showPager && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', margin: '20px 0 8px', flexWrap: 'wrap' }}>
-              <button onClick={() => gotoPage(pagerCur - 1)} disabled={pagerCur <= 1} style={{ ...navBtn, opacity: pagerCur <= 1 ? 0.4 : 1, cursor: pagerCur <= 1 ? 'not-allowed' : 'pointer' }}>
+              <button onClick={() => gotoPage(pagerCur - 1)} disabled={pagerCur <= 1} aria-label="Halaman sebelumnya" style={{ ...navBtn, opacity: pagerCur <= 1 ? 0.4 : 1, cursor: pagerCur <= 1 ? 'not-allowed' : 'pointer' }}>
                 ‹
               </button>
               {pagerNums.map(n => (
@@ -1008,7 +1629,7 @@ export default function LegalRepository() {
                   {n}
                 </button>
               ))}
-              <button onClick={() => gotoPage(pagerCur + 1)} disabled={pagerCur >= pagerPages} style={{ ...navBtn, opacity: pagerCur >= pagerPages ? 0.4 : 1, cursor: pagerCur >= pagerPages ? 'not-allowed' : 'pointer' }}>
+              <button onClick={() => gotoPage(pagerCur + 1)} disabled={pagerCur >= pagerPages} aria-label="Halaman berikutnya" style={{ ...navBtn, opacity: pagerCur >= pagerPages ? 0.4 : 1, cursor: pagerCur >= pagerPages ? 'not-allowed' : 'pointer' }}>
                 ›
               </button>
               <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginLeft: '8px' }}>
@@ -1026,13 +1647,13 @@ export default function LegalRepository() {
       {/* Centered PDF Modal for Pending Documents */}
       {viewPdfDoc && (
         <div className="modal-overlay" style={{ zIndex: 1100, padding: '24px' }}>
-          <div className="modal-content" style={{ background: 'var(--bg-card)', width: '100%', maxWidth: '900px', height: '90vh', borderRadius: '12px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.5)' }}>
+          <div ref={pdfModalRef} role="dialog" aria-modal="true" aria-label="Pratinjau PDF dokumen" tabIndex={-1} className="modal-content" style={{ background: 'var(--bg-card)', width: '100%', maxWidth: '900px', height: '90vh', borderRadius: '12px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.5)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', background: 'var(--bg-base)', borderBottom: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <div style={{ background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warning-text)', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>Menunggu Konfirmasi</div>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{viewPdfDoc.judul}</h3>
               </div>
-              <button onClick={() => { setViewPdfDoc(null); setPdfBlobUrl(null); }} style={{ background: 'var(--bg-element)', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button onClick={() => { setViewPdfDoc(null); setPdfBlobUrl(null); }} aria-label="Tutup pratinjau PDF" style={{ background: 'var(--bg-element)', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={20} />
               </button>
             </div>
@@ -1043,7 +1664,7 @@ export default function LegalRepository() {
                   <p>Memuat PDF...</p>
                 </div>
               ) : pdfBlobUrl ? (
-                <iframe src={pdfBlobUrl} title="PDF Viewer" style={{ width: '100%', height: '100%', border: 'none' }} />
+                <iframe src={pdfBlobUrl} title="Penampil PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--danger-text)' }}>
                   <p>Gagal memuat PDF.</p>
@@ -1062,10 +1683,10 @@ export default function LegalRepository() {
       {/* Share Modal (FR-21 & FR-22) */}
       {showShareModal && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ background: 'var(--bg-card)', width: '90%', maxWidth: '500px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div ref={shareModalRef} role="dialog" aria-modal="true" aria-label="Beri akses dokumen" tabIndex={-1} className="modal-content" style={{ background: 'var(--bg-card)', width: '90%', maxWidth: '500px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
               <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Beri Akses Dokumen</h3>
-              <button onClick={() => setShowShareModal(null)} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              <button onClick={() => setShowShareModal(null)} aria-label="Tutup dialog" style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
             </div>
@@ -1074,8 +1695,9 @@ export default function LegalRepository() {
             </p>
             <form onSubmit={handleShareSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Pilih Pengguna *</label>
+                <label htmlFor="share-user" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Pilih Pengguna *</label>
                 <input 
+                  id="share-user"
                   required
                   list="users-list"
                   value={shareUser}
@@ -1090,8 +1712,9 @@ export default function LegalRepository() {
                 </datalist>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Alasan *</label>
+                <label htmlFor="share-reason" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Alasan *</label>
                 <textarea 
+                  id="share-reason"
                   required
                   value={shareReason}
                   onChange={(e) => setShareReason(e.target.value)}
@@ -1100,8 +1723,9 @@ export default function LegalRepository() {
                 />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Batas Waktu (Opsional)</label>
+                <label htmlFor="share-expiry" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Batas Waktu (Opsional)</label>
                 <input 
+                  id="share-expiry"
                   type="date"
                   value={shareExpiry}
                   onChange={(e) => setShareExpiry(e.target.value)}
@@ -1123,10 +1747,10 @@ export default function LegalRepository() {
       {/* Prompt Modal */}
       {showPromptModal && (
         <div className="modal-overlay">
-          <div className="modal-content" style={{ background: 'var(--bg-card)', width: '90%', maxWidth: '700px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div ref={promptModalRef} role="dialog" aria-modal="true" aria-label="Buat dokumen dari template" tabIndex={-1} className="modal-content" style={{ background: 'var(--bg-card)', width: '90%', maxWidth: '700px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-              <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Generate Dokumen</h3>
-              <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Buat Dokumen</h3>
+              <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} aria-label="Tutup dialog" style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
             </div>
@@ -1146,7 +1770,7 @@ export default function LegalRepository() {
                   <button onClick={() => { setShowPromptModal(null); setPromptInput(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #475569', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Batal</button>
                   <button onClick={() => handleGenerateTemplate(showPromptModal)} disabled={isGenerating || !promptInput.trim()} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'var(--accent-color)', color: 'white', cursor: isGenerating || !promptInput.trim() ? 'not-allowed' : 'pointer', opacity: isGenerating || !promptInput.trim() ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
                     {isGenerating ? <Database size={16} className="animate-pulse" /> : <Zap size={16} />}
-                    {isGenerating ? 'Menyusun...' : 'Generate Dokumen'}
+                    {isGenerating ? 'Menyusun...' : 'Buat Dokumen'}
                   </button>
                 </div>
               </>
@@ -1157,10 +1781,10 @@ export default function LegalRepository() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', flexWrap: 'wrap' }}>
                   <button onClick={() => navigator.clipboard.writeText(generatedDoc!)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #475569', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                    Copy Teks
+                    Salin Teks
                   </button>
                   <button onClick={() => handleExportWord(generatedDoc!)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #3b82f6', background: 'rgba(59, 130, 246, 0.15)', color: 'var(--accent-hover)', cursor: 'pointer', fontWeight: 600 }}>
-                    ↓ Export to Word
+                    ↓ Ekspor ke Word
                   </button>
                   <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'var(--accent-color)', color: 'white', cursor: 'pointer' }}>Selesai</button>
                 </div>

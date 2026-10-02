@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Scale, ShieldCheck, FileText, AlertTriangle, Upload, Search,
@@ -8,12 +8,42 @@ import './LandingPage.css';
 
 const TEAM_SIZES = ['1–10', '11–50', '51–200', '200+'];
 
+/* Watermelon-grammar restyle (2026-10-01, user-approved): the light
+   "blueprint-technical" variant of the watermelon.sh landing-01 template —
+   mono sheet labels, corner brackets, dot grids, crosshairs, bento spans,
+   sharp corners, staggered scroll reveals. Palette, copy, sections and the
+   demo form behavior stay exactly as before; only the visual grammar
+   changes. Reveals are IntersectionObserver + CSS (no motion dependency);
+   content is visible by default and the .lp-js gate only hides it once JS
+   is running, so no-JS and reduce-motion both degrade to a static page. */
 export default function LandingPage() {
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
   const [teamSize, setTeamSize] = useState(TEAM_SIZES[1]);
   const [formError, setFormError] = useState('');
   const [requested, setRequested] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    root.classList.add('lp-js');
+    const els = Array.from(root.querySelectorAll('.lp-reveal'));
+    if (!('IntersectionObserver' in window)) {
+      els.forEach(el => el.classList.add('is-in'));
+      return;
+    }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(en => {
+        if (en.isIntersecting) {
+          en.target.classList.add('is-in');
+          io.unobserve(en.target);
+        }
+      });
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    els.forEach(el => io.observe(el));
+    return () => io.disconnect();
+  }, []);
 
   const handleDemoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,7 +58,7 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="lp">
+    <div className="lp" ref={rootRef}>
       {/* ---------- nav ---------- */}
       <header className="lp-nav">
         <div className="lp-inner lp-nav-row">
@@ -52,7 +82,7 @@ export default function LandingPage() {
         <div className="lp-inner lp-hero-grid">
           <div>
             <span className="lp-eyebrow">IN-HOUSE LEGAL COMPLIANCE</span>
-            <h1>Compliance, verified before you sign.</h1>
+            <h1>Compliance, <span className="lp-accent">verified</span> before you sign.</h1>
             <p className="lp-lede">
               LA Legal-Analyzer scans contracts and internal documents against
               applicable laws and regulations — mapping every clause to its source
@@ -64,16 +94,19 @@ export default function LandingPage() {
               </a>
               <Link to="/login" className="lp-btn lp-btn-ghost">Sign in to the app</Link>
             </div>
+            <div className="lp-trustline" aria-hidden="true">
+              <span>Trusted by in-house teams</span>
+            </div>
             <div className="lp-stats">
-              <div className="lp-stat"><b>53,000+</b><span>regulatory clauses indexed</span></div>
-              <div className="lp-stat"><b>12+</b><span>regulatory bodies covered</span></div>
-              <div className="lp-stat"><b>1,000+</b><span>regulations catalogued</span></div>
-              <div className="lp-stat"><b>80%</b><span>review-time reduction target</span></div>
+              <div className="lp-stat lp-reveal" style={{ '--i': 0 } as React.CSSProperties}><b>53,000+</b><span>regulatory clauses indexed</span></div>
+              <div className="lp-stat lp-reveal" style={{ '--i': 1 } as React.CSSProperties}><b>12+</b><span>regulatory bodies covered</span></div>
+              <div className="lp-stat lp-reveal" style={{ '--i': 2 } as React.CSSProperties}><b>1,000+</b><span>regulations catalogued</span></div>
+              <div className="lp-stat lp-reveal" style={{ '--i': 3 } as React.CSSProperties}><b>80%</b><span>review-time reduction target</span></div>
             </div>
           </div>
 
           {/* live analyzer preview (illustrative mock) */}
-          <div className="lp-mock" aria-hidden="true">
+          <div className="lp-mock lp-brackets lp-reveal" aria-hidden="true">
             <div className="lp-mock-bar">
               <span className="lp-dot" /><span className="lp-dot" /><span className="lp-dot" />
               <span className="lp-mock-title">PKS_Telekomunikasi_2026.pdf — Compliance Check</span>
@@ -113,11 +146,12 @@ export default function LandingPage() {
       {/* ---------- 2. capabilities ---------- */}
       <section className="lp-section" id="capabilities">
         <div className="lp-inner">
-          <div className="lp-kicker">CAPABILITIES</div>
-          <h2>Built for the way in-house teams work</h2>
+          <div className="lp-rule" aria-hidden="true"><span className="lp-rule-tag">Capabilities</span></div>
+          <h2>Built for the way <span className="lp-accent">in-house</span> teams work</h2>
           <p className="lp-sub">Three goals, one analyzer — every finding traceable to the exact article it came from.</p>
-          <div className="lp-grid-3">
-            <div className="lp-card">
+          <div className="lp-bento">
+            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 0 } as React.CSSProperties}>
+              <span className="lp-cardtag" aria-hidden="true">[ COMPLIANCE ]</span>
               <span className="lp-icon"><Scale size={20} /></span>
               <h3>Regulatory Compliance Check</h3>
               <p>Map each clause to the laws and regulations that govern it — no more manual cross-referencing across fragmented PDFs.</p>
@@ -127,7 +161,8 @@ export default function LandingPage() {
                 <li>Per-clause verdicts: compliant, at-risk, non-compliant</li>
               </ul>
             </div>
-            <div className="lp-card">
+            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 1 } as React.CSSProperties}>
+              <span className="lp-cardtag" aria-hidden="true">[ RISK ]</span>
               <span className="lp-icon"><AlertTriangle size={20} /></span>
               <h3>Risk &amp; Gap Detection</h3>
               <p>Surface what the draft is missing — outdated references, conflicting clauses, and absent protections — before counterparties do.</p>
@@ -137,7 +172,8 @@ export default function LandingPage() {
                 <li>Actionable amendment recommendations</li>
               </ul>
             </div>
-            <div className="lp-card">
+            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 2 } as React.CSSProperties}>
+              <span className="lp-cardtag" aria-hidden="true">[ AUDIT ]</span>
               <span className="lp-icon"><FileText size={20} /></span>
               <h3>Audit Trail &amp; Reporting</h3>
               <p>Export findings your auditors can actually follow — every flag linked back to source text, versioned and attributable.</p>
@@ -154,26 +190,26 @@ export default function LandingPage() {
       {/* ---------- 3. how it works ---------- */}
       <section className="lp-section alt" id="how">
         <div className="lp-inner">
-          <div className="lp-kicker">HOW IT WORKS</div>
-          <h2>From upload to signed-off in four steps</h2>
+          <div className="lp-rule" aria-hidden="true"><span className="lp-rule-tag">How it works</span></div>
+          <h2>From upload to signed-off in <span className="lp-accent">four steps</span></h2>
           <p className="lp-sub">No new workflow to learn — the analyzer slots into the review you already do.</p>
           <div className="lp-steps">
-            <div className="lp-step">
+            <div className="lp-step lp-reveal" style={{ '--i': 0 } as React.CSSProperties}>
               <span className="lp-step-num">1</span>
               <h3><Upload size={15} style={{ verticalAlign: -2 }} /> Upload</h3>
               <p>Drop in contracts or policies — PDF, Word, Excel, even scanned images with OCR fallback.</p>
             </div>
-            <div className="lp-step">
+            <div className="lp-step lp-reveal" style={{ '--i': 1 } as React.CSSProperties}>
               <span className="lp-step-num">2</span>
               <h3><Search size={15} style={{ verticalAlign: -2 }} /> Scan</h3>
               <p>Each clause is extracted and checked against the live regulatory knowledge base.</p>
             </div>
-            <div className="lp-step">
+            <div className="lp-step lp-reveal" style={{ '--i': 2 } as React.CSSProperties}>
               <span className="lp-step-num">3</span>
               <h3><Eye size={15} style={{ verticalAlign: -2 }} /> Review findings</h3>
               <p>Work the flagged list: green passes, amber needs judgment, red needs action — all cited.</p>
             </div>
-            <div className="lp-step">
+            <div className="lp-step lp-reveal" style={{ '--i': 3 } as React.CSSProperties}>
               <span className="lp-step-num">4</span>
               <h3><Download size={15} style={{ verticalAlign: -2 }} /> Export report</h3>
               <p>Generate the audit-ready report and archive the decision trail for the file.</p>
@@ -185,11 +221,12 @@ export default function LandingPage() {
       {/* ---------- 4. team ---------- */}
       <section className="lp-section" id="team">
         <div className="lp-inner">
-          <div className="lp-kicker">TEAM &amp; CREDENTIALS</div>
-          <h2>Built with legal rigor, engineered for scale</h2>
+          <div className="lp-rule" aria-hidden="true"><span className="lp-rule-tag">Team &amp; credentials</span></div>
+          <h2>Built with legal <span className="lp-accent">rigor</span>, engineered for scale</h2>
           <p className="lp-sub">A combined bench of legal practitioners and platform engineers — organized by what each group is accountable for.</p>
           <div className="lp-grid-3">
-            <div className="lp-card">
+            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 0 } as React.CSSProperties}>
+              <span className="lp-cardtag" aria-hidden="true">[ COUNSEL ]</span>
               <span className="lp-avatar"><Scale size={20} /></span>
               <h3>Legal &amp; Compliance Advisors</h3>
               <p>Practitioners who define what "correct" means: review methodology, regulatory coverage priorities, and citation standards.</p>
@@ -199,7 +236,8 @@ export default function LandingPage() {
                 <span className="lp-tag">GCG &amp; corporate secretarial</span>
               </div>
             </div>
-            <div className="lp-card">
+            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 1 } as React.CSSProperties}>
+              <span className="lp-cardtag" aria-hidden="true">[ BUILD ]</span>
               <span className="lp-avatar"><Users size={20} /></span>
               <h3>Product &amp; Engineering</h3>
               <p>Platform engineers behind the retrieval pipeline, document understanding, and the review interfaces your team touches daily.</p>
@@ -209,7 +247,8 @@ export default function LandingPage() {
                 <span className="lp-tag">Enterprise integrations</span>
               </div>
             </div>
-            <div className="lp-card">
+            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 2 } as React.CSSProperties}>
+              <span className="lp-cardtag" aria-hidden="true">[ GUARD ]</span>
               <span className="lp-avatar"><Award size={20} /></span>
               <h3>Data &amp; Security</h3>
               <p>Custodians of the knowledge base and access controls — currency of regulations, integrity of evidence, confidentiality of your documents.</p>
@@ -226,11 +265,12 @@ export default function LandingPage() {
       {/* ---------- 5. use cases ---------- */}
       <section className="lp-section alt" id="results">
         <div className="lp-inner">
-          <div className="lp-kicker">USE CASES</div>
-          <h2>Where in-house teams feel it first</h2>
+          <div className="lp-rule" aria-hidden="true"><span className="lp-rule-tag">Use cases</span></div>
+          <h2>Where in-house teams feel it <span className="lp-accent">first</span></h2>
           <p className="lp-sub">Typical engagements and the shape of the improvement — measured per pilot, reported with evidence.</p>
           <div className="lp-grid-3">
-            <div className="lp-card">
+            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 0 } as React.CSSProperties}>
+              <span className="lp-cardtag" aria-hidden="true">[ VENDOR ]</span>
               <span className="lp-icon"><Building2 size={20} /></span>
               <h3>Vendor agreement review</h3>
               <div className="lp-beforeafter">
@@ -238,7 +278,8 @@ export default function LandingPage() {
                 <div className="lp-ba lp-ba-after"><b>AFTER</b><span>Same-day flagged draft with cited risks; negotiation starts from evidence.</span></div>
               </div>
             </div>
-            <div className="lp-card">
+            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 1 } as React.CSSProperties}>
+              <span className="lp-cardtag" aria-hidden="true">[ POLICY ]</span>
               <span className="lp-icon"><ShieldCheck size={20} /></span>
               <h3>Policy harmonization</h3>
               <div className="lp-beforeafter">
@@ -246,7 +287,8 @@ export default function LandingPage() {
                 <div className="lp-ba lp-ba-after"><b>AFTER</b><span>Knowledge graph shows affected policies the day the rule changes.</span></div>
               </div>
             </div>
-            <div className="lp-card">
+            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 2 } as React.CSSProperties}>
+              <span className="lp-cardtag" aria-hidden="true">[ AUDIT ]</span>
               <span className="lp-icon"><CheckCircle2 size={20} /></span>
               <h3>Audit readiness</h3>
               <div className="lp-beforeafter">
@@ -262,18 +304,19 @@ export default function LandingPage() {
       {/* ---------- 6. security ---------- */}
       <section className="lp-section" id="security">
         <div className="lp-inner">
-          <div className="lp-kicker">SECURITY &amp; TRUST</div>
-          <h2>Confidential by architecture, not by promise</h2>
+          <div className="lp-rule" aria-hidden="true"><span className="lp-rule-tag">Security &amp; trust</span></div>
+          <h2>Confidential by <span className="lp-accent">architecture</span>, not by promise</h2>
           <p className="lp-sub">In-house teams entrust us with their most sensitive documents. Here is how that trust is enforced technically.</p>
           <div className="lp-sec-grid">
-            <div className="lp-card" style={{ gap: 14 }}>
+            <div className="lp-card lp-brackets lp-reveal" style={{ gap: 14, '--i': 0 } as React.CSSProperties}>
               <div className="lp-check"><Lock size={16} /><span><b>Need-to-know access.</b> Role-based controls gate every module; classified documents are filtered per user clearance.</span></div>
               <div className="lp-check"><ShieldCheck size={16} /><span><b>Short-lived sessions.</b> Signed tokens expire within 24 hours; registration can never self-grant elevated roles.</span></div>
               <div className="lp-check"><Eye size={16} /><span><b>Full auditability.</b> Uploads, reviews, approvals, and exports are logged with actor and timestamp.</span></div>
               <div className="lp-check"><Upload size={16} /><span><b>Upload guardrails.</b> Strict file-type and size limits protect the pipeline from malformed or hostile inputs.</span></div>
               <div className="lp-check"><FileText size={16} /><span><b>Your data stays yours.</b> Documents are processed for your matters only — never used to train shared models.</span></div>
             </div>
-            <div className="lp-perimeter">
+            <div className="lp-perimeter lp-brackets lp-reveal" style={{ '--i': 1 } as React.CSSProperties}>
+              <span className="lp-cardtag lp-cardtag-light" aria-hidden="true">[ PERIMETER ]</span>
               <h3>Deploys inside your perimeter</h3>
               <p>Containerized services run in your infrastructure or approved cloud — data, vectors, and audit logs never need to leave your boundary. Detailed architecture and data-flow documentation available under NDA during evaluation.</p>
             </div>
@@ -285,16 +328,16 @@ export default function LandingPage() {
       <section className="lp-section alt" id="demo">
         <div className="lp-inner lp-demo-grid">
           <div>
-            <div className="lp-kicker">REQUEST A DEMO</div>
-            <h2>See your own contract, analyzed live</h2>
+            <div className="lp-rule" aria-hidden="true"><span className="lp-rule-tag">Request a demo</span></div>
+            <h2>See your own contract, analyzed <span className="lp-accent">live</span></h2>
             <p className="lp-sub">A 30-minute working session: we run one of your agreements through the analyzer and walk the findings together. No slideware.</p>
             <div className="lp-tagrow">
               <span className="lp-tag">Live clause walkthrough</span>
-              <span className="lp-tag">Coverage Q&A</span>
+              <span className="lp-tag">Coverage Q&amp;A</span>
               <span className="lp-tag">Security review pack</span>
             </div>
           </div>
-          <div className="lp-form">
+          <div className="lp-form lp-brackets lp-reveal">
             {requested ? (
               <div className="lp-form-ok">
                 <b>Request received.</b><br />

@@ -27,6 +27,69 @@ h1, h2, h3, h4, h5, h6 {
   width: 100%;
 }
 
+/* Reduce-motion setting (settings dialog, 2026-09-29): collapses every
+   animation/transition to ~0 for motion-sensitive users. The attribute
+   is set pre-paint by index.html and at runtime by src/settings.ts;
+   programmatic smooth scrolls read the same setting in JS. */
+:root[data-reduce-motion="true"] *,
+:root[data-reduce-motion="true"] *::before,
+:root[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* UI scale (settings dialog, 2026-09-29): one rem base per preset so every
+   rem type step follows the chosen scale; px chrome (hairlines, icon
+   glyphs) stays crisp. A global zoom was rejected because the 19 vw/vh
+   sizes in the app ignore zoom and would overflow. Attribute set
+   pre-paint by index.html and at runtime by src/settings.ts. */
+:root[data-ui-scale="90"]  { font-size: 14.4px; }
+:root[data-ui-scale="100"] { font-size: 16px; }
+:root[data-ui-scale="110"] { font-size: 17.6px; }
+:root[data-ui-scale="125"] { font-size: 20px; }
+:root[data-ui-scale="150"] { font-size: 24px; }
+:root[data-ui-scale="175"] { font-size: 28px; }
+
+/* Interface font built-ins (settings dialog, 2026-09-29; widened app-wide
+   2026-09-30 per review): discrete slugs on data-chat-font map to installed
+   stacks for the whole interface. The key/attribute keep their original
+   "chat" names so stored prefs stay valid. The body * selector (0,2,1)
+   beats the single-class Inter rules without !important, and also reaches
+   form controls, which don't inherit fonts from the UA stylesheet. The
+   dialog preview mirrors these stacks from CHAT_FONTS in src/settings.ts. */
+:root[data-chat-font="times"] body,
+:root[data-chat-font="times"] body * {
+  font-family: 'Times New Roman', Times, serif;
+}
+:root[data-chat-font="georgia"] body,
+:root[data-chat-font="georgia"] body * {
+  font-family: Georgia, serif;
+}
+:root[data-chat-font="arial"] body,
+:root[data-chat-font="arial"] body * {
+  font-family: Arial, Helvetica, sans-serif;
+}
+:root[data-chat-font="verdana"] body,
+:root[data-chat-font="verdana"] body * {
+  font-family: Verdana, Geneva, sans-serif;
+}
+:root[data-chat-font="courier"] body,
+:root[data-chat-font="courier"] body * {
+  font-family: 'Courier New', Courier, monospace;
+}
+
+/* Reading line spacing (settings dialog, 2026-09-30): a multiplier on the
+   long-form line-heights — chat bubbles (.bubble), AI markdown answers
+   (.markdown-body), evidence quotes (.evidence-snippet), and compliance
+   result text. 'cozy' (1) reproduces the fixed values that predate the
+   setting; compact/wide scale around them via calc(). Attribute set
+   pre-paint by index.html and at runtime by src/settings.ts. */
+:root[data-reading-spacing="compact"] { --reading-lh-mult: 0.875; }
+:root[data-reading-spacing="cozy"]    { --reading-lh-mult: 1; }
+:root[data-reading-spacing="wide"]    { --reading-lh-mult: 1.15; }
+
 /* Glassmorphism Utilities
    Note: never hand-write `-webkit-backdrop-filter` next to the plain
    property. esbuild's CSS minifier treats the pair as one property and keeps
@@ -154,6 +217,120 @@ h1, h2, h3, h4, h5, h6 {
 @keyframes labelFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* Desktop auto-submerge (2026-10-01 review, third pass): the rail lives
+   SUBMERGED off the left wall at rest (same -24px clearance grammar as
+   the mobile drawer) while the content column keeps the full width; an
+   invisible 16px `.nav-edge` strip over the wall gap is the hover
+   trigger, because the off-canvas rail cannot catch :hover itself.
+   Hovering the strip, the rail, or keyboard-focusing a nav link
+   surfaces the rail already expanded into the labeled panel — it
+   overlays content and never reflows it (the hover-expand grammar).
+   The visible wall tab is `.nav-cue`, a child of the rail (see its
+   block below): parked on the wall at rest, riding the expanding
+   seam while surfaced. Mobile (≤767px) keeps the
+   off-canvas drawer; edge and cue stay display: none. */
+.nav-edge {
+  display: none;
+}
+
+.nav-cue {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .nav-edge {
+    display: block;
+    position: absolute;
+    left: 0;
+    /* top/height/bottom are set INLINE by Sidebar (the wall tab's rest
+       zone, railMidY ±64px — the ±40px band left only 8px of grace
+       around the 64px tab and a cursor parked just above it never
+       surfaced the rail, bugfix 2026-10-01 video pass) — a full-height
+       strip surfaced the rail on ANY left-edge hover, far from the tab
+       (first bugfix 2026-10-01); these declarations are only fallback */
+    top: 0;
+    bottom: 0;
+    /* matches the cue's width so the whole visible tab is hover-active
+       (the cue itself is pointer-events: none) */
+    width: 28px;
+    z-index: 101;
+  }
+  /* Wall cue (2026-10-01 review, sixth pass): a CHILD of the rail at
+     left: 100% / top: 50%, riding the rail's right seam every frame of
+     the hover expansion. At rest a +25px counter-transform parks it on
+     the wall as a right-rounded 0..28px tab (the rail's padding-box
+     right rests at -25px). Surfaced, the counter becomes -1px: the cue
+     sits FLUSH outside the panel, tucked 1px under its right border so
+     it reads as a handle welded to the sidebar (the fifth pass
+     straddled the seam half-in/half-out and looked detached - user:
+     "make seems like attached to the sidebar"). The ::before chevron
+     shows › at rest and spins 540deg (full turn + 180 flip) to ‹ in
+     accent color while surfaced, reversing on close. */
+  .nav-cue {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 50%;
+    left: 100%;
+    width: 28px;
+    height: 64px;
+    transform: translateY(-50%) translateX(25px);
+    border: 1px solid var(--border-color);
+    border-left: none;
+    border-radius: 0 999px 999px 0;
+    background: var(--bg-card);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+    pointer-events: none;
+    z-index: 101;
+    transition: transform 0.25s ease;
+  }
+  .nav-cue::before {
+    content: '\203A';
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text-secondary);
+    transition: transform 0.45s ease, color 0.2s ease;
+  }
+  .dashboard-content-row:has(.nav-edge:hover) .nav-cue,
+  .sidebar:hover .nav-cue,
+  .sidebar:has(:focus-visible) .nav-cue {
+    transform: translateY(-50%) translateX(-1px);
+  }
+  .dashboard-content-row:has(.nav-edge:hover) .nav-cue::before,
+  .sidebar:hover .nav-cue::before,
+  .sidebar:has(:focus-visible) .nav-cue::before {
+    transform: rotate(540deg);
+    color: var(--accent-color);
+  }
+  /* Rest state: submerged. Transform joins the width transition so both
+     directions animate (the min-width clamp lesson, bug_reports
+     2026-10-01). */
+  .sidebar {
+    transform: translateX(calc(-100% - 40px));
+    transition: width 0.25s ease, transform 0.25s ease;
+  }
+  .dashboard-content-row:has(.nav-edge:hover) .sidebar,
+  .sidebar:hover,
+  .sidebar:has(:focus-visible) {
+    transform: none;
+  }
+  .dashboard-content-row:has(.nav-edge:hover) .sidebar { width: var(--sidebar-width); }
+  .dashboard-content-row:has(.nav-edge:hover) .sidebar .sidebar-menu { align-items: stretch; }
+  .dashboard-content-row:has(.nav-edge:hover) .sidebar .sidebar-item {
+    width: auto;
+    height: 48px;
+    margin: 0 12px;
+    padding: 0 14px;
+    justify-content: flex-start;
+  }
+  .dashboard-content-row:has(.nav-edge:hover) .sidebar .sidebar-item .item-label {
+    display: inline;
+    animation: labelFadeIn 0.12s ease 0.18s both;
+  }
 }
 
 .sidebar-menu {
@@ -324,6 +501,22 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Chat Specific Styles */
+/* The opinion view floats as a Glass Card on the page base (2026-10-01
+   review: the flat full-bleed wash left the chatbot container with no
+   visible edge — "subtle and hard to see"). Same shell grammar as the
+   dialogs and the mobile conversation panel: card fill, hairline border,
+   radius-lg, soft ink shadow; the sidebar/chat/input surfaces step on
+   top of it. overflow hidden clips the stepped fills into the corners
+   (.no-scroll already pins overflow-y). */
+.legal-opinion-view {
+  margin: 16px 24px 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.1);
+  overflow: hidden;
+}
+
 .legal-opinion-body {
   display: flex;
   flex: 1;
@@ -428,17 +621,19 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-primary);
 }
 
+/* Portaled to document.body (bugfix 2026-10-01): fixed coordinates set
+   inline by LegalOpinion, so the history list's overflow-y frame and the
+   mobile drawer can never clip the dropdown; z-300 clears the drawer
+   (z-100) and its backdrop (z-90). */
 .conversation-menu {
-  position: absolute;
-  top: 32px;
-  right: 0;
+  position: fixed;
   min-width: 140px;
   background: var(--bg-card);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
   border-radius: 10px;
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.25);
-  z-index: 20;
+  z-index: 300;
   overflow: hidden;
 }
 
@@ -486,6 +681,72 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 0.85rem;
 }
 
+/* Desktop history-collapse handle (2026-10-01 review): a half-pill
+   straddling the panel seam at mid-height (where the user's red dot
+   sat). Collapsing zeroes the panel width so .chat-main expands into
+   the freed space; the handle rides the seam to the left edge and
+   flips its chevron + rounding. Mobile (≤767px) keeps the off-canvas
+   drawer — the handle stays hidden there. */
+.panel-collapse-handle {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .legal-opinion-body {
+    position: relative;
+  }
+
+  .conversation-panel {
+    /* min-width must transition alongside width: the base rule pins
+       min-width: 280px, and an untransitioned min-width clamps the used
+       width to 280 on frame 0 of the expand — the panel snapped open
+       while collapsing animated fine (bug_reports 2026-10-01). Same
+       duration + easing keeps width(t) == min-width(t) in lockstep. */
+    transition: width 0.2s ease, min-width 0.2s ease;
+  }
+
+  .panel-collapse-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 50%;
+    left: 280px;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    cursor: pointer;
+    z-index: 6;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+    transition: left 0.2s ease, transform 0.2s ease, color 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .panel-collapse-handle:hover {
+    color: var(--text-primary);
+    border-color: var(--accent-color);
+  }
+
+  .legal-opinion-body.history-collapsed .conversation-panel {
+    width: 0;
+    min-width: 0;
+    border-right: none;
+    overflow: hidden;
+  }
+
+  .legal-opinion-body.history-collapsed .panel-collapse-handle {
+    left: 0;
+    transform: translate(0, -50%);
+    border-left: none;
+    border-radius: 0 999px 999px 0;
+  }
+}
+
 .chat-main {
   flex: 1;
   display: flex;
@@ -510,28 +771,173 @@ h1, h2, h3, h4, h5, h6 {
 }
 .message-item.user { align-self: flex-end; }
 .message-item.ai { align-self: flex-start; }
+/* User side mirrors the messenger anatomy (2026-10-01): avatar disc
+   outside the bubble on the right, bubble speaking from it via a
+   mirrored tail. row-reverse keeps DOM order (avatar, bubble) while
+   placing the disc at the row's end. */
+.message-item.user {
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  gap: 10px;
+}
+/* Avatar column (2026-10-01 review): avatar with the sender name BELOW
+   it — the name moved out of the bubble so the bubble surface carries
+   content only. The 2px top margin keeps the avatar aligned with the
+   bubble tail (top: 14px) exactly as before. */
+.msg-avatar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.msg-name {
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-secondary);
+  text-align: center;
+}
+.msg-avatar-user {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--info-bg);
+  color: var(--accent-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
 
 .bubble {
   padding: 16px 20px;
   border-radius: 16px;
-  line-height: 1.6;
+  line-height: calc(1.6 * var(--reading-lh-mult, 1));
 }
 
 .user .bubble {
-  background: var(--user-bubble);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: var(--ai-bubble);
+  border: 1px solid var(--border-color);
   border-bottom-right-radius: 4px;
   color: var(--text-primary);
 }
+/* Claude-style AI answer (2026-10-01 review): boxless — the answer text
+   sits directly on the chat canvas (no fill, no hairline, no padding),
+   matching the reference chat the user circled; the user pill keeps
+   the messenger bubble grammar. */
 .ai .bubble {
-  background: var(--ai-bubble);
-  border: 1px solid var(--border-color);
-  border-bottom-left-radius: 4px;
+  background: transparent;
+  border: none;
+  padding: 0;
   color: var(--text-primary);
+}
+
+/* Messenger anatomy (2026-10-01 review): the bot avatar sits outside the
+   bubble as a 32px BotIdentity column. Since the same day's Claude-style
+   review the AI bubble is boxless and grows NO tail (plain text on the
+   canvas); the pending row keeps the outer avatar with its transparent
+   bubble (.bubble-pending). The user bubble keeps its mirrored tail. */
+.message-item.ai {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+}
+.message-item.ai > canvas {
+  margin-top: 2px;
+}
+.message-item.ai .bubble {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+/* Mirrored tail on the user bubble's right edge; same ink hairline as
+   the bot tail now that both bubbles share one surface grammar. */
+.message-item.user .bubble {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.message-item.user .bubble::before {
+  content: '';
+  position: absolute;
+  right: -6px;
+  top: 14px;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  transform: rotate(45deg);
+  border-right: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-color);
+}
+
+/* Claude-style message actions (2026-10-01 review): a quiet icon row
+   under the AI answer — copy + retry. The AI bubble is boxless, so the
+   row sits directly on the chat canvas, left-aligned with the text. */
+.msg-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+}
+.msg-action-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.msg-action-btn:hover:not(:disabled) {
+  background: var(--bg-element);
+  color: var(--accent-color);
+}
+.msg-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.msg-action-btn:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
 }
 
 .bubble p { margin: 0 0 1em 0; }
 .bubble p:last-child { margin: 0; }
+
+/* Greeting hero (2026-09-30): while a conversation is fresh (seeded
+   greeting only, nothing pending) the pane shows a centered hero — an
+   enlarged BotIdentity with the greeting copy below it and no bubble.
+   The first question turns the greeting into an ordinary history
+   bubble. Auto block margins center the hero vertically in tall panes
+   and collapse to zero when the pane scrolls. */
+.greeting-hero {
+  align-self: center;
+  margin-block: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 24px;
+  max-width: 640px;
+  text-align: center;
+}
+
+.greeting-hero-text.markdown-body {
+  color: var(--text-secondary);
+}
+/* The greeting line is a markdown H2 (2026-10-01 review: bigger copy with
+   heading semantics); zero the top margin that .markdown-body h1-h3 would
+   add so the mascot-to-copy rhythm stays tight. The heading itself takes
+   --text-primary from the markdown heading rule, lifting it above the
+   secondary ink of any following copy. */
+.greeting-hero-text :first-child {
+  margin-top: 0;
+}
 
 .input-area {
   padding: 24px 32px;
@@ -543,35 +949,70 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   gap: 12px;
   align-items: flex-end;
-  background: var(--bg-base);
-  border: 1px solid var(--border-color);
+  /* Card surface, not the base fill: on the --bg-element strip the old
+     --bg-base face sat within a few percent of its surroundings (user
+     review 2026-10-01). The resting outline is gone per the same review
+     ("remove the textbox line entirely") — fill + soft system shadow
+     carry the elevation; the 1px transparent border only exists to keep
+     geometry stable when focus paints it accent-colored below. */
+  background: var(--bg-card);
+  border: 1px solid transparent;
+  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.1);
   padding: 8px;
   border-radius: var(--radius-md);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 /* Field focus per DESIGN.md: border shifts to Chancery Blue + the system's
    only ring — the 3px chancery-glow — on the container; the textarea sits
-   transparent inside (search-bar grammar). Replaces the former 2px ring on
-   .chat-input:focus and the TSX inline double-definition. */
+   transparent inside (search-bar grammar). Focus feedback stays even with
+   the resting line removed (a11y): the accent hairline + glow appear only
+   while the field is focused. */
 .input-container:focus-within {
   border-color: var(--accent-color);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+  box-shadow: 0 0 0 3px var(--accent-glow), 0 4px 20px -4px rgba(15, 23, 42, 0.1);
 }
 
 .chat-input {
   flex: 1;
+  /* border-box is load-bearing: resizeTextarea assigns scrollHeight
+     (padding-inclusive) to style.height, which on a content-box field
+     excludes padding — the padding was re-added on every resize and the
+     empty composer settled ~24px too tall (2026-10-01 bugfix; no global
+     box-sizing reset exists in this project). */
+  box-sizing: border-box;
   background: transparent;
   border: none;
   resize: none;
-  min-height: 50px;
+  /* 40px floor = the send button's height (2026-10-01 review): the
+     resting composer is one slim row; resizeTextarea grows the field
+     with content up to the 200px cap. With border-box the floor is the
+     TOTAL box, so one text line (1.5 × 0.95rem ≈ 23px) + 16px padding
+     fits exactly inside 40px and the empty state never inflates. */
+  min-height: 40px;
   max-height: 200px;
-  overflow-y: auto;
-  padding: 12px;
+  /* While growing, the composer owns no scrollbar channel at all: the
+     auto-resize already tracks content, and the former always-on
+     `overflow-y: auto` let recent Chromium paint a native, OS-accent-tinted
+     scrollbar frame inside the field — the "inner ring" of the 2026-10-01
+     user review (reproduced on Chrome + Edge, absent where the channel
+     never opens). Scrolling switches on only past the 200px cap, via
+     .is-scrollable below. */
+  overflow: hidden;
+  padding: 8px 12px;
   line-height: 1.5;
   color: var(--text-primary);
   font-family: inherit;
   font-size: 0.95rem;
   outline: none;
+}
+/* Past the height cap the field scrolls with an explicitly themed thin
+   scrollbar, so no Chromium generation falls back to the OS accent color.
+   Standard properties lead; the global ::-webkit-scrollbar rules (line ~825)
+   still cover older engines. */
+.chat-input.is-scrollable {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
 }
 
 /* Geometry only — color, hover lift, glow and disabled state come from the
@@ -579,14 +1020,16 @@ h1, h2, h3, h4, h5, h6 {
    The former local overrides (ink-navy icon, −2px lift, 52px width) and the
    TSX inline double-definition were removed in the 2026-09-28 polish pass.
    border:none keeps the content-box at exactly 40px (no global border-box
-   reset exists). */
+   reset exists). No margin: with the field floored at the same 40px,
+   align-items: flex-end + the container's 8px padding put both boxes on
+   one shared baseline (2026-10-01 review). */
 .send-button {
   width: 40px;
   height: 40px;
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
-  margin: 0 4px 4px 0;
+  margin: 0;
   flex-shrink: 0;
 }
 .send-button:focus-visible {
@@ -646,6 +1089,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .document-card {
+  position: relative; /* stacking anchor for the status-chip hint tooltip */
   background: var(--bg-card);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
@@ -660,7 +1104,11 @@ h1, h2, h3, h4, h5, h6 {
   border-color: var(--border-highlight);
   transform: translateY(-4px);
   box-shadow: 0 12px 30px -8px rgba(37, 99, 235, 0.2);
+  z-index: 4;
 }
+/* Keep a focused card's hint tooltip above neighbouring cards
+   (2026-09-29 critique re-score P1). */
+.document-card:focus-within { z-index: 5; }
 
 .doc-type-badge {
   align-self: flex-start;
@@ -674,10 +1122,22 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: 0.5px;
 }
 
-.doc-title { margin: 0 0 12px 0; font-size: 1rem; line-height: 1.4; color: var(--text-primary); overflow-wrap: anywhere; word-break: break-word; }
+.doc-title { margin: 0 0 12px 0; font-size: 1rem; line-height: 1.4; color: var(--text-primary); overflow-wrap: anywhere; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .doc-meta { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 8px; }
 .doc-sektor { color: var(--accent-color); }
 .doc-status { font-size: 0.8rem; color: var(--success-text); font-weight: 500; margin-bottom: 16px; }
+/* Card head row: jenis badge left, status/classification chips right —
+   status is the decision-critical fact and must outrank decoration
+   (2026-09-29 critique remediation P0). */
+.doc-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.doc-card-head .doc-type-badge { margin-bottom: 0; }
+.doc-head-chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+/* Structured citation line (jenis + parsed Nomor …/Tahun …) in the data
+   mono face; falls back to nothing when the title carries no parseable
+   citation. */
+.doc-citation { font-family: var(--font-mono); font-size: 0.78rem; color: var(--text-secondary); margin: -6px 0 10px 0; overflow-wrap: anywhere; }
+/* Screen-reader-only labels for icon/placeholder-named controls. */
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 .doc-footer {
   margin-top: auto;
@@ -1087,6 +1547,24 @@ h1, h2, h3, h4, h5, h6 {
   gap: 20px;
 }
 
+/* Qualified-status caveat at the top of the drawer's Ikhtisar tab
+   (2026-09-29 critique re-score P1) — warning-tone panel, same hue
+   family as .status-chip--warning. */
+.drawer-status-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(251, 146, 60, 0.1);
+  border: 1px solid rgba(251, 146, 60, 0.25);
+  border-left: 3px solid rgba(251, 146, 60, 0.65);
+  border-radius: 8px;
+  color: var(--warning-text);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.drawer-status-note svg { flex-shrink: 0; margin-top: 3px; }
+
 /* Stat Card */
 .stat-card {
   background: rgba(56, 189, 248, 0.05);
@@ -1379,6 +1857,59 @@ h1, h2, h3, h4, h5, h6 {
   background: rgba(248, 113, 113, 0.12);
   color: var(--danger-text);
   border: 1px solid rgba(248, 113, 113, 0.25);
+}
+/* Semantic tones for document-level status / classification chips
+   (Legal Repository cards, 2026-09-29 critique remediation P0). Same
+   bg+fg token pairs as the status-chip vocabulary in ui_ux_design.md:
+   success/warning/danger + a neutral for hidden-or-failed rows. */
+.status-chip--success {
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--success-text);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.status-chip--warning {
+  background: rgba(251, 146, 60, 0.12);
+  color: var(--warning-text);
+  border: 1px solid rgba(251, 146, 60, 0.25);
+}
+.status-chip--danger {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--danger-text);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+.status-chip--neutral {
+  background: var(--bg-element);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+/* Keyboard/SR-reachable hint tooltip (2026-09-29 critique re-score P1):
+   the native title tooltip is hover-only, so qualified-status chips carry
+   data-hint, are focusable, and paint the hint on :hover AND :focus-visible.
+   Screen-reader text lives in the chip's aria-describedby twin instead. */
+.status-chip[data-hint] { position: relative; cursor: help; }
+.status-chip[data-hint]:hover::after,
+.status-chip[data-hint]:focus-visible::after {
+  content: attr(data-hint);
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -8px;
+  z-index: 40;
+  width: max-content;
+  max-width: 240px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 12px 28px -8px rgba(15, 23, 42, 0.45);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
+  white-space: normal;
+  text-align: left;
+  pointer-events: none;
 }
 
 /* Analysis sub-sections */
@@ -1726,7 +2257,7 @@ h1, h2, h3, h4, h5, h6 {
 .compliance-ref-text {
   margin: 8px 0 0;
   font-size: 0.84rem;
-  line-height: 1.55;
+  line-height: calc(1.55 * var(--reading-lh-mult, 1));
   color: var(--text-secondary);
 }
 
@@ -1775,6 +2306,10 @@ h1, h2, h3, h4, h5, h6 {
   overflow: hidden;
 }
 
+/* Chancery migration 2026-10-02 (critique P1): the panel wash, grid and orbs
+   moved from the legacy purple family to the Chancery/ink-navy family per the
+   DESIGN.md frontmatter gradient for this brand surface. Text values are
+   pinned light because this surface never theme-flips. */
 .auth-brand-side {
   flex: 6;
   position: relative;
@@ -1782,10 +2317,13 @@ h1, h2, h3, h4, h5, h6 {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(135deg, rgba(15, 12, 32, 0.9), rgba(22, 18, 43, 0.9)),
-              url('data:image/svg+xml;utf8,<svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(168,85,247,0.05)" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(%23grid)"/></svg>');
+  background: linear-gradient(135deg, rgba(30, 64, 175, 0.88), rgba(15, 23, 42, 0.94)),
+              url('data:image/svg+xml;utf8,<svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(147,197,253,0.08)" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(%23grid)"/></svg>');
   border-right: 1px solid var(--border-color);
-  overflow: hidden;
+  /* Scroll safety for short-and-wide viewports (same clip class the form side
+     had): ink overflow from the orb blurs does not create scrollbars. */
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Animated glowing orbs */
@@ -1800,14 +2338,14 @@ h1, h2, h3, h4, h5, h6 {
 .auth-brand-side::before {
   width: 400px;
   height: 400px;
-  background: rgba(168, 85, 247, 0.15);
+  background: rgba(59, 130, 246, 0.18);
   top: 10%;
   left: 10%;
 }
 .auth-brand-side::after {
   width: 300px;
   height: 300px;
-  background: rgba(56, 189, 248, 0.1);
+  background: rgba(96, 165, 250, 0.12);
   bottom: 20%;
   right: 10%;
   animation-delay: -10s;
@@ -1828,19 +2366,31 @@ h1, h2, h3, h4, h5, h6 {
   flex-direction: column;
   align-items: center;
   gap: 24px;
+  /* margin:auto centers when there is room and keeps both ends reachable by
+     scrolling when a short viewport is shorter than the lockup. */
+  margin: auto;
+  padding: 24px 16px;
 }
 
 .brand-logo-container {
   width: 120px;
   height: 120px;
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(56, 189, 248, 0.2));
-  border: 1px solid rgba(168, 85, 247, 0.4);
+  /* Light plate: the logo mark is a dark glyph (same asset as the TopBar), so
+     it needs a light backing to read on the dark Chancery panel. */
+  background: linear-gradient(180deg, #ffffff, #e2e8f0);
+  border: 1px solid rgba(59, 130, 246, 0.45);
   border-radius: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 40px rgba(168, 85, 247, 0.2), inset 0 0 20px rgba(168, 85, 247, 0.2);
-  color: var(--text-primary);
+  box-shadow: 0 0 40px rgba(37, 99, 235, 0.25), inset 0 0 20px rgba(37, 99, 235, 0.2);
+  color: #f1f5f9;
+}
+
+.brand-logo-img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
 }
 
 .brand-content h1 {
@@ -1848,31 +2398,107 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 3.5rem;
   font-weight: 700;
   margin: 0;
-  background: linear-gradient(to right, #fff, #a8a2c2);
+  background: linear-gradient(to right, #fff, #bfdbfe);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: -0.02em;
 }
 
-.brand-content p {
-  color: var(--text-secondary);
+/* Pinned light values: this surface never theme-flips, so theme tokens here
+   shipped invisible text in the default light theme (critique P1). */
+.brand-tagline {
+  color: #cbd5e1;
   font-size: 1.2rem;
   max-width: 400px;
   line-height: 1.6;
 }
 
-.auth-form-side {
-  flex: 4;
+.auth-features {
+  margin-top: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.auth-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.auth-feature-icon {
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  display: flex;
+}
+
+.auth-feature h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.auth-feature p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
+
+.auth-credit {
+  margin-top: auto;
+  padding-top: 40px;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #cbd5e1;
+}
+
+.auth-credit-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 10px var(--success);
+}
+
+.auth-hint {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+/* 44px hit area at every width (critique P1 touch targets); right:8px also
+   seats the toggle inside the field edge instead of detached outside it. */
+.auth-eye {
+  position: absolute;
+  right: 8px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-base);
-  padding: 40px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
 }
 
+.auth-form-side {
+  flex: 4;
+  display: flex;
+  background: var(--bg-base);
+  padding: 40px;
+  overflow-y: auto;
+}
+
+/* margin:auto centers the card when there is room and still allows scrolling
+   when the register form exceeds a short viewport (align-items:center would
+   clip the overflow unreachable). */
 .auth-card {
   width: 100%;
   max-width: 420px;
+  margin: auto;
   animation: fadeIn 0.5s ease-out forwards;
 }
 
@@ -1998,6 +2624,32 @@ h1, h2, h3, h4, h5, h6 {
 
 .auth-toggle button:hover {
   text-decoration: underline;
+}
+
+/* Responsive layer 2026-10-02 (critique P0): the split-screen previously had
+   zero viewport rules — at 390px the form column kept ~76px of usable input
+   width, and short viewports clipped the register submit button. */
+@media (max-width: 767px) {
+  .auth-container {
+    flex-direction: column;
+    height: 100dvh;
+    overflow-y: auto;
+  }
+  .auth-brand-side {
+    flex: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    padding: 32px 16px;
+  }
+  .auth-features, .brand-tagline, .auth-credit { display: none; }
+  .brand-content { gap: 12px; }
+  .brand-content h1 { font-size: 2rem; }
+  .brand-logo-container { width: 72px; height: 72px; border-radius: 20px; }
+  .brand-logo-img { width: 40px; height: 40px; }
+  .auth-form-side {
+    flex: none;
+    padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+  }
 }
 
 /* Account Profile View Styles */
@@ -2226,19 +2878,36 @@ h1, h2, h3, h4, h5, h6 {
   flex-direction: column;
   flex: 1 0 auto;
   min-height: 0;
-  margin-left: calc(32px + var(--sidebar-rail));
+  /* No rail gutter at any width since the 2026-10-01 auto-submerge: the
+     rail lives off-canvas at rest and OVERLAYS content on hover (the
+     hover-expand grammar), so reserving 92px would leave a dead column. */
+  margin-left: 0;
 }
 
-/* Routes whose view scrolls internally (.no-scroll — today only
-   LegalOpinion) must never push more than the scroller's height into
+/* Routes whose view scrolls internally (.no-scroll — LegalOpinion and
+   KnowledgeGraph) must never push more than the scroller's height into
    the page flow: with the base shrink-0 / uncapped combo the view's
    intrinsic height wins at short viewports, pushing the chat input
    area and the footer below the fold and keeping chat-box's internal
    scrolling from ever engaging (critique adapt P2, footer finding).
+   For KnowledgeGraph the cap also breaks the vis-network autoResize
+   feedback loop: without a definite height the canvas ratchets the
+   container taller every poll tick and the page expands endlessly.
    max-height caps only that overflow case — grow and the shrink-0
    footer reveal behave exactly as before otherwise. Document-flow
    views are untouched. */
-.route-inset:has(> .no-scroll) { max-height: 100%; }
+/* flex-basis: 100% (2026-10-01, footer scroll-reveal): with basis auto the
+   inset GROWS to absorb free space whenever the collapsed footer (~46px
+   copyright bar) is shorter than the leftover viewport — scrollHeight then
+   equals clientHeight, there is nothing to scroll, and the footer's
+   bottom-edge expand trigger fires on mount, so internally-scrolled routes
+   could never show the collapsed state. Pinning the basis to the scroller
+   height makes the footer always overflow the fold by exactly its own
+   height, restoring the documented shrink-0 footer-reveal grammar; the
+   max-height cap above still guards the short-viewport overflow case, and
+   KnowledgeGraph's vis-network gets a constant definite height (no
+   autoResize ratchet). */
+.route-inset:has(> .no-scroll) { max-height: 100%; flex-basis: 100%; }
 
 
 /* TopBar Styles — full-width bar, edge to edge */
@@ -2405,6 +3074,417 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--accent-color);
 }
 
+/* === Settings dialog (topbar gear, 2026-09-29) ===================
+   Centered modal window over the shared veil: category nav (single-open
+   accordion) + breadcrumb + sections of title/description rows with a
+   right-aligned control (switch or segmented radiogroup). Replaced the
+   first theme popover the same day; reshaped from full-screen to a
+   window the same day per design review. useDialogA11y supplies Esc/
+   focus/trap and the window carries aria-modal="true"; the veil click
+   closes. Portaled to <body> (see containing-block rule). The <=767px
+   stack lives in utilities.css with the other responsive overrides. */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay-veil);
+}
+
+/* Glass Card shell like the drawer/modals, one radius step up for the
+   window scale; nav column and content pane split the inner grid. */
+.settings-window {
+  position: relative;
+  display: grid;
+  grid-template-columns: 264px 1fr;
+  width: clamp(320px, 86vw, 1800px);
+  height: clamp(420px, 82vh, 1000px);
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.35);
+  overflow: hidden;
+}
+
+.settings-close {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  z-index: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+}
+
+.settings-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-element);
+}
+
+.settings-nav {
+  background: var(--bg-element);
+  border-right: 1px solid var(--border-color);
+  padding: 20px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-nav-cat,
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.settings-nav-cat:hover,
+.settings-nav-item:hover {
+  background: var(--bg-card);
+}
+
+.settings-nav-item {
+  padding-left: 36px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.settings-nav-item.active {
+  background: var(--accent-glow);
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+.settings-nav-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.settings-nav-item.active .settings-nav-icon {
+  color: var(--accent-color);
+}
+
+.settings-nav-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-nav-chevron {
+  color: var(--text-secondary);
+  transition: transform 0.15s ease;
+}
+
+.settings-nav-chevron.open {
+  transform: rotate(90deg);
+}
+
+.settings-content {
+  overflow-y: auto;
+  padding: 28px 40px 48px;
+}
+
+.settings-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-bottom: 28px;
+}
+
+.settings-breadcrumb-current {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 860px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row-text {
+  min-width: 0;
+}
+
+.settings-row-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-row-desc {
+  margin-top: 4px;
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+  max-width: 560px;
+  line-height: 1.5;
+}
+
+.settings-row-control {
+  flex-shrink: 0;
+}
+
+/* Sage-avatar picker control (moved from the Legal Opinion
+   conversation-panel footer 2026-10-01, user review): radiogroup grid
+   of paused BotIdentity stills, one per bot-avatars shape. Item grammar
+   follows the old picker — hairline border stepping to accent on hover,
+   selected = accent border + --info-bg tint. */
+.settings-avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 34px);
+  gap: 6px;
+}
+
+.settings-avatar-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.settings-avatar-item:hover {
+  border-color: var(--accent-color);
+}
+
+.settings-avatar-item.selected {
+  border-color: var(--accent-color);
+  background: var(--info-bg);
+}
+
+/* Sage avatar body-colour swatches (2026-10-01 review): same radiogroup
+   grammar as the shape picker above — hairline border stepping to accent
+   on hover; selected adds an accent outline ring (the chip fill IS the
+   swatch colour, so the avatar item's --info-bg tint can't apply). */
+.settings-swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.settings-swatch-item {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.settings-swatch-item:hover {
+  border-color: var(--accent-color);
+}
+
+.settings-swatch-item.selected {
+  border-color: var(--accent-color);
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* Switch — role="switch" button; knob is a graphical object (>=3:1 in
+   both states: slate on element wash, white on the accent track). */
+.settings-switch {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-element);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.settings-switch.on {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.settings-switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.settings-switch.on .settings-switch-knob {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+/* Segmented radiogroup (theme row). Native radios are visually hidden
+   but keep arrow-key navigation; the checked segment and the
+   :has(input:focus-visible) ring carry the visible state. */
+.settings-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-element);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.settings-segment {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.83rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.settings-segment input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.settings-segment.checked {
+  background: var(--bg-card);
+  color: var(--accent-color);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+
+.settings-segment:has(input:focus-visible) {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* Select control (chat font row) — the repository's inline select look
+   promoted to a class; reset link beside it mirrors the reference's
+   "Use theme font" affordance. */
+.settings-select {
+  background: var(--bg-element);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  min-width: 260px;
+}
+
+.settings-control-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-link-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent-color);
+  font-size: 0.83rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.settings-link-btn:hover:not(:disabled) {
+  background: var(--accent-glow);
+}
+
+.settings-link-btn:disabled {
+  color: var(--text-secondary);
+  cursor: default;
+}
+
+/* Font preview line under the chat font row. */
+.settings-preview {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 14px 0 4px;
+  color: var(--text-secondary);
+  font-size: 0.83rem;
+}
+
+.settings-preview-text {
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+/* Reading-spacing preview: stacks the label above a multi-line sample. */
+.settings-preview--block {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.settings-preview--block .settings-preview-text {
+  max-width: 560px;
+}
+
+/* Icon + label action buttons (export/import/reset rows). */
+.settings-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-link-btn--danger {
+  color: var(--danger-text);
+}
+
+.settings-link-btn--danger:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* Import/reset feedback line under the settings-data rows. */
+.settings-status {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
 /* Activity Feed Styles */
 .activity-feed {
   width: 320px;
@@ -2539,6 +3619,7 @@ h1, h2, h3, h4, h5, h6 {
   color: white;
 }
 
+.hero-content h1,
 .hero-content h2 {
   font-size: 1.3rem;
   margin: 0;
@@ -2714,11 +3795,13 @@ h1, h2, h3, h4, h5, h6 {
   background: rgba(239, 68, 68, 0.12);
 }
 
-/* Readable placeholder text (≥4.5:1 on white) */
+/* Readable placeholder text: #5c6b82 measures 4.98:1 on the composited
+   --bg-element and 5.4:1 on --bg-card (the old #64748b was 4.38:1 — just
+   under AA). Dark theme flips placeholders in theme-dark.css. */
 input::placeholder,
 textarea::placeholder,
 select::placeholder {
-  color: #64748b;
+  color: #5c6b82;
   opacity: 1;
 }
 
@@ -2849,7 +3932,7 @@ select::placeholder {
 /* Markdown Styles — chat answers: clean sans-serif, light-theme legible */
 .markdown-body {
   font-size: 0.95rem;
-  line-height: 1.7;
+  line-height: calc(1.7 * var(--reading-lh-mult, 1));
   color: var(--text-primary);
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   overflow-wrap: break-word;
@@ -2987,7 +4070,7 @@ select::placeholder {
 .evidence-snippet {
   font-size: 0.85rem;
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: calc(1.6 * var(--reading-lh-mult, 1));
   background: var(--bg-element);
   padding: 12px;
   border-radius: 6px;
@@ -2999,7 +4082,9 @@ select::placeholder {
 /* Corporate footer (modeled on lintasarta.co.id) — lives INSIDE the scroll
    flow (.tab-panel--active) with margin-top: auto, so it sits at the end of
    the page and is revealed by scrolling instead of squishing the
-   fixed-height dashboard viewport. Titles/labels are real; values are
+   fixed-height dashboard viewport. Since 2026-10-01 it rests collapsed to
+   the copyright bar; the scroller's bottom edge opens .footer-reveal below
+   it (state logic in Footer.tsx). Titles/labels are real; values are
    placeholders pending final content. */
 .app-footer {
   flex-shrink: 0;
@@ -3016,6 +4101,30 @@ select::placeholder {
   padding: 12px 24px;
   border-bottom: 1px solid var(--border-color);
   text-align: center;
+}
+
+/* Scroll-reveal wrapper (2026-10-01): collapsed shows only the copyright
+   bar; hitting the scroller's bottom edge opens the grid (Footer.tsx). The
+   0fr→1fr row keeps the transition height-agnostic. The padding-free
+   -inner div is the load-bearing grid item: this project has no global
+   border-box reset, so .footer-grid's 48px top padding would set an
+   irreducible 48px floor under the 0fr track — the inner wrapper carries
+   min-height: 0 + overflow: hidden instead and collapses to a true 0.
+   The reduce-motion kill-switch (:root[data-reduce-motion]) flattens the
+   transition automatically. */
+.footer-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 450ms ease;
+}
+
+.app-footer--expanded .footer-reveal {
+  grid-template-rows: 1fr;
+}
+
+.footer-reveal > .footer-reveal-inner {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .footer-grid {
@@ -3107,3 +4216,514 @@ select::placeholder {
   font-size: 0.78rem;
   color: var(--text-secondary);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ADMIN DASHBOARD (2026-09-30 critique remediation) — replaces the
+   screen's inline-style one-offs with the shared glass grammar:
+   .hero-banner, .status-chip, .compliance-table, .btn, .confirm-modal.
+   Semantic card tones ride on --card-* custom properties so every
+   face flips with the theme (the old hardcoded hexes collapsed to
+   1.98:1 in dark). Mobile overrides live in utilities.css.
+   ═══════════════════════════════════════════════════════════════ */
+.admin-view {
+  width: 100%;
+  max-width: 1200px;
+  /* Flex item of .route-inset: without this, the 920px .compliance-table
+     min-content props the whole page open at every viewport (measured:
+     955px content in a 390px window, h-scroll on 1062px laptops). The
+     .view-container zeroing in utilities.css only kicks in at <=1024. */
+  min-width: 0;
+  margin: 0 auto;
+  /* Horizontal insets follow the .repository-view convention — route-inset
+     carries no padding of its own. */
+  padding: 24px 32px 48px;
+  box-sizing: border-box;
+}
+
+/* Hero: shared navy brand surface + ghost action button. Pure-white
+   text on the white-12% face measures 5.25:1 at the gradient's
+   brightest stop; hover lifts the face to 18% (4.7:1). */
+.admin-hero-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.btn-hero {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.btn-hero:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.btn-hero:disabled { opacity: 0.6; cursor: wait; }
+.btn-hero:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.admin-spin { animation: spin 1s linear infinite; }
+
+/* System-health + counters row */
+.admin-health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.admin-health-tile {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.admin-health-tile--ok { border-color: var(--success-border); }
+.admin-health-tile--down { border-color: var(--danger-border); }
+.admin-health-icon { display: inline-flex; }
+.admin-health-icon.ok { color: var(--success-text); }
+.admin-health-icon.down { color: var(--danger-text); }
+.admin-health-icon.accent { color: var(--accent-color); }
+.admin-tile-label { font-size: 0.75rem; color: var(--text-secondary); }
+.admin-tile-value {
+  font-weight: 700;
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+}
+.admin-tile-value.ok { color: var(--success-text); }
+.admin-tile-value.down { color: var(--danger-text); }
+.admin-tile-value.accent { color: var(--accent-hover); }
+
+/* Per-status document cards. Tone modifiers pin the AA-hardened text
+   token + border/track tints per theme; the fill rides the text token
+   (deep in light, bright tint in dark) so bars keep >=3:1 everywhere. */
+.admin-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+  align-items: stretch;
+}
+.admin-status-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--card-border, var(--border-color));
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.admin-status-card--success {
+  --card-text: var(--success-text);
+  --card-border: var(--success-border);
+  --card-track: var(--success-bg);
+}
+.admin-status-card--warning {
+  --card-text: var(--warning-text);
+  --card-border: var(--warning-border);
+  --card-track: var(--warning-bg);
+}
+.admin-status-card--danger {
+  --card-text: var(--danger-text);
+  --card-border: var(--danger-border);
+  --card-track: var(--danger-bg);
+}
+.admin-status-body { padding: 20px 24px; }
+.admin-status-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--card-text);
+}
+.admin-status-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+.admin-status-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--card-text);
+  font-variant-numeric: tabular-nums;
+  margin-top: 10px;
+}
+.admin-status-track {
+  height: 4px;
+  background: var(--card-track);
+  border-radius: 2px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+.admin-status-fill {
+  height: 100%;
+  background: var(--card-text);
+  transform-origin: left;
+  transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.admin-status-browser {
+  padding: 0 24px 20px;
+  border-top: 1px solid var(--card-track);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.admin-card-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 16px 0 12px;
+}
+.admin-card-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 34px 9px 12px;
+  background: var(--bg-element);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.admin-card-search input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.admin-search-clear {
+  position: absolute;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.admin-search-clear:hover { background: var(--bg-card); color: var(--text-primary); }
+.admin-search-clear:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+.admin-doc-list {
+  max-height: 200px;
+  overflow-y: auto;
+  flex: 1;
+}
+.admin-doc-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+.admin-doc-item:last-child { border-bottom: none; }
+.admin-doc-title {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.admin-doc-nomor {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+.admin-list-empty {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 10px 0;
+  margin: 0;
+}
+.admin-list-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  margin: 8px 0 0;
+}
+
+/* Panels (klasifikasi / jenis / KG exclusions / audit) */
+.admin-panels-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.admin-panels-2col .admin-panel { margin-bottom: 0; }
+.admin-panel {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-bottom: 24px;
+}
+.admin-panel:last-child { margin-bottom: 0; }
+.admin-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.admin-panel-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.admin-panel-note {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.admin-panel-hint {
+  margin: -8px 0 16px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+@media (max-width: 900px) {
+  .admin-panels-2col { grid-template-columns: 1fr; }
+}
+
+/* Distribution bars — transform-driven so growth stays on the
+   compositor (the old width transitions thrashed layout: the CLI
+   detector's only two findings on this screen). */
+.admin-bar-row { margin-bottom: 16px; }
+.admin-bar-row:last-child { margin-bottom: 0; }
+.admin-bar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.admin-bar-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.admin-bar-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.admin-bar-count {
+  font-weight: 600;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.admin-bar-track {
+  height: 6px;
+  background: var(--bg-element);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.admin-bar-fill {
+  height: 100%;
+  transform-origin: left;
+  transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* KG-exclusion form + inline feedback */
+.admin-exclusion-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.admin-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-element);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.admin-input:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.admin-select {
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-element);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.85rem;
+  outline: none;
+  cursor: pointer;
+}
+.admin-select:focus {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.admin-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+}
+.admin-feedback--success {
+  background: var(--success-bg);
+  color: var(--success-text);
+  border: 1px solid var(--success-border);
+}
+.admin-feedback--error {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border: 1px solid var(--danger-border);
+}
+.admin-feedback-retry { padding: 4px 12px; font-size: 0.8rem; margin-left: auto; }
+
+/* Audit toolbar + pagination */
+.admin-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.admin-toolbar .admin-input { flex: 1; min-width: 180px; }
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.admin-page-info {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.admin-page-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.admin-page-btn:hover:not(:disabled) { background: var(--bg-element); color: var(--text-primary); }
+.admin-page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.admin-page-btn:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+
+/* Table cell utilities (compliance-table grammar) */
+.admin-mono {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+.admin-cell-secondary { color: var(--text-secondary); font-size: 0.84rem; }
+.admin-nowrap { white-space: nowrap; }
+.admin-cell-truncate {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-cell-action { text-align: right; }
+.admin-th-action { text-align: right; }
+.admin-entity-name { color: var(--text-primary); font-weight: 500; }
+.admin-table-empty {
+  text-align: center;
+  padding: 20px !important;
+  color: var(--text-secondary);
+}
+.admin-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.admin-icon-btn--danger:hover { background: var(--danger-bg); color: var(--danger-text); }
+.admin-icon-btn:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+
+/* Loading / error states */
+.admin-loading { width: 100%; padding: 24px 0; }
+.admin-skeleton { width: 100%; max-width: 720px; gap: 16px; }
+.admin-error-state { padding: 80px 24px; text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-bar-fill,
+  .admin-status-fill { transition: none; }
+  .admin-spin { animation: none; }
+}
+
+/* ── Loading orb (thinking-orbs, 2026-09-30) — app-wide indeterminate
+      loader. Theme follows data-theme on <html> via the library's auto
+      mode; reduced motion renders a static frame (library-internal). ── */
+.loading-orb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  text-align: center;
+}
+.loading-orb--row {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 10px;
+  width: auto;
+  text-align: left;
+}
+.loading-orb--padded { padding: 48px 24px; }
+.loading-orb canvas { display: block; }
+.loading-orb-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+/* Surfaces whose background does not follow the app theme (the KG wash):
+   light label over the dark veil; the orb itself is pinned via prop. */
+.loading-orb--on-dark .loading-orb-label { color: #cbd5e1; }

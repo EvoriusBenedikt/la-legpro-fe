@@ -1,10 +1,56 @@
 <!doctype html>
-<html lang="en">
+<html lang="id">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/logoLintas-removebg-preview.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>LA Legal-Analyzer — Compliance, verified before you sign</title>
+    <script>
+      /* Pre-paint settings application: sets data-theme and
+         data-reduce-motion on <html> before the bundle loads so dark or
+         reduce-motion users never see a flash. Runtime owner:
+         src/settings.ts (settings dialog, key `la_settings`); the legacy
+         single-key `la_theme_pref` is honoured as a migration fallback. */
+      (function () {
+        var theme = 'system';
+        var reduceMotion = false;
+        var uiScale = 100;
+        var chatFont = 'default';
+        var locale = 'id';
+        var readingSpacing = 'cozy';
+        var scales = [90, 100, 110, 125, 150, 175];
+        var fonts = ['default', 'times', 'georgia', 'arial', 'verdana', 'courier'];
+        var locales = ['id', 'en'];
+        var spacings = ['compact', 'cozy', 'wide'];
+        try {
+          var raw = localStorage.getItem('la_settings');
+          if (raw) {
+            var s = JSON.parse(raw);
+            if (s && (s.theme === 'light' || s.theme === 'dark' || s.theme === 'system')) theme = s.theme;
+            if (s && typeof s.reduceMotion === 'boolean') reduceMotion = s.reduceMotion;
+            if (s && scales.indexOf(s.uiScale) !== -1) uiScale = s.uiScale;
+            if (s && fonts.indexOf(s.chatFont) !== -1) chatFont = s.chatFont;
+            if (s && locales.indexOf(s.locale) !== -1) locale = s.locale;
+            if (s && spacings.indexOf(s.readingSpacing) !== -1) readingSpacing = s.readingSpacing;
+          } else {
+            var legacy = localStorage.getItem('la_theme_pref');
+            if (legacy === 'light' || legacy === 'dark' || legacy === 'system') theme = legacy;
+          }
+        } catch (e) {
+          /* storage blocked or corrupt JSON: defaults */
+        }
+        var dark = theme === 'dark' ||
+          (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        if (reduceMotion) document.documentElement.setAttribute('data-reduce-motion', 'true');
+        document.documentElement.setAttribute('data-ui-scale', String(uiScale));
+        document.documentElement.setAttribute('data-chat-font', chatFont);
+        document.documentElement.setAttribute('data-locale', locale);
+        document.documentElement.setAttribute('data-reading-spacing', readingSpacing);
+        document.documentElement.lang = locale;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

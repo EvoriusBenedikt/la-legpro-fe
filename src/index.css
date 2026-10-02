@@ -1,7 +1,25 @@
-/* Global stylesheet entry - the cascade lives in three ordered layers.
-   Import order is load-bearing: tokens -> components -> utilities (the
+/* Global stylesheet entry - the cascade lives in four ordered layers.
+   Import order is load-bearing: tokens -> components -> theme-dark ->
+   utilities (dark-theme patches must beat component rules; the
    responsive system must win ties). Visual system of record: /DESIGN.md
    (workspace root). Split from this file in Phase 5, 2026-09-24. */
 @import './styles/tokens.css';
 @import './styles/components.css';
+@import './styles/theme-dark.css';
 @import './styles/utilities.css';
+
+/* Keyboard-focus floor (2026-09-29 critique remediation P2): every
+   focusable element gets a visible ring on keyboard-originated focus.
+   !important because several component rules set `outline: none` for
+   mouse focus and must not be able to swallow the a11y ring;
+   :focus-visible keeps mouse clicks ring-free.
+   Exception (2026-10-01 bugfix): the composer textarea. Text fields
+   match :focus-visible on plain clicks, so the floor painted a second
+   accent ring inside the composer on top of the container's
+   :focus-within chancery ring — the "inner blue ring" of the
+   2026-10-01 review. The container ring already covers mouse AND
+   keyboard focus there, so the field itself is exempt. */
+:focus-visible:not(.chat-input) {
+  outline: 2px solid var(--accent-color) !important;
+  outline-offset: 2px;
+}

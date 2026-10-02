@@ -7,7 +7,10 @@ import {
 import { useContractUpload } from '../context/ContractUploadContext';
 import ComplianceResultsViewer from './ComplianceResultsViewer';
 import ContractUploadModal from './ContractUploadModal';
+import LoadingOrb from './LoadingOrb';
 import api, { isHttpError } from '../services/api';
+import { useDateFormatters, formatDateWith } from '../format';
+import type { DateFormat } from '../settings';
 
 interface AnalyzedDocument {
   id: string;
@@ -32,7 +35,7 @@ interface ExpiryInfo {
   notifColor: string;
 }
 
-function getExpiryInfo(expiration_date: string | null): ExpiryInfo {
+function getExpiryInfo(expiration_date: string | null, fmt: DateFormat): ExpiryInfo {
   if (!expiration_date) return {
     status: 'none', label: 'Tidak terdeteksi', daysLeft: null,
     badgeColor: '#475569', badgeBg: 'rgba(100,116,139,0.15)', badgeBorder: 'rgba(100,116,139,0.3)',
@@ -42,7 +45,7 @@ function getExpiryInfo(expiration_date: string | null): ExpiryInfo {
   const now = new Date(); now.setHours(0,0,0,0);
   const exp = new Date(expiration_date); exp.setHours(0,0,0,0);
   const daysLeft = Math.ceil((exp.getTime() - now.getTime()) / 86400000);
-  const dateStr = exp.toLocaleDateString('id-ID', { day:'numeric', month:'short', year:'numeric' });
+  const dateStr = formatDateWith(fmt, exp, 'short');
 
   if (daysLeft < 0) return {
     status: 'expired', label: `Kadaluarsa ${Math.abs(daysLeft)} hari lalu`, daysLeft,
@@ -78,6 +81,7 @@ export default function ContractMonitor() {
   const [loadingViewId, setLoadingViewId] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const { jobs, subscribe } = useContractUpload();
+  const { dateFormat, formatDate } = useDateFormatters();
   const processingCount = jobs.filter(j => j.status === 'processing').length;
 
   const fetchDocs = async () => {
@@ -165,13 +169,13 @@ export default function ContractMonitor() {
 
   // Compute KPIs
   const total = documents.length;
-  const expired = documents.filter(d => { const e = getExpiryInfo(d.expiration_date); return e.status === 'expired'; }).length;
-  const expiring = documents.filter(d => { const e = getExpiryInfo(d.expiration_date); return e.status === 'warning' || e.status === 'critical'; }).length;
-  const active = documents.filter(d => { const e = getExpiryInfo(d.expiration_date); return e.status === 'active'; }).length;
+  const expired = documents.filter(d => { const e = getExpiryInfo(d.expiration_date, dateFormat); return e.status === 'expired'; }).length;
+  const expiring = documents.filter(d => { const e = getExpiryInfo(d.expiration_date, dateFormat); return e.status === 'warning' || e.status === 'critical'; }).length;
+  const active = documents.filter(d => { const e = getExpiryInfo(d.expiration_date, dateFormat); return e.status === 'active'; }).length;
 
   // Filter + search
   const filtered = documents.filter(doc => {
-    const expiry = getExpiryInfo(doc.expiration_date);
+    const expiry = getExpiryInfo(doc.expiration_date, dateFormat);
     const matchesTab = filterTab === 'all' ||
       (filterTab === 'active' && expiry.status === 'active') ||
       (filterTab === 'expiring' && (expiry.status === 'warning' || expiry.status === 'critical')) ||
@@ -273,7 +277,7 @@ export default function ContractMonitor() {
 
       {/* Document List */}
       {isLoading ? (
-        <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-secondary)' }}>Memuat dokumen...</div>
+        <LoadingOrb className="loading-orb--padded" label="Memuat dokumen..." />
       ) : filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-secondary)' }}>
           <TrendingUp size={40} style={{ opacity: 0.3, marginBottom: '12px' }} />
@@ -282,7 +286,7 @@ export default function ContractMonitor() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {filtered.map(doc => {
-            const expiry = getExpiryInfo(doc.expiration_date);
+            const expiry = getExpiryInfo(doc.expiration_date, dateFormat);
             const isViewing = viewingDoc?.id === doc.id;
             return (
               <div key={doc.id}>
@@ -310,7 +314,7 @@ export default function ContractMonitor() {
                             </span>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '5px', color: 'var(--text-secondary)', fontSize: '0.83rem' }}>
                               <Calendar size={13} />
-                              Dianalisis: {new Date(doc.created_at).toLocaleDateString('id-ID')}
+                              Dianalisis: {formatDate(doc.created_at)}
                             </span>
                           </div>
                         </div>

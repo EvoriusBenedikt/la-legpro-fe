@@ -7,6 +7,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
 
 :root {
+  color-scheme: light;   /* native controls (scrollbars, date inputs) follow the theme */
   --bg-base: #f8fafc;   /* lightest solid base surface; renamed from --bg-dark (dark-theme misnomer) 2026-09-25 */
   --bg-card: rgba(255, 255, 255, 0.9);
   --bg-element: rgba(241, 245, 249, 0.8);
@@ -28,14 +29,26 @@
   --success-text: #047857;   /* AA-hardened variant for small text on light glass */
   --warning: #F59E0B;
   --warning-bg: rgba(245, 158, 11, 0.1);
+  --warning-border: rgba(245, 158, 11, 0.3);  /* completes the semantic border trio (2026-09-30) */
   --warning-text: #92400e;   /* AA-hardened variant for small text on light glass */
   --danger: #EF4444;
   --danger-bg: rgba(239, 68, 68, 0.1);
+  --danger-border: rgba(239, 68, 68, 0.3);
   --danger-text: #b91c1c;    /* AA-hardened variant for small text on light glass */
   --info: #3B82F6;
   --info-bg: rgba(59, 130, 246, 0.1);
+
+  /* Categorical data-viz hues (admin dashboard klasifikasi bars/legends):
+     deep -700 variants on light glass per the hue-inventory rule; the dark
+     theme flips these to 300-level tints (all verified >=4.5:1 on card). */
+  --dv-cyan: #0e7490;
+  --dv-rose: #be123c;
   
-  --user-bubble: rgba(37, 99, 235, 0.15);
+  /* Single bubble surface for both sides (2026-10-01 "same textbox"
+     review): the user bubble joins the bot's white-on-card grammar —
+     sides are told apart by alignment, avatar and header, not by fill.
+     The accent tint for the user avatar disc and the avatar-picker
+     selection is --info-bg; the former --user-bubble token is retired. */
   --ai-bubble: rgba(255, 255, 255, 0.9);
   --overlay-veil: rgba(15, 23, 42, 0.55);  /* shared ink-navy veil for modal/drawer backdrops */
 
@@ -46,4 +59,62 @@
   --radius-md: 12px;
   --radius-lg: 16px;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+/* === Dark theme overrides (2026-09-29) =========================
+   Keyed off `data-theme` on <html>: applied pre-paint by the inline
+   script in index.html and at runtime by src/theme.ts (topbar settings
+   menu — Terang / Gelap / Ikuti Sistem; preference in localStorage
+   `la_theme_pref`). The light values above are the default theme.
+
+   The dark set inverts the same semantic tokens onto the Ink Navy
+   family the system already uses for veils/shadows: surfaces step up
+   as they elevate (base < card), text flips to the slate-100/400 pair,
+   and the AA-hardened verdict-text trio flips to bright 400-level
+   tints so small semantic copy keeps >=4.5:1 on dark glass.
+
+   Accent role split: --accent-color brightens to #3B82F6 for TEXT/
+   icon/ring roles (5.1:1 on the dark base). White-text button faces
+   cannot use it (3.7:1) — theme-dark.css re-pins every class-based
+   white-text face to #2563eb. Normative record: /DESIGN.md Colors. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-base: #0b1220;
+  --bg-card: rgba(23, 34, 54, 0.85);
+  --bg-element: rgba(10, 16, 30, 0.6);
+  --bg-footer: #0f172a;
+  --border-color: rgba(148, 163, 184, 0.16);
+  --border-highlight: rgba(96, 165, 250, 0.45);
+
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+
+  --accent-glow: rgba(59, 130, 230, 0.25);
+  --accent-color: #3b82f6;
+  --accent-hover: #60a5fa;
+  /* --gradient-brand intentionally unchanged: the deep-blue brand
+     gradient (auth panel, hero headers, white text) reads correctly
+     on both themes. */
+
+  --success: #10b981;
+  --success-bg: rgba(16, 185, 129, 0.14);
+  --success-border: rgba(16, 185, 129, 0.35);
+  --success-text: #34d399;
+  --warning: #f59e0b;
+  --warning-bg: rgba(245, 158, 11, 0.14);
+  --warning-border: rgba(245, 158, 11, 0.35);
+  --warning-text: #fbbf24;
+  --danger: #ef4444;
+  --danger-bg: rgba(239, 68, 68, 0.14);
+  --danger-border: rgba(239, 68, 68, 0.35);
+  --danger-text: #f87171;
+  --info: #3b82f6;
+  --info-bg: rgba(59, 130, 246, 0.14);
+  /* Data-viz hues flip to bright 300-level tints (11.3:1 / 8.6:1 on card) */
+  --dv-cyan: #67e8f9;
+  --dv-rose: #fda4af;
+
+  --ai-bubble: rgba(30, 41, 59, 0.8);
+  --overlay-veil: rgba(2, 6, 23, 0.7);
 }

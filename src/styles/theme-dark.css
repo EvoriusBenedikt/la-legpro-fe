@@ -1,0 +1,57 @@
+/* === theme-dark.css - dark-theme component patches =============
+   Token-level inversion lives in tokens.css (:root[data-theme="dark"]).
+   This file carries the class-level fixes where light-theme rules bake
+   in assumptions that don't survive the flip. Loaded after
+   components.css so these rules win ties; utilities.css (responsive)
+   still wins after it.
+
+   Why the faces are re-pinned: every white-text accent surface drops
+   to 3.7:1 on the dark --accent-color (#3b82f6, brightened for text/
+   icon roles). #2563eb measures 5.1:1 under white text and #1d4ed8
+   6.4:1, so class-based faces get the deep pair here. Known gap: TSX
+   inline styles pairing background:var(--accent-color) with white text
+   cannot be overridden from CSS — tracked in DESIGN.md "Dark Theme". */
+
+:root[data-theme="dark"] body {
+  /* Body washes strengthened: the light-theme 4% tints vanish on ink navy. */
+  background-image:
+    radial-gradient(circle at 10% 20%, rgba(59, 130, 230, 0.1) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(14, 165, 233, 0.08) 0%, transparent 40%);
+}
+
+/* White-text accent faces -> AA-safe deep blue */
+:root[data-theme="dark"] .btn-primary,
+:root[data-theme="dark"] .auth-button,
+:root[data-theme="dark"] .repo-tab.active,
+:root[data-theme="dark"] .avatar {
+  background: #2563eb;
+}
+
+:root[data-theme="dark"] .btn-primary:hover:not(:disabled),
+:root[data-theme="dark"] .auth-button:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+/* Topbar avatar disc: the light-theme accent->accent-hover gradient
+   would end at #60a5fa (2.6:1 under the white initials). */
+:root[data-theme="dark"] .avatar-small {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+/* Placeholder text: the light-theme #5c6b82 lands near 3:1 on dark
+   element glass; slate-400 restores AA (7.0:1 on the composited dark
+   --bg-element, 6.4:1 on --bg-card). App-wide, 2026-09-30 P0. */
+:root[data-theme="dark"] input::placeholder,
+:root[data-theme="dark"] textarea::placeholder,
+:root[data-theme="dark"] select::placeholder {
+  color: #94a3b8;
+}
+
+/* Deliberately untouched:
+   - .upload-btn keeps its ink-on-blue pairing: #0f172a text measures
+     4.8:1 on the dark accent (#3b82f6) and 6.9:1 on its #60a5fa hover.
+   - .sidebar-item.active::before, .deep-loading-bar-inner: non-text
+     accent fills (>=3:1 as graphical objects).
+   - .pdf-object stays #fff — it is PDF paper, not chrome.
+   - .skeleton-line / scrollbar thumbs use slate rgba tints that read
+     correctly on both themes. */

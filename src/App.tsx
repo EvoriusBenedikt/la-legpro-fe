@@ -1,9 +1,10 @@
-import React, { Suspense, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Auth from './components/Auth';
 import TopBar from './components/TopBar';
 import Footer from './components/Footer';
+import LoadingOrb from './components/LoadingOrb';
 import { useAuth } from './context/AuthContext';
 import './index.css';
 
@@ -22,6 +23,19 @@ function App() {
   const { isAuthenticated, user } = useAuth();
   const role = user?.role?.toLowerCase() || '';
   const [navOpen, setNavOpen] = useState(false);
+  const location = useLocation();
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  // Reset the shared route scroller on every navigation. The
+  // .tab-panel--active element persists across route swaps, so without
+  // this the previous page's scrollTop carries into the new route and
+  // gets clamped to the new content's max — on Legal Opinion that lands
+  // on the footer band, so the page opened at the bottom instead of the
+  // top (bug 2026-09-29). Pathname-only dep: query-string updates
+  // (repository filters) must not yank the scroll.
+  useEffect(() => {
+    scrollerRef.current?.scrollTo({ top: 0 });
+  }, [location.pathname]);
   const isITAdmin = role === 'admin';
   const isSekretaris = role === 'sekretaris perusahaan';
   const isEngineer = role === 'insinyur ti';
@@ -42,18 +56,19 @@ function App() {
     <div className="layout-container dashboard-main">
       <TopBar onMenu={() => setNavOpen(true)} />
       <div className="dashboard-content-row">
-        <Sidebar mobileOpen={navOpen} onClose={() => setNavOpen(false)} />
+        <Sidebar
+          mobileOpen={navOpen}
+          onClose={() => setNavOpen(false)}
+        />
 
         <div className="dashboard-center">
           <div className="main-content" style={{ padding: 0 }}>
             <Suspense fallback={
               <div style={{ padding: '24px' }}>
-                <div className="skeleton" style={{ height: '40px', width: '30%', marginBottom: '24px' }} />
-                <div className="skeleton" style={{ height: '200px', width: '100%', marginBottom: '16px' }} />
-                <div className="skeleton" style={{ height: '200px', width: '100%' }} />
+                <LoadingOrb label="Memuat..." />
               </div>
             }>
-            <div className="tab-panel--active">
+            <div className="tab-panel--active" ref={scrollerRef}>
               <div className="route-inset">
                 <Routes>
                   {/* Role-based default redirects */}

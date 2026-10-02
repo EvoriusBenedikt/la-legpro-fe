@@ -1,5 +1,6 @@
 import { AlertCircle, CheckCircle, AlertTriangle, XCircle, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import { useDateFormatters } from '../format';
 
 // Shared interfaces
 export interface SupportingRegulation {
@@ -41,6 +42,8 @@ interface ComplianceResultsViewerProps {
 }
 
 export default function ComplianceResultsViewer({ filename, summary, results, headerActions }: ComplianceResultsViewerProps) {
+  // Hook must run before the early return below (rules of hooks).
+  const { formatDate } = useDateFormatters();
   if (!results) return null;
 
   const getStatusIcon = (status: string) => {
@@ -90,7 +93,7 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
               <span className="summary-tag">{summary.jenis_dokumen}</span>
               <span className="summary-tag">{summary.sektor_bisnis}</span>
               <span className="summary-tag" style={{ background: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger-text)', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                Kadaluarsa: {summary.tanggal_berakhir ? new Date(summary.tanggal_berakhir).toLocaleDateString('id-ID', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Tidak terdeteksi'}
+                Kadaluarsa: {summary.tanggal_berakhir ? formatDate(summary.tanggal_berakhir, 'short') : 'Tidak terdeteksi'}
               </span>
             </div>
             <p className="compliance-summary-parties" style={{ fontSize: '1.1rem', marginTop: '8px' }}>

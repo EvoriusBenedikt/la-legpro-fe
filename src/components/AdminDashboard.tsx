@@ -1,86 +1,202 @@
-import React from 'react';
-import { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Shield, Database, FileText, AlertTriangle, CheckCircle2,
-  Clock, Users, Activity, Server, Eye, Lock, XCircle, RefreshCw
+  Clock, Users, Server, Eye, Lock, XCircle, RefreshCw,
+  X, Trash2, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import api, { isHttpError } from '../services/api';
+import { useDateFormatters } from '../format';
+import { useAuth } from '../context/AuthContext';
+import LoadingOrb from './LoadingOrb';
+
+interface StatusDoc {
+  id: number;
+  judul: string;
+  nomor: string | null;
+  status: string;
+}
+
+interface AuditLog {
+  id: number;
+  timestamp: string;
+  user_id: string;
+  action_type: string;
+  resource_id: string;
+  details: string;
+}
 
 interface DashboardData {
   doc_status: Record<string, number>;
   doc_by_klasifikasi: Record<string, number>;
   doc_by_jenis: { jenis: string; count: number }[];
   active_grants: number;
-  audit_logs: {
-    id: number;
-    timestamp: string;
-    user_id: string;
-    action_type: string;
-    resource_id: string;
-    details: string;
-  }[];
-  system_health: {
-    sqlite: boolean;
-    chromadb: boolean;
-  };
-  doc_details?: Record<string, any[]>;
+  audit_logs: AuditLog[];
+  /** Legacy key names ("sqlite"/"chromadb") are a frozen API contract;
+      both have probed PostgreSQL since Migration M3. */
+  system_health: { sqlite: boolean; chromadb: boolean };
+  doc_details?: Record<string, StatusDoc[]>;
 }
 
-const ACTION_COLORS: Record<string, string> = {
-  SEARCH: '#0369a1',
-  GRANT_ACCESS: '#7e22ce',
-  REVOKE_ACCESS: '#be123c',
-  UPLOAD: '#155e75',
-  DEFAULT: '#475569',
+interface Exclusion {
+  id: number;
+  entity_name: string;
+  created_at: string;
+}
+
+type Tone = 'success' | 'warning' | 'danger';
+
+interface StatusCardProps {
+  label: string;
+  value: number;
+  tone: Tone;
+  icon: React.ReactNode;
+  docs: StatusDoc[];
+  totalDocs: number;
+}
+
+interface ConfirmState {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+}
+
+/** Must match DOC_DETAILS_LIMIT in la-legpro-be/api/routers/admin.py. */
+const DOC_DETAILS_LIMIT = 100;
+const AUDIT_PAGE_SIZE = 20;
+
+/** Audit actions on the documented status-chip vocabulary: revoke and
+    document-delete ride the "revoked" red, upload the "new" sky, grant
+    the success green; anything else stays neutral (the triad hues
+    otherwise encode legal status only). Inventory: the backend logs
+    SEARCH, GRANT_ACCESS, REVOKE_ACCESS, DELETE_DOCUMENT literals
+    (db_service.log_audit call sites); UPLOAD survives in migrated legacy
+    rows. Replaces the hardcoded #7e22ce/#be123c map — forbidden purple,
+    rose double duty with "Terbatas", and 1.98:1 in dark theme. */
+const ACTION_CHIP: Record<string, string> = {
+  SEARCH: 'status-chip--neutral',
+  UPLOAD: 'status-chip--new',
+  GRANT_ACCESS: 'status-chip--success',
+  REVOKE_ACCESS: 'status-chip--revoked',
+  DELETE_DOCUMENT: 'status-chip--revoked',
 };
 
-const KLASIFIKASI_COLORS: Record<string, string> = {
-  Umum: '#0e7490',
-  Rahasia: '#92400e',
-  Terbatas: '#be123c',
+/** Klasifikasi legend/bar hues via theme-aware tokens: deep -700 variants
+    on light glass, 300-level tints in dark (tokens.css). Rahasia reuses
+    --warning-text (the same deep amber, flips automatically). */
+const KLASIFIKASI_COLOR: Record<string, string> = {
+  Umum: 'var(--dv-cyan)',
+  Rahasia: 'var(--warning-text)',
+  Terbatas: 'var(--dv-rose)',
 };
+const FALLBACK_COLOR = 'var(--text-secondary)';
 
+const StatusCard = ({ label, value, tone, icon, docs, totalDocs }: StatusCardProps) => {
+  const [search, setSearch] = useState('');
+  const inputId = `admin-card-search-${label.toLowerCase().replace(/\s+/g, '-')}`;
+  const q = search.trim().toLowerCase();
 
-const StatusCard = ({ label, value, icon, color, totalDocs, docs = [] }: any) => {
-  const [search, setSearch] = React.useState("");
+  const filteredDocs = q
+    ? docs.filter(d =>
+        (d.judul || '').toLowerCase().includes(q) ||
+        (d.nomor || '').toLowerCase().includes(q))
+    : docs;
 
-  const filteredDocs = docs.filter((d: any) => 
-    d.judul.toLowerCase().includes(search.toLowerCase()) || 
-    (d.nomor && d.nomor.toLowerCase().includes(search.toLowerCase()))
-  );
+  const pct = totalDocs > 0 ? Math.min(1, value / totalDocs) : 0;
+  const capped = value > docs.length;
+  const meta = q
+    ? `${filteredDocs.length} cocok dari ${Math.min(docs.length, DOC_DETAILS_LIMIT)} dokumen dimuat`
+    : capped
+      ? `Menampilkan ${docs.length} pertama dari ${value} dokumen`
+      : `${value} dokumen`;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-card)', borderRadius: '14px', border: `1px solid ${color}33`, overflow: 'hidden', height: '100%' }}>
-      <div style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color }}>
-            {icon}
-            <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{label}</span>
-          </div>
+    <div className={`admin-status-card admin-status-card--${tone}`}>
+      <div className="admin-status-body">
+        <div className="admin-status-head">
+          <span aria-hidden="true">{icon}</span>
+          <span className="admin-status-label">{label}</span>
         </div>
-        <div style={{ fontSize: '2rem', fontWeight: 800, color, marginTop: '12px' }}>{value}</div>
-        <div style={{ height: '4px', background: `${color}22`, borderRadius: '2px', marginTop: '12px' }}>
-          <div style={{ height: '100%', borderRadius: '2px', background: color, width: totalDocs > 0 ? `${Math.min(100, (value / totalDocs) * 100)}%` : '0%' }}></div>
+        <div className="admin-status-value">{value}</div>
+        <div className="admin-status-track" aria-hidden="true">
+          <div className="admin-status-fill" style={{ transform: `scaleX(${pct})` }} />
         </div>
       </div>
-      
-      <div style={{ padding: '0 24px 24px', borderTop: `1px solid ${color}22`, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-        <input 
-          type="text" 
-          placeholder={`Cari regulasi ${label.toLowerCase()}...`}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ width: '100%', padding: '8px 12px', background: 'var(--bg-element)', border: `1px solid ${color}55`, borderRadius: '6px', color: 'var(--text-primary)', marginTop: '16px', marginBottom: '12px', fontSize: '0.85rem' }}
-        />
-        <div className="custom-scrollbar" style={{ maxHeight: '200px', flexGrow: 1, overflowY: 'auto' }}>
-          {filteredDocs.length > 0 ? filteredDocs.map((d: any, i: number) => (
-            <div key={i} style={{ padding: '8px 0', borderBottom: i < filteredDocs.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 500, lineHeight: '1.4' }}>{d.judul}</div>
-              {d.nomor && <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{d.nomor}</div>}
-            </div>
-          )) : (
-            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center', padding: '10px 0' }}>Tidak ada dokumen ditemukan</div>
+      <div className="admin-status-browser">
+        <div className="admin-card-search">
+          <label htmlFor={inputId} className="visually-hidden">Cari regulasi berstatus {label}</label>
+          <input
+            id={inputId}
+            type="text"
+            placeholder={`Cari regulasi ${label.toLowerCase()}...`}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          {search && (
+            <button
+              type="button"
+              className="admin-search-clear"
+              onClick={() => setSearch('')}
+              aria-label={`Bersihkan pencarian regulasi ${label.toLowerCase()}`}
+            >
+              <X size={14} />
+            </button>
           )}
+        </div>
+        <div className="admin-doc-list">
+          {filteredDocs.length > 0 ? (
+            filteredDocs.map(d => (
+              <div key={d.id} className="admin-doc-item">
+                <div className="admin-doc-title">{d.judul}</div>
+                {d.nomor && <div className="admin-doc-nomor">{d.nomor}</div>}
+              </div>
+            ))
+          ) : (
+            <p className="admin-list-empty">
+              {q ? `Tidak ada dokumen yang cocok dengan "${search.trim()}".` : 'Belum ada dokumen.'}
+            </p>
+          )}
+        </div>
+        <p className="admin-list-meta">{meta}</p>
+      </div>
+    </div>
+  );
+};
+
+/** System-consistent confirmation dialog (mirrors LegalOpinion's AppDialog
+    pattern): replaces window.confirm for the destructive FR-30 actions. */
+const ConfirmDialog = ({ state, onClose }: { state: ConfirmState; onClose: () => void }) => {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    cancelRef.current?.focus();
+  }, [state]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="modal-overlay"
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="admin-confirm-title">
+        <h3 className="confirm-modal-title" id="admin-confirm-title">{state.title}</h3>
+        <p className="confirm-modal-body">{state.body}</p>
+        <div className="confirm-modal-actions">
+          <button ref={cancelRef} type="button" className="btn btn-secondary" onClick={onClose}>
+            Batal
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={() => { state.onConfirm(); onClose(); }}
+          >
+            {state.confirmLabel}
+          </button>
         </div>
       </div>
     </div>
@@ -88,375 +204,532 @@ const StatusCard = ({ label, value, icon, color, totalDocs, docs = [] }: any) =>
 };
 
 export default function AdminDashboard() {
+  const { formatDateTime, formatTime } = useDateFormatters();
+  const { user } = useAuth();
+
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lastRefresh, setLastRefresh] = useState(new Date());
-  
-  const [exclusions, setExclusions] = useState<{id: number; entity_name: string; created_at: string}[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+
+  const [exclusions, setExclusions] = useState<Exclusion[]>([]);
+  const [exclusionsError, setExclusionsError] = useState(false);
   const [newExclusion, setNewExclusion] = useState('');
   const [addingExclusion, setAddingExclusion] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const feedbackTimer = useRef<number | undefined>(undefined);
 
-  const fetchDashboard = async () => {
-    setLoading(true);
-    try {
-      // Per-call catch: a failing endpoint still lets the other one load
-      const res = await api.get('/api/admin/dashboard').catch(() => null);
-      if (res) {
-        setData(res.data);
-        setLastRefresh(new Date());
-      }
-      
-      const excRes = await api.get('/api/admin/kg-exclusions').catch(() => null);
-      if (excRes) {
-        setExclusions(excRes.data.exclusions);
-      }
-    } catch (e) {
-      console.error('Admin dashboard fetch error:', e);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditAction, setAuditAction] = useState('');
+  const [auditPage, setAuditPage] = useState(0);
 
-  useEffect(() => {
-    fetchDashboard();
+  const showFeedback = useCallback((kind: 'success' | 'error', text: string) => {
+    window.clearTimeout(feedbackTimer.current);
+    setFeedback({ kind, text });
+    feedbackTimer.current = window.setTimeout(() => setFeedback(null), 8000);
   }, []);
 
-  const handleAddExclusion = async () => {
-    if (!newExclusion.trim()) return;
+  useEffect(() => () => window.clearTimeout(feedbackTimer.current), []);
+
+  /** Refresh never blanks the page: the skeleton shows only while data is
+      null; later pulls keep the (stale) view, spin the hero button, and
+      surface failures as an inline alert instead of a content vacuum. */
+  const runFetch = useCallback(async () => {
+    // Per-call catch: a failing endpoint still lets the other one load
+    const res = await api.get('/api/admin/dashboard').catch((e) => { console.error('Dashboard fetch error:', e); return null; });
+    if (res) {
+      setData(res.data);
+      setLastRefresh(new Date());
+      setLoadError(null);
+    } else {
+      setLoadError('Gagal memuat statistik dashboard.');
+    }
+
+    const excRes = await api.get('/api/admin/kg-exclusions').catch((e) => { console.error('KG exclusions fetch error:', e); return null; });
+    if (excRes) {
+      setExclusions(excRes.data.exclusions);
+      setExclusionsError(false);
+    } else {
+      setExclusionsError(true);
+    }
+  }, []);
+
+  /** Event-handler entry point (refresh button, retries, post-mutation):
+      flips the busy flags around the fetch. */
+  const fetchAll = useCallback(async (isRefresh: boolean) => {
+    if (isRefresh) setRefreshing(true); else setLoading(true);
+    try {
+      await runFetch();
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [runFetch]);
+
+  useEffect(() => {
+    // Initial load: `loading` already starts true, so the effect needs no
+    // synchronous setState (react-hooks/set-state-in-effect) — the async
+    // block clears the flag once the fetch settles.
+    (async () => {
+      try { await runFetch(); } finally { setLoading(false); }
+    })();
+  }, [runFetch]);
+
+  const addExclusion = async (name: string) => {
     setAddingExclusion(true);
     try {
-      await api.post('/api/admin/kg-exclusions', { entity_name: newExclusion });
+      const res = await api.post('/api/admin/kg-exclusions', { entity_name: name });
+      const deletedNodes: number = res.data?.deleted_nodes ?? 0;
+      const deletedEdges: number = res.data?.deleted_edges ?? 0;
       setNewExclusion('');
-      fetchDashboard();
+      // FR-30 deletes matching KG nodes/edges server-side; report exactly
+      // what was destroyed instead of a silent success (backend returns
+      // the counts, admin.py POST /kg-exclusions).
+      showFeedback('success', deletedNodes + deletedEdges > 0
+        ? `Pengecualian "${name}" ditambahkan — ${deletedNodes} node dan ${deletedEdges} relasi dihapus dari Knowledge Graph.`
+        : `Pengecualian "${name}" ditambahkan. Tidak ada node atau relasi yang cocok untuk dihapus.`);
+      await fetchAll(true);
     } catch (e) {
-      if (isHttpError(e)) {
-        alert(e.response.data?.detail || 'Gagal menambahkan pengecualian');
-      } else {
-        console.error(e);
-      }
+      const detail = isHttpError(e) ? (e.response.data?.detail as string | undefined) : undefined;
+      showFeedback('error', detail === 'Entity already in exclusion list'
+        ? `"${name}" sudah ada dalam daftar pengecualian.`
+        : `Gagal menambahkan pengecualian${detail ? `: ${detail}` : '.'}`);
+      console.error('Add exclusion error:', e);
     } finally {
       setAddingExclusion(false);
     }
   };
 
-  const handleDeleteExclusion = async (id: number) => {
-    if (!confirm('Hapus pengecualian ini?')) return;
+  const requestAddExclusion = () => {
+    const name = newExclusion.trim();
+    if (!name || addingExclusion) return;
+    // Adding is destructive: matching nodes/edges are deleted immediately.
+    setConfirmState({
+      title: 'Kecualikan entitas dari Knowledge Graph?',
+      body: `Node dan relasi yang cocok dengan "${name}" akan dihapus dari graf. Tindakan ini tidak dapat dibatalkan.`,
+      confirmLabel: 'Kecualikan Entitas',
+      onConfirm: () => { void addExclusion(name); },
+    });
+  };
+
+  const deleteExclusion = async (exc: Exclusion) => {
     try {
-      await api.delete(`/api/admin/kg-exclusions/${id}`);
-      fetchDashboard();
+      await api.delete(`/api/admin/kg-exclusions/${exc.id}`);
+      showFeedback('success', `Pengecualian "${exc.entity_name}" dihapus.`);
+      await fetchAll(true);
     } catch (e) {
-      console.error(e);
+      showFeedback('error', `Gagal menghapus pengecualian "${exc.entity_name}".`);
+      console.error('Delete exclusion error:', e);
     }
   };
 
-  const totalDocs = data ? Object.values(data.doc_status).reduce((a: any, b: any) => a + b, 0) : 0;
-  const berlakuDocs = data?.doc_status['Berlaku'] ?? 0;
-  const tidakBerlakuDocs = data?.doc_status['Tidak Berlaku'] ?? 0;
-  const memproseDocs = data?.doc_status['Memproses'] ?? 0;
-  const failedDocs = data?.doc_status['Gagal'] ?? 0;
-  
-  const docDetails = data?.doc_details || {};
-    
+  const requestDeleteExclusion = (exc: Exclusion) => {
+    setConfirmState({
+      title: 'Hapus pengecualian?',
+      body: `"${exc.entity_name}" akan dihapus dari daftar pengecualian. Node dan relasi yang sudah dihapus tidak dipulihkan otomatis — entitas ini baru terekstraksi kembali saat dokumen diproses ulang.`,
+      confirmLabel: 'Hapus Pengecualian',
+      onConfirm: () => { void deleteExclusion(exc); },
+    });
+  };
+
+  const totalDocs = data ? Object.values(data.doc_status).reduce((a, b) => a + b, 0) : 0;
+  const docDetails = data?.doc_details ?? {};
   const maxJenisCount = data?.doc_by_jenis?.length ? Math.max(...data.doc_by_jenis.map(d => d.count)) : 1;
 
+  // "Tidak Berlaku" rides the danger tone for Fixed-Vocabulary parity with
+  // the repository's statusTone (LegalRepository.tsx); icon + label keep it
+  // distinct from "Gagal".
+  const statusCards: StatusCardProps[] = data ? [
+    { label: 'Berlaku', value: data.doc_status['Berlaku'] ?? 0, tone: 'success', icon: <CheckCircle2 size={20} />, docs: docDetails['Berlaku'] ?? [], totalDocs },
+    { label: 'Tidak Berlaku', value: data.doc_status['Tidak Berlaku'] ?? 0, tone: 'danger', icon: <XCircle size={20} />, docs: docDetails['Tidak Berlaku'] ?? [], totalDocs },
+    { label: 'Memproses', value: data.doc_status['Memproses'] ?? 0, tone: 'warning', icon: <Clock size={20} />, docs: docDetails['Memproses'] ?? [], totalDocs },
+    { label: 'Gagal', value: data.doc_status['Gagal'] ?? 0, tone: 'danger', icon: <AlertTriangle size={20} />, docs: docDetails['Gagal'] ?? [], totalDocs },
+  ] : [];
+
+  const auditLogs = useMemo(() => data?.audit_logs ?? [], [data]);
+  const auditActionTypes = useMemo(
+    () => Array.from(new Set(auditLogs.map(l => l.action_type))).sort(),
+    [auditLogs],
+  );
+  const filteredAudit = useMemo(() => {
+    const q = auditSearch.trim().toLowerCase();
+    return auditLogs.filter(l =>
+      (!auditAction || l.action_type === auditAction) &&
+      (!q ||
+        (l.user_id || '').toLowerCase().includes(q) ||
+        (l.resource_id || '').toLowerCase().includes(q) ||
+        (l.details || '').toLowerCase().includes(q)));
+  }, [auditLogs, auditSearch, auditAction]);
+  const pageCount = Math.max(1, Math.ceil(filteredAudit.length / AUDIT_PAGE_SIZE));
+  const safePage = Math.min(auditPage, pageCount - 1);
+  const pageRows = filteredAudit.slice(safePage * AUDIT_PAGE_SIZE, (safePage + 1) * AUDIT_PAGE_SIZE);
+  const rangeLabel = filteredAudit.length === 0
+    ? '0 entri'
+    : `${safePage * AUDIT_PAGE_SIZE + 1}\u2013${Math.min((safePage + 1) * AUDIT_PAGE_SIZE, filteredAudit.length)} dari ${filteredAudit.length}`;
+
+  const isSekretaris = (user?.role || '').toLowerCase() === 'sekretaris perusahaan';
+  const heroSubtitle = isSekretaris
+    ? 'Statistik operasional dan kesehatan sistem untuk corpus regulasi Anda.'
+    : 'Statistik operasional dan kesehatan sistem — akses admin terbatas pada metadata, konten dokumen tidak ditampilkan.';
+
   return (
-    <div style={{ padding: '0 0 48px', maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{
-        background: 'linear-gradient(135deg, rgba(168,85,247,0.15), rgba(56,189,248,0.1))',
-        borderRadius: '20px',
-        padding: '32px',
-        marginBottom: '28px',
-        border: '1px solid rgba(168,85,247,0.2)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '16px',
-      }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-            <div style={{
-              background: 'var(--gradient-brand)',
-              borderRadius: '12px', padding: '10px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Shield size={24} color="white" />
+    <div className="view-container admin-view">
+      {/* Hero — the shared navy brand surface (.hero-banner), not a
+          one-off gradient (the old purple tint violated DESIGN.md's
+          forbidden-hue rule). */}
+      <div className="hero-banner">
+        <div className="hero-content admin-hero-row">
+          <div>
+            <div className="hero-title-row">
+              <span className="hero-icon-tile" aria-hidden="true">
+                <Shield size={22} strokeWidth={1.75} />
+              </span>
+              <h1>Admin Dashboard</h1>
             </div>
-            <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-              Admin Dashboard
-            </h1>
+            <p>{heroSubtitle}</p>
           </div>
-          <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-            Monitoring sistem & statistik operasional — Anda tidak memiliki akses ke konten dokumen
-          </p>
+          <button
+            type="button"
+            className="btn-hero"
+            onClick={() => fetchAll(true)}
+            disabled={loading || refreshing}
+          >
+            <RefreshCw size={15} className={refreshing ? 'admin-spin' : undefined} aria-hidden="true" />
+            {lastRefresh ? `Refresh (${formatTime(lastRefresh)})` : 'Refresh'}
+          </button>
         </div>
-        <button
-          onClick={fetchDashboard}
-          style={{
-            background: 'var(--accent-glow)', border: '1px solid var(--border-highlight)',
-            color: 'var(--accent-hover)', borderRadius: '10px', padding: '10px 20px',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
-            fontSize: '0.9rem', fontWeight: 500,
-          }}
-        >
-          <RefreshCw size={16} />
-          Refresh ({lastRefresh.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })})
-        </button>
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '80px', color: 'var(--text-secondary)' }}>
-          <Activity size={40} style={{ marginBottom: '16px', opacity: 0.5, display: 'block', margin: '0 auto 16px' }} />
-          Memuat data dashboard...
-        </div>
+        <LoadingOrb className="loading-orb--padded" label="Memuat data dashboard..." />
       ) : !data ? (
-        <div style={{ textAlign: 'center', padding: '80px', color: 'var(--danger-text)' }}>
-          Gagal memuat data dashboard.
+        <div className="empty-state admin-error-state" role="alert">
+          <AlertTriangle size={40} color="var(--danger-text)" aria-hidden="true" />
+          <p>{loadError ?? 'Gagal memuat data dashboard.'}</p>
+          <button type="button" className="btn btn-primary" onClick={() => fetchAll(false)}>
+            Coba lagi
+          </button>
         </div>
       ) : (
         <>
-          {/* System Health */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+          {loadError && (
+            <div className="admin-feedback admin-feedback--error" role="alert">
+              <AlertTriangle size={16} aria-hidden="true" />
+              Gagal memuat data terbaru{lastRefresh ? ` — menampilkan data per ${formatTime(lastRefresh)}` : ''}.
+              <button type="button" className="btn btn-secondary admin-feedback-retry" onClick={() => fetchAll(true)}>
+                Coba lagi
+              </button>
+            </div>
+          )}
+
+          {/* System health + counters */}
+          <div className="admin-health-grid">
             {[
               { label: 'PostgreSQL Database', ok: data.system_health.sqlite, icon: <Database size={18} /> },
               { label: 'PGVector', ok: data.system_health.chromadb, icon: <Server size={18} /> },
             ].map(item => (
-              <div key={item.label} style={{
-                background: 'var(--bg-card)', borderRadius: '14px', padding: '20px',
-                border: `1px solid ${item.ok ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`,
-                display: 'flex', alignItems: 'center', gap: '12px',
-              }}>
-                <div style={{ color: item.ok ? 'var(--success-text)' : 'var(--danger-text)' }}>{item.icon}</div>
+              <div key={item.label} className={`admin-health-tile admin-health-tile--${item.ok ? 'ok' : 'down'}`}>
+                <span className={`admin-health-icon ${item.ok ? 'ok' : 'down'}`} aria-hidden="true">{item.icon}</span>
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{item.label}</div>
-                  <div style={{ fontWeight: 600, color: item.ok ? 'var(--success-text)' : 'var(--danger-text)', fontSize: '0.9rem' }}>
+                  <div className="admin-tile-label">{item.label}</div>
+                  <div className={`admin-tile-value ${item.ok ? 'ok' : 'down'}`}>
                     {item.ok ? '● Online' : '● Offline'}
                   </div>
                 </div>
               </div>
             ))}
 
-            <div style={{
-              background: 'var(--bg-card)', borderRadius: '14px', padding: '20px',
-              border: '1px solid var(--border-highlight)',
-              display: 'flex', alignItems: 'center', gap: '12px',
-            }}>
-              <Users size={18} color="var(--accent-color)" />
+            <div className="admin-health-tile">
+              <span className="admin-health-icon accent" aria-hidden="true"><Users size={18} /></span>
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Pemberian Akses Aktif</div>
-                <div style={{ fontWeight: 700, color: 'var(--accent-hover)', fontSize: '1.2rem' }}>{data.active_grants}</div>
+                <div className="admin-tile-label">Pemberian Akses Aktif</div>
+                <div className="admin-tile-value accent">{data.active_grants}</div>
               </div>
             </div>
 
-            <div style={{
-              background: 'var(--bg-card)', borderRadius: '14px', padding: '20px',
-              border: '1px solid var(--border-highlight)',
-              display: 'flex', alignItems: 'center', gap: '12px',
-            }}>
-              <FileText size={18} color="var(--accent-color)" />
+            <div className="admin-health-tile">
+              <span className="admin-health-icon accent" aria-hidden="true"><FileText size={18} /></span>
               <div>
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Total Dokumen</div>
-                <div style={{ fontWeight: 700, color: 'var(--accent-hover)', fontSize: '1.2rem' }}>{totalDocs}</div>
+                <div className="admin-tile-label">Total Dokumen</div>
+                <div className="admin-tile-value accent">{totalDocs}</div>
               </div>
             </div>
           </div>
 
-          {/* Doc Status Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '24px', alignItems: 'stretch' }}>
-            {[
-              { label: 'Berlaku', value: berlakuDocs, icon: <CheckCircle2 size={20} />, color: '#047857', docs: docDetails['Berlaku'] || [] },
-              { label: 'Tidak Berlaku', value: tidakBerlakuDocs, icon: <XCircle size={20} />, color: '#64748b', docs: docDetails['Tidak Berlaku'] || [] },
-              { label: 'Memproses', value: memproseDocs, icon: <Clock size={20} />, color: '#92400e', docs: docDetails['Memproses'] || [] },
-              { label: 'Gagal', value: failedDocs, icon: <AlertTriangle size={20} />, color: '#b91c1c', docs: docDetails['Gagal'] || [] },
-            ].map(card => (
-              <StatusCard key={card.label} {...card} totalDocs={totalDocs} />
+          {/* Document status cards with per-status browsers */}
+          <div className="admin-status-grid">
+            {statusCards.map(card => (
+              <StatusCard key={card.label} {...card} />
             ))}
           </div>
 
           {/* Volume by Klasifikasi & Jenis */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
-            {/* By Klasifikasi */}
-            <div style={{ background: 'var(--bg-card)', borderRadius: '16px', padding: '24px', border: '1px solid var(--border-color)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                <Lock size={18} color="var(--accent-color)" />
-                <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)' }}>Volume per Klasifikasi</h3>
+          <div className="admin-panels-2col">
+            <section className="admin-panel" aria-labelledby="admin-klas-title">
+              <div className="admin-panel-head">
+                <h3 className="admin-panel-title" id="admin-klas-title">
+                  <Lock size={18} color="var(--accent-color)" aria-hidden="true" />
+                  Volume per Klasifikasi
+                </h3>
               </div>
-              {Object.entries(data.doc_by_klasifikasi).map(([klas, count]) => (
-                <div key={klas} style={{ marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: KLASIFIKASI_COLORS[klas] ?? '#64748b', display: 'inline-block' }} />
-                      {klas}
-                    </span>
-                    <span style={{ fontWeight: 600, color: KLASIFIKASI_COLORS[klas] ?? 'var(--text-primary)' }}>{count}</span>
+              <p className="admin-panel-hint">Porsi terhadap total {totalDocs} dokumen.</p>
+              {Object.entries(data.doc_by_klasifikasi).map(([klas, count]) => {
+                const color = KLASIFIKASI_COLOR[klas] ?? FALLBACK_COLOR;
+                return (
+                  <div key={klas} className="admin-bar-row">
+                    <div className="admin-bar-head">
+                      <span className="admin-bar-label">
+                        <span className="admin-legend-dot" style={{ background: color }} aria-hidden="true" />
+                        <span className="admin-bar-name" title={klas}>{klas}</span>
+                      </span>
+                      <span className="admin-bar-count" style={{ color }}>{count}</span>
+                    </div>
+                    <div className="admin-bar-track" aria-hidden="true">
+                      <div
+                        className="admin-bar-fill"
+                        style={{ background: color, transform: `scaleX(${totalDocs > 0 ? count / totalDocs : 0})` }}
+                      />
+                    </div>
                   </div>
-                  <div style={{ height: '6px', background: 'var(--bg-element)', borderRadius: '3px' }}>
-                    <div style={{
-                      height: '100%', borderRadius: '3px',
-                      background: KLASIFIKASI_COLORS[klas] ?? '#64748b',
-                      width: totalDocs > 0 ? `${(count / totalDocs) * 100}%` : '0%',
-                      transition: 'width 0.8s ease',
-                    }} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {Object.keys(data.doc_by_klasifikasi).length === 0 && (
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', margin: 0 }}>Tidak ada data</p>
+                <p className="admin-list-empty">Tidak ada data</p>
               )}
-            </div>
+            </section>
 
-            {/* By Jenis */}
-            <div style={{ background: 'var(--bg-card)', borderRadius: '16px', padding: '24px', border: '1px solid var(--border-color)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                <FileText size={18} color="var(--accent-color)" />
-                <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)' }}>Volume per Jenis</h3>
+            <section className="admin-panel" aria-labelledby="admin-jenis-title">
+              <div className="admin-panel-head">
+                <h3 className="admin-panel-title" id="admin-jenis-title">
+                  <FileText size={18} color="var(--accent-color)" aria-hidden="true" />
+                  Volume per Jenis
+                </h3>
               </div>
+              <p className="admin-panel-hint">10 jenis teratas — panjang batang relatif terhadap jenis terbanyak.</p>
               {data.doc_by_jenis.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Tidak ada data</p>
+                <p className="admin-list-empty">Tidak ada data</p>
               ) : (
                 data.doc_by_jenis.map(item => (
-                  <div key={item.jenis} style={{ marginBottom: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', flex: 1, marginRight: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {item.jenis || 'Tidak Diketahui'}
+                  <div key={item.jenis || 'Tidak Diketahui'} className="admin-bar-row">
+                    <div className="admin-bar-head">
+                      <span className="admin-bar-label">
+                        <span className="admin-bar-name" title={item.jenis || 'Tidak Diketahui'}>
+                          {item.jenis || 'Tidak Diketahui'}
+                        </span>
                       </span>
-                      <span style={{
-                        color: 'var(--accent-hover)', fontSize: '0.85rem', fontWeight: 600,
-                      }}>{item.count}</span>
+                      <span className="admin-bar-count" style={{ color: 'var(--accent-hover)' }}>{item.count}</span>
                     </div>
-                    <div style={{ height: '6px', background: 'var(--bg-element)', borderRadius: '3px' }}>
-                      <div style={{
-                        height: '100%', borderRadius: '3px',
-                        background: 'var(--accent-color)',
-                        width: maxJenisCount > 0 ? `${(item.count / maxJenisCount) * 100}%` : '0%',
-                        transition: 'width 0.8s ease',
-                      }} />
+                    <div className="admin-bar-track" aria-hidden="true">
+                      <div
+                        className="admin-bar-fill"
+                        style={{ background: 'var(--accent-color)', transform: `scaleX(${maxJenisCount > 0 ? item.count / maxJenisCount : 0})` }}
+                      />
                     </div>
                   </div>
                 ))
               )}
-            </div>
+            </section>
           </div>
 
-          {/* FR-30: KG Exclusions */}
-          <div style={{ background: 'var(--bg-card)', borderRadius: '16px', padding: '24px', border: '1px solid var(--border-color)', marginBottom: '24px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-              <Shield size={18} color="var(--danger)" />
-              <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)' }}>Pengecualian Entitas Knowledge Graph (FR-30)</h3>
+          {/* FR-30: KG entity exclusions */}
+          <section className="admin-panel" aria-labelledby="admin-kg-title">
+            <div className="admin-panel-head">
+              <h3 className="admin-panel-title" id="admin-kg-title">
+                <Shield size={18} color="var(--danger)" aria-hidden="true" />
+                Pengecualian Entitas Knowledge Graph
+              </h3>
             </div>
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+            <p className="admin-panel-hint">
+              Entitas yang dikecualikan tidak diekstraksi ke dalam Knowledge Graph.
+              Menambahkan pengecualian akan menghapus node dan relasi entitas tersebut
+              yang sudah ada — tindakan ini tidak dapat dibatalkan.
+            </p>
+
+            <div className="admin-exclusion-form">
+              <label htmlFor="admin-new-exclusion" className="visually-hidden">Nama entitas untuk dikecualikan</label>
               <input
+                id="admin-new-exclusion"
+                className="admin-input"
                 type="text"
                 placeholder="Nama entitas untuk dikecualikan (misal: 'Menteri Hukum', 'Kementerian X')..."
                 value={newExclusion}
-                onChange={(e) => setNewExclusion(e.target.value)}
-                style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-element)', color: 'var(--text-primary)' }}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddExclusion()}
+                onChange={e => setNewExclusion(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') requestAddExclusion(); }}
               />
               <button
-                onClick={handleAddExclusion}
-                disabled={addingExclusion}
-                style={{ background: 'var(--accent-color)', color: '#fff', border: 'none', padding: '0 20px', borderRadius: '8px', cursor: addingExclusion ? 'wait' : 'pointer', fontWeight: 600 }}
+                type="button"
+                className="btn btn-primary"
+                onClick={requestAddExclusion}
+                disabled={addingExclusion || !newExclusion.trim()}
               >
                 {addingExclusion ? 'Menambahkan...' : 'Tambah Pengecualian'}
               </button>
             </div>
-            
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>ID</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>Nama Entitas</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-secondary)' }}>Ditambahkan Pada</th>
-                    <th style={{ padding: '10px 12px', textAlign: 'right', color: 'var(--text-secondary)' }}>Aksi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {exclusions.map(exc => (
-                    <tr key={exc.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                      <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>{exc.id}</td>
-                      <td style={{ padding: '10px 12px', color: 'var(--text-primary)', fontWeight: 500 }}>{exc.entity_name}</td>
-                      <td style={{ padding: '10px 12px', color: 'var(--text-secondary)' }}>{new Date(exc.created_at).toLocaleString('id-ID')}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                        <button onClick={() => handleDeleteExclusion(exc.id)} title="Hapus pengecualian" style={{ background: 'transparent', border: 'none', color: 'var(--danger-text)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>
-                          <XCircle size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {exclusions.length === 0 && (
-                    <tr>
-                      <td colSpan={4} style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>Belum ada entitas yang dikecualikan.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
 
-          {/* Audit Logs */}
-          <div style={{ background: 'var(--bg-card)', borderRadius: '16px', padding: '24px', border: '1px solid var(--border-color)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-              <Eye size={18} color="var(--warning)" />
-              <h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-primary)' }}>Log Audit (Append-Only)</h3>
-              <span style={{
-                marginLeft: 'auto', background: 'rgba(245,158,11,0.15)', color: 'var(--warning-text)',
-                borderRadius: '20px', padding: '2px 10px', fontSize: '0.75rem', fontWeight: 600,
-              }}>
-                {data.audit_logs.length} entri terbaru
-              </span>
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              {data.audit_logs.length === 0 ? (
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', textAlign: 'center', padding: '32px' }}>
-                  Belum ada entri log audit.
-                </p>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            {feedback && (
+              <div
+                className={`admin-feedback admin-feedback--${feedback.kind}`}
+                role={feedback.kind === 'error' ? 'alert' : 'status'}
+              >
+                {feedback.text}
+              </div>
+            )}
+
+            {exclusionsError ? (
+              <div className="admin-feedback admin-feedback--error" role="alert">
+                <AlertTriangle size={16} aria-hidden="true" />
+                Gagal memuat daftar pengecualian.
+                <button type="button" className="btn btn-secondary admin-feedback-retry" onClick={() => fetchAll(true)}>
+                  Coba lagi
+                </button>
+              </div>
+            ) : (
+              <div className="compliance-table-wrap">
+                <table className="compliance-table">
+                  <caption className="visually-hidden">Daftar entitas yang dikecualikan dari Knowledge Graph</caption>
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                      {['Waktu', 'User ID', 'Aksi', 'Resource', 'Detail'].map(h => (
-                        <th key={h} style={{
-                          padding: '10px 12px', textAlign: 'left',
-                          color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.8rem',
-                        }}>{h}</th>
-                      ))}
+                    <tr>
+                      <th scope="col">ID</th>
+                      <th scope="col">Nama Entitas</th>
+                      <th scope="col">Ditambahkan Pada</th>
+                      <th scope="col" className="admin-th-action">Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.audit_logs.map(log => (
-                      <tr key={log.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                          {new Date(log.timestamp).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short' })}
-                        </td>
-                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: '0.78rem' }}>
-                          {log.user_id.slice(0, 8)}...
-                        </td>
-                        <td style={{ padding: '10px 12px' }}>
-                          <span style={{
-                            background: `${ACTION_COLORS[log.action_type] ?? ACTION_COLORS.DEFAULT}22`,
-                            color: ACTION_COLORS[log.action_type] ?? ACTION_COLORS.DEFAULT,
-                            borderRadius: '6px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 600,
-                          }}>
-                            {log.action_type}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: '0.78rem' }}>
-                          {log.resource_id ? log.resource_id.slice(0, 12) : '—'}
-                        </td>
-                        <td style={{ padding: '10px 12px', color: 'var(--text-secondary)', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {log.details}
+                    {exclusions.map(exc => (
+                      <tr key={exc.id}>
+                        <td className="admin-mono">{exc.id}</td>
+                        <td className="admin-entity-name">{exc.entity_name}</td>
+                        <td className="admin-cell-secondary admin-nowrap">{formatDateTime(exc.created_at)}</td>
+                        <td className="admin-cell-action">
+                          <button
+                            type="button"
+                            className="admin-icon-btn admin-icon-btn--danger"
+                            onClick={() => requestDeleteExclusion(exc)}
+                            aria-label={`Hapus pengecualian ${exc.entity_name}`}
+                            title={`Hapus pengecualian ${exc.entity_name}`}
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         </td>
                       </tr>
                     ))}
+                    {exclusions.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="admin-table-empty">Belum ada entitas yang dikecualikan.</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
-              )}
+              </div>
+            )}
+          </section>
+
+          {/* Audit logs — FE-side search/filter/pagination over the 100
+              rows the API returns (parity with the engineer-only
+              SystemMonitoring viewer, which admins cannot reach). */}
+          <section className="admin-panel" aria-labelledby="admin-audit-title">
+            <div className="admin-panel-head">
+              <h3 className="admin-panel-title" id="admin-audit-title">
+                <Eye size={18} color="var(--warning)" aria-hidden="true" />
+                Log Audit
+              </h3>
+              <span className="status-chip status-chip--neutral">Append-Only</span>
+              <span className="admin-panel-note">{auditLogs.length} entri terbaru</span>
             </div>
-          </div>
+
+            <div className="admin-toolbar">
+              <label htmlFor="admin-audit-search" className="visually-hidden">Cari log audit</label>
+              <input
+                id="admin-audit-search"
+                className="admin-input"
+                type="text"
+                placeholder="Cari user, resource, atau detail..."
+                value={auditSearch}
+                onChange={e => { setAuditSearch(e.target.value); setAuditPage(0); }}
+              />
+              <label htmlFor="admin-audit-action" className="visually-hidden">Filter jenis aksi</label>
+              <select
+                id="admin-audit-action"
+                className="admin-select"
+                value={auditAction}
+                onChange={e => { setAuditAction(e.target.value); setAuditPage(0); }}
+              >
+                <option value="">Semua Aksi</option>
+                {auditActionTypes.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+
+            {filteredAudit.length === 0 ? (
+              <p className="admin-list-empty">
+                {auditLogs.length === 0 ? 'Belum ada entri log audit.' : 'Tidak ada log yang cocok dengan pencarian atau filter.'}
+              </p>
+            ) : (
+              <>
+                <div className="compliance-table-wrap">
+                  <table className="compliance-table">
+                    <caption className="visually-hidden">{auditLogs.length} entri log audit terbaru</caption>
+                    <thead>
+                      <tr>
+                        {['Waktu', 'User ID', 'Aksi', 'Resource', 'Detail'].map(h => (
+                          <th key={h} scope="col">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pageRows.map(log => (
+                        <tr key={log.id}>
+                          <td className="admin-cell-secondary admin-nowrap">{formatDateTime(log.timestamp)}</td>
+                          <td className="admin-mono" title={log.user_id}>
+                            {log.user_id ? `${log.user_id.slice(0, 8)}\u2026` : '\u2014'}
+                          </td>
+                          <td>
+                            <span className={`status-chip ${ACTION_CHIP[log.action_type] ?? 'status-chip--neutral'}`}>
+                              {log.action_type}
+                            </span>
+                          </td>
+                          <td className="admin-mono admin-cell-truncate" title={log.resource_id || undefined}>
+                            {log.resource_id || '\u2014'}
+                          </td>
+                          <td className="admin-cell-secondary admin-cell-truncate" title={log.details || undefined}>
+                            {log.details || '\u2014'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="admin-pagination">
+                  <span className="admin-page-info">{rangeLabel}</span>
+                  <button
+                    type="button"
+                    className="admin-page-btn"
+                    onClick={() => setAuditPage(p => Math.max(0, p - 1))}
+                    disabled={safePage === 0}
+                    aria-label="Halaman sebelumnya"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-page-btn"
+                    onClick={() => setAuditPage(p => Math.min(pageCount - 1, p + 1))}
+                    disabled={safePage >= pageCount - 1}
+                    aria-label="Halaman berikutnya"
+                  >
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
         </>
+      )}
+
+      {confirmState && (
+        <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
       )}
     </div>
   );
