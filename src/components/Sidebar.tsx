@@ -98,14 +98,17 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
       {/* Desktop auto-submerge hover trigger (2026-10-01 review; bugfix
           pass): an invisible strip over the wall gap — the off-canvas
           rail cannot catch :hover itself. Vertically limited to the
-          wall tab's rest zone (railMidY ±40px, inline below) so only
-          hovering the tab's neighborhood surfaces the rail, not the
-          whole left edge. Follows .sidebar in DOM order so surface
+          wall tab's rest zone (railMidY ±64px, via CSS custom properties
+          below) so only hovering the tab's neighborhood surfaces the
+          rail, not the whole left edge; while surfaced, CSS grows the
+          strip to the row's full height so the wall gap beside the panel
+          acts as a keep-open zone (2026-10-03 twitch fix, see
+          components.css). Follows .sidebar in DOM order so surface
           states can use plain sibling/ancestor selectors. */}
       <div
         className="nav-edge"
         aria-hidden="true"
-        style={{ top: `${railMidY - 64}px`, height: '128px', bottom: 'auto' } as CSSProperties}
+        style={{ '--ne-top': `${railMidY - 64}px`, '--ne-h': '128px' } as CSSProperties}
       />
     </>
   );

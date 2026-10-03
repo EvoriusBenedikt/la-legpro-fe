@@ -244,18 +244,34 @@ h1, h2, h3, h4, h5, h6 {
     display: block;
     position: absolute;
     left: 0;
-    /* top/height/bottom are set INLINE by Sidebar (the wall tab's rest
-       zone, railMidY ±64px — the ±40px band left only 8px of grace
-       around the 64px tab and a cursor parked just above it never
-       surfaced the rail, bugfix 2026-10-01 video pass) — a full-height
-       strip surfaced the rail on ANY left-edge hover, far from the tab
-       (first bugfix 2026-10-01); these declarations are only fallback */
-    top: 0;
-    bottom: 0;
+    /* Rest zone comes from Sidebar via CSS custom properties (the wall
+       tab's neighborhood, railMidY ±64px — the ±40px band left only 8px
+       of grace around the 64px tab and a cursor parked just above it
+       never surfaced the rail, bugfix 2026-10-01 video pass; a
+       full-height strip AT REST surfaced the rail on ANY left-edge
+       hover, far from the tab, first bugfix 2026-10-01). */
+    top: var(--ne-top, 0px);
+    height: var(--ne-h, 128px);
+    bottom: auto;
     /* matches the cue's width so the whole visible tab is hover-active
        (the cue itself is pointer-events: none) */
     width: 28px;
     z-index: 101;
+  }
+  /* While the rail is SURFACED (strip hover, panel hover, or keyboard
+     focus) the strip grows to the row's full height, turning the 16px
+     wall gap beside the panel into a keep-open zone: a cursor sliding
+     off the panel into the gap lands on the strip and holds
+     nav-edge:hover instead of dropping every hover source — one half of
+     the 2026-10-03 twitch fix (the other half is the pointer-events
+     rule on .sidebar below). At rest the strip is back to the small
+     band, so the 2026-10-01 fixes are untouched. */
+  .dashboard-content-row:has(.nav-edge:hover) .nav-edge,
+  .dashboard-content-row:has(.sidebar:hover) .nav-edge,
+  .dashboard-content-row:has(.sidebar :focus-visible) .nav-edge {
+    top: 16px;
+    height: auto;
+    bottom: 16px;
   }
   /* Wall cue (2026-10-01 review, sixth pass): a CHILD of the rail at
      left: 100% / top: 50%, riding the rail's right seam every frame of
@@ -317,6 +333,24 @@ h1, h2, h3, h4, h5, h6 {
   .sidebar:hover,
   .sidebar:has(:focus-visible) {
     transform: none;
+  }
+  /* Twitch-loop breaker (2026-10-03): the submerged rail must never catch
+     hover. Previously a cursor parked in the wall gap OUTSIDE the strip's
+     rest band lost :hover the moment the panel docked at left:16, and the
+     submerging sweep then slid the panel back UNDER the cursor, re-firing
+     .sidebar:hover — a ~45Hz expand/collapse feedback loop (user video
+     2026-10-02). pointer-events now follows the surfaced state, so any
+     submerging sweep is inert; the grown nav-edge strip above keeps the
+     gap itself hoverable while the panel is open. Entry paths are the
+     strip and keyboard focus (the submerged rail sits fully off-viewport,
+     so nothing legitimate depends on hovering it at rest). */
+  .sidebar {
+    pointer-events: none;
+  }
+  .dashboard-content-row:has(.nav-edge:hover) .sidebar,
+  .dashboard-content-row:has(.sidebar:hover) .sidebar,
+  .dashboard-content-row:has(.sidebar :focus-visible) .sidebar {
+    pointer-events: auto;
   }
   .dashboard-content-row:has(.nav-edge:hover) .sidebar { width: var(--sidebar-width); }
   .dashboard-content-row:has(.nav-edge:hover) .sidebar .sidebar-menu { align-items: stretch; }
