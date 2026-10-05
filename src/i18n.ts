@@ -207,8 +207,9 @@ const id = {
   authPasswordPh: 'Masukkan kata sandi Anda',
   authConfirm: 'Konfirmasi kata sandi',
   authConfirmPh: 'Ulangi kata sandi Anda',
-  authPasswordRules:
-    'Kata sandi harus memuat setidaknya satu angka dan satu simbol.',
+  authRuleUpper: '1 huruf besar',
+  authRuleNumber: '1 angka',
+  authRuleSymbol: '1 simbol',
   authShowPassword: 'Tampilkan kata sandi',
   authHidePassword: 'Sembunyikan kata sandi',
   authSignIn: 'Masuk',
@@ -221,6 +222,8 @@ const id = {
   authBack: '← Kembali ke ikhtisar',
   authErrMismatch:
     'Kata sandi dan konfirmasi kata sandi tidak cocok. Periksa kembali kedua isian tersebut.',
+  authErrNeedUppercase:
+    'Kata sandi harus memuat setidaknya satu huruf besar. Tambahkan huruf besar lalu coba lagi.',
   authErrNeedNumber:
     'Kata sandi harus memuat setidaknya satu angka. Tambahkan angka lalu coba lagi.',
   authErrNeedSymbol:
@@ -416,8 +419,9 @@ const en: Record<StringKey, string> = {
   authPasswordPh: 'Enter your password',
   authConfirm: 'Confirm password',
   authConfirmPh: 'Repeat your password',
-  authPasswordRules:
-    'Password must contain at least one number and one symbol.',
+  authRuleUpper: '1 uppercase letter',
+  authRuleNumber: '1 number',
+  authRuleSymbol: '1 symbol',
   authShowPassword: 'Show password',
   authHidePassword: 'Hide password',
   authSignIn: 'Sign In',
@@ -430,6 +434,8 @@ const en: Record<StringKey, string> = {
   authBack: '← Back to overview',
   authErrMismatch:
     'Password and confirmation do not match. Check both fields and try again.',
+  authErrNeedUppercase:
+    'Password must contain at least one uppercase letter. Add an uppercase letter and try again.',
   authErrNeedNumber:
     'Password must contain at least one number. Add a number and try again.',
   authErrNeedSymbol:

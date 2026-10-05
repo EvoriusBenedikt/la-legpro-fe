@@ -2504,10 +2504,30 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 0 10px var(--success);
 }
 
-.auth-hint {
-  color: var(--text-secondary);
-  font-size: 0.75rem;
+/* Live password requirement checklist (register mode, 2026-10-05; replaces
+   the static .auth-hint rules text). Items are muted until met, then flip to
+   the success color + check icon — the icon shape change keeps color from
+   being the only cue. The list is an aria-live region. */
+.auth-rules {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
+
+.auth-rule {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.auth-rule svg { flex-shrink: 0; }
+
+.auth-rule--met { color: var(--success-text); }
 
 /* 44px hit area at every width (critique P1 touch targets); right:8px also
    seats the toggle inside the field edge instead of detached outside it. */

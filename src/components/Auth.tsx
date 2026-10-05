@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Lock, User, LogIn, UserPlus, Mail, Scale, Eye, EyeOff, ShieldCheck, Brain } from 'lucide-react';
+import { Lock, User, LogIn, UserPlus, Mail, Scale, Eye, EyeOff, ShieldCheck, Brain, Check, Circle } from 'lucide-react';
 import api, { isHttpError } from '../services/api';
 import { Link } from 'react-router-dom';
 import { useStrings } from '../i18n';
@@ -36,6 +36,13 @@ export default function Auth() {
   const [shake, setShake] = useState<'off' | 'on' | 'settled'>('off');
   const settleTimer = useRef<number | null>(null);
   const { login } = useAuth();
+
+  // Live password requirements (the register checklist and the submit gate
+  // share these definitions). A symbol is any non-alphanumeric, non-whitespace
+  // character — spaces deliberately don't count (user decision 2026-10-05).
+  const ruleUpper = /[A-Z]/.test(password);
+  const ruleNumber = /\d/.test(password);
+  const ruleSymbol = /[^A-Za-z0-9\s]/.test(password);
 
   const markFields = (fields: AuthField[]) => {
     const next: Partial<Record<AuthField, boolean>> = {};
@@ -91,11 +98,15 @@ export default function Auth() {
     }
 
     if (!isLogin) {
-      if (!/\d/.test(password)) {
+      if (!ruleUpper) {
+        raiseError(t.authErrNeedUppercase, ['password']);
+        return;
+      }
+      if (!ruleNumber) {
         raiseError(t.authErrNeedNumber, ['password']);
         return;
       }
-      if (!/[^A-Za-z0-9]/.test(password)) {
+      if (!ruleSymbol) {
         raiseError(t.authErrNeedSymbol, ['password']);
         return;
       }
@@ -263,9 +274,20 @@ export default function Auth() {
                 </button>
               </div>
               {!isLogin && (
-                <small className="auth-hint">
-                  {t.authPasswordRules}
-                </small>
+                <ul className="auth-rules" aria-live="polite">
+                  <li className={ruleUpper ? 'auth-rule auth-rule--met' : 'auth-rule'}>
+                    {ruleUpper ? <Check size={12} aria-hidden="true" /> : <Circle size={12} aria-hidden="true" />}
+                    <span>{t.authRuleUpper}</span>
+                  </li>
+                  <li className={ruleNumber ? 'auth-rule auth-rule--met' : 'auth-rule'}>
+                    {ruleNumber ? <Check size={12} aria-hidden="true" /> : <Circle size={12} aria-hidden="true" />}
+                    <span>{t.authRuleNumber}</span>
+                  </li>
+                  <li className={ruleSymbol ? 'auth-rule auth-rule--met' : 'auth-rule'}>
+                    {ruleSymbol ? <Check size={12} aria-hidden="true" /> : <Circle size={12} aria-hidden="true" />}
+                    <span>{t.authRuleSymbol}</span>
+                  </li>
+                </ul>
               )}
             </div>
 

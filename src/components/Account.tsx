@@ -24,11 +24,15 @@ export default function Account() {
       setPwError('New passwords do not match');
       return;
     }
+    if (!/[A-Z]/.test(newPassword)) {
+      setPwError('Password must contain at least one uppercase letter');
+      return;
+    }
     if (!/\d/.test(newPassword)) {
       setPwError('Password must contain at least one number');
       return;
     }
-    if (!/[^A-Za-z0-9]/.test(newPassword)) {
+    if (!/[^A-Za-z0-9\s]/.test(newPassword)) {
       setPwError('Password must contain at least one symbol');
       return;
     }
