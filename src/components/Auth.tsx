@@ -210,7 +210,7 @@ export default function Auth() {
                     aria-invalid={fieldErrors.email || undefined}
                     aria-describedby={fieldErrors.email ? 'auth-error-msg' : undefined}
                     value={email}
-                    onChange={(e) => { setEmail(e.target.value); clearField('email'); }}
+                    onChange={(e) => { setEmail(e.target.value.toLowerCase()); clearField('email'); }}
                   />
                 </div>
               </div>
