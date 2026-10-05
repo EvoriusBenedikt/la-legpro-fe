@@ -1208,6 +1208,13 @@ h1, h2, h3, h4, h5, h6 {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
 .animate-spin-slow { animation: spin 3s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+/* OS-level reduced motion: the :root[data-reduce-motion] kill-switch near the
+   top of this file covers the in-app setting; these gates honor the OS
+   preference too (same double-gate convention as .auth-shake / .admin-spin). */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-spin-slow { animation: none; }
+}
 
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }

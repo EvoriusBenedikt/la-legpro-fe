@@ -15,6 +15,7 @@ const SERVER_FIELD_ERRORS: Record<string, AuthField[]> = {
   'Incorrect username or password': ['username', 'password'],
   'Username already registered': ['username'],
   'Email already registered': ['email'],
+  'Email must not contain whitespace': ['email'],
 };
 
 export default function Auth() {
@@ -69,6 +70,20 @@ export default function Auth() {
     e.preventDefault();
     setError('');
     setFieldErrors({});
+
+    if (!isLogin) {
+      // Whitespace makes an email invalid — rejected, never auto-stripped, so
+      // the user retypes it. The format check replaces the native validation
+      // the input no longer runs (see the comment on the email field JSX).
+      if (/\s/.test(email)) {
+        raiseError(t.authErrEmailSpace, ['email']);
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        raiseError(t.authErrEmailFormat, ['email']);
+        return;
+      }
+    }
 
     if (!isLogin && password !== confirmPassword) {
       raiseError(t.authErrMismatch, ['password', 'confirmPassword']);
@@ -170,7 +185,7 @@ export default function Auth() {
           </div>
 
           {error && (
-            <div id="auth-error-msg" className="auth-error animate-pulse" role="alert">
+            <div id="auth-error-msg" className="auth-error" role="alert">
               {error}
             </div>
           )}
@@ -200,9 +215,15 @@ export default function Auth() {
                 <label htmlFor="auth-email">{t.authEmail}</label>
                 <div className={`input-wrapper${fieldErrors.email ? ' input-error' : ''}`}>
                   <Mail size={18} />
+                  {/* The input below is deliberately "text" + inputMode, not
+                      "email": native email validation silently trims
+                      leading/trailing spaces and blocks inner ones with a
+                      generic browser bubble, which would bypass the custom
+                      whitespace/format errors raised in handleSubmit. */}
                   <input 
                     id="auth-email"
-                    type="email" 
+                    type="text"
+                    inputMode="email" 
                     required
                     className="auth-input"
                     placeholder={t.authEmailPh}

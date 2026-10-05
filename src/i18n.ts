@@ -225,6 +225,10 @@ const id = {
     'Kata sandi harus memuat setidaknya satu angka. Tambahkan angka lalu coba lagi.',
   authErrNeedSymbol:
     'Kata sandi harus memuat setidaknya satu simbol. Tambahkan simbol lalu coba lagi.',
+  authErrEmailSpace:
+    'Email tidak boleh mengandung spasi. Hapus spasinya lalu ketik ulang alamat email.',
+  authErrEmailFormat:
+    'Format email tidak valid. Contoh: nama@domain.com',
   authErrFailed:
     'Autentikasi gagal. Periksa kembali nama pengguna dan kata sandi Anda; jika berlanjut, hubungi administrator sistem Anda.',
 } as const;
@@ -430,6 +434,10 @@ const en: Record<StringKey, string> = {
     'Password must contain at least one number. Add a number and try again.',
   authErrNeedSymbol:
     'Password must contain at least one symbol. Add a symbol and try again.',
+  authErrEmailSpace:
+    'Email must not contain whitespace. Remove the spaces and retype the email address.',
+  authErrEmailFormat:
+    'Invalid email format. Example: name@domain.com',
   authErrFailed:
     'Authentication failed. Check your username and password; if this persists, contact your system administrator.',
 };
