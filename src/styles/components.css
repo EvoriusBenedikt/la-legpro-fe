@@ -2536,6 +2536,38 @@ h1, h2, h3, h4, h5, h6 {
   animation: fadeIn 0.5s ease-out forwards;
 }
 
+/* Shake-to-reject (Auth.tsx): fired whenever a submit fails -- bad
+   credentials, duplicate username/email, or password-rule violations.
+   Three-state class scheme: after the first shake the card parks on
+   auth-shake-settled (animation:none) so toggling the shake class can
+   never restart the entry fadeIn above. Both reduced-motion gates follow
+   the codebase convention (app setting + OS media query). */
+@keyframes authShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-10px); }
+  40% { transform: translateX(9px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(4px); }
+}
+
+.auth-card.auth-shake {
+  animation: authShake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.auth-card.auth-shake-settled {
+  animation: none;
+}
+
+[data-reduce-motion="true"] .auth-card.auth-shake {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-card.auth-shake {
+    animation: none;
+  }
+}
+
 .auth-header {
   text-align: center;
   margin-bottom: 32px;
@@ -2599,6 +2631,23 @@ h1, h2, h3, h4, h5, h6 {
   outline: none;
   border-color: var(--accent-color);
   box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* Field-level error highlight: applied while the last submit error refers
+   to this field (SERVER_FIELD_ERRORS in Auth.tsx); clears on the first
+   keystroke. The focus ring switches from accent to danger so a red field
+   never shows an "all good" accent ring. */
+.input-wrapper.input-error > svg {
+  color: var(--danger-text);
+}
+
+.input-wrapper.input-error .auth-input {
+  border-color: var(--danger);
+}
+
+.input-wrapper.input-error .auth-input:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-border);
 }
 
 .auth-button {

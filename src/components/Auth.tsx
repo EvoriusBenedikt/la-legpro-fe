@@ -1,9 +1,21 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Lock, User, LogIn, UserPlus, Mail, Scale, Eye, EyeOff, ShieldCheck, Brain } from 'lucide-react';
 import api, { isHttpError } from '../services/api';
 import { Link } from 'react-router-dom';
 import { useStrings } from '../i18n';
+
+type AuthField = 'username' | 'email' | 'password' | 'confirmPassword';
+
+// Known backend auth error details (la-legpro-be/api/auth.py) mapped to the
+// form fields they refer to, used to highlight the offending inputs in red.
+// Unrecognized messages (network failures, backend rewording) degrade to
+// shake-only with no field highlight. Keep in sync with the BE detail strings.
+const SERVER_FIELD_ERRORS: Record<string, AuthField[]> = {
+  'Incorrect username or password': ['username', 'password'],
+  'Username already registered': ['username'],
+  'Email already registered': ['email'],
+};
 
 export default function Auth() {
   const t = useStrings();
@@ -16,24 +28,60 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<AuthField, boolean>>>({});
+  // Three-state so the card's entry fadeIn can never re-run: after the first
+  // shake the card parks on 'settled' (auth-shake-settled = animation:none)
+  // instead of dropping back to the base rule and restarting fadeIn.
+  const [shake, setShake] = useState<'off' | 'on' | 'settled'>('off');
+  const settleTimer = useRef<number | null>(null);
   const { login } = useAuth();
+
+  const markFields = (fields: AuthField[]) => {
+    const next: Partial<Record<AuthField, boolean>> = {};
+    for (const f of fields) next[f] = true;
+    setFieldErrors(next);
+  };
+
+  const clearField = (f: AuthField) =>
+    setFieldErrors((prev) => (prev[f] ? { ...prev, [f]: false } : prev));
+
+  // Single error path (called from submit handlers): banner message + red
+  // highlight on the offending fields + card shake. The timeout settles the
+  // shake even when the animation is disabled (reduced motion never fires
+  // animationend), so the next error retriggers.
+  const raiseError = (message: string, fields?: AuthField[]) => {
+    setError(message);
+    if (fields) markFields(fields);
+    setShake('on');
+    if (settleTimer.current !== null) window.clearTimeout(settleTimer.current);
+    settleTimer.current = window.setTimeout(
+      () => setShake((s) => (s === 'on' ? 'settled' : s)),
+      500
+    );
+  };
+
+  // Clear a pending settle timer if the component unmounts mid-shake.
+  useEffect(() => () => {
+    if (settleTimer.current !== null) window.clearTimeout(settleTimer.current);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setFieldErrors({});
 
     if (!isLogin && password !== confirmPassword) {
-      setError(t.authErrMismatch);
+      raiseError(t.authErrMismatch, ['password', 'confirmPassword']);
       return;
     }
 
     if (!isLogin) {
       if (!/\d/.test(password)) {
-        setError(t.authErrNeedNumber);
+        raiseError(t.authErrNeedNumber, ['password']);
         return;
       }
       if (!/[^A-Za-z0-9]/.test(password)) {
-        setError(t.authErrNeedSymbol);
+        raiseError(t.authErrNeedSymbol, ['password']);
         return;
       }
     }
@@ -49,7 +97,10 @@ export default function Auth() {
       login(response.data.access_token, response.data.user);
     } catch (err) {
       const detail = isHttpError(err) ? err.response.data?.detail : undefined;
-      setError(detail ? String(detail) : t.authErrFailed);
+      raiseError(
+        detail ? String(detail) : t.authErrFailed,
+        detail ? SERVER_FIELD_ERRORS[String(detail)] : undefined
+      );
     } finally {
       setLoading(false);
     }
@@ -109,14 +160,17 @@ export default function Auth() {
 
       {/* Right Form Side */}
       <div className="auth-form-side">
-        <div className="auth-card">
+        <div
+          className={`auth-card${shake === 'on' ? ' auth-shake' : shake === 'settled' ? ' auth-shake-settled' : ''}`}
+          onAnimationEnd={(e) => { if (e.animationName === 'authShake') setShake('settled'); }}
+        >
           <div className="auth-header">
             <h2>{isLogin ? t.authWelcome : t.authRegisterTitle}</h2>
             <p>{isLogin ? t.authWelcomeSub : t.authRegisterSub}</p>
           </div>
 
           {error && (
-            <div className="auth-error animate-pulse" role="alert">
+            <div id="auth-error-msg" className="auth-error animate-pulse" role="alert">
               {error}
             </div>
           )}
@@ -124,7 +178,7 @@ export default function Auth() {
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="input-group">
               <label htmlFor="auth-username">{t.authUsername}</label>
-              <div className="input-wrapper">
+              <div className={`input-wrapper${fieldErrors.username ? ' input-error' : ''}`}>
                 <User size={18} />
                 <input 
                   id="auth-username"
@@ -133,8 +187,10 @@ export default function Auth() {
                   className="auth-input"
                   placeholder={t.authUsernamePh}
                   autoComplete="username"
+                  aria-invalid={fieldErrors.username || undefined}
+                  aria-describedby={fieldErrors.username ? 'auth-error-msg' : undefined}
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => { setUsername(e.target.value); clearField('username'); }}
                 />
               </div>
             </div>
@@ -142,7 +198,7 @@ export default function Auth() {
             {!isLogin && (
               <div className="input-group">
                 <label htmlFor="auth-email">{t.authEmail}</label>
-                <div className="input-wrapper">
+                <div className={`input-wrapper${fieldErrors.email ? ' input-error' : ''}`}>
                   <Mail size={18} />
                   <input 
                     id="auth-email"
@@ -151,8 +207,10 @@ export default function Auth() {
                     className="auth-input"
                     placeholder={t.authEmailPh}
                     autoComplete="email"
+                    aria-invalid={fieldErrors.email || undefined}
+                    aria-describedby={fieldErrors.email ? 'auth-error-msg' : undefined}
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => { setEmail(e.target.value); clearField('email'); }}
                   />
                 </div>
               </div>
@@ -160,7 +218,7 @@ export default function Auth() {
 
             <div className="input-group">
               <label htmlFor="auth-password">{t.authPassword}</label>
-              <div className="input-wrapper">
+              <div className={`input-wrapper${fieldErrors.password ? ' input-error' : ''}`}>
                 <Lock size={18} />
                 <input 
                   id="auth-password"
@@ -169,8 +227,10 @@ export default function Auth() {
                   className="auth-input"
                   placeholder={t.authPasswordPh}
                   autoComplete={isLogin ? "current-password" : "new-password"}
+                  aria-invalid={fieldErrors.password || undefined}
+                  aria-describedby={fieldErrors.password ? 'auth-error-msg' : undefined}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => { setPassword(e.target.value); clearField('password'); }}
                 />
                 <button 
                   type="button" 
@@ -191,7 +251,7 @@ export default function Auth() {
             {!isLogin && (
               <div className="input-group">
                 <label htmlFor="auth-confirm">{t.authConfirm}</label>
-                <div className="input-wrapper">
+                <div className={`input-wrapper${fieldErrors.confirmPassword ? ' input-error' : ''}`}>
                   <Lock size={18} />
                   <input 
                     id="auth-confirm"
@@ -200,8 +260,10 @@ export default function Auth() {
                     className="auth-input"
                     placeholder={t.authConfirmPh}
                     autoComplete="new-password"
+                    aria-invalid={fieldErrors.confirmPassword || undefined}
+                    aria-describedby={fieldErrors.confirmPassword ? 'auth-error-msg' : undefined}
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    onChange={(e) => { setConfirmPassword(e.target.value); clearField('confirmPassword'); }}
                   />
                   <button 
                     type="button" 
@@ -227,7 +289,7 @@ export default function Auth() {
 
           <div className="auth-toggle">
             {isLogin ? t.authNoAccount : t.authHaveAccount}
-            <button type="button" onClick={() => { setIsLogin(!isLogin); setError(''); }}>
+            <button type="button" onClick={() => { setIsLogin(!isLogin); setError(''); setFieldErrors({}); }}>
               {isLogin ? t.authRegisterHere : t.authLoginHere}
             </button>
           </div>
