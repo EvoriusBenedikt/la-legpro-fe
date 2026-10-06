@@ -350,3 +350,12 @@
   .admin-card-search input { min-height: 44px; }
   .admin-search-clear { width: 32px; height: 32px; }
 }
+
+/* ── Taxonomy Manager (≤767px): 44px touch targets on the row controls
+      and the status-chip switch (2026-10-06 critique remediation) ── */
+@media (max-width: 767px) {
+  .tax-icon-btn { width: 44px; height: 44px; margin-left: 0; }
+  button.status-chip.tax-chip { min-height: 44px; padding: 3px 12px; }
+  .tax-add-row { padding: 16px; }
+  .tax-add-row .btn { width: 100%; min-height: 44px; }
+}

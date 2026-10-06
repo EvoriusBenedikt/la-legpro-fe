@@ -220,6 +220,8 @@ const id = {
   authHaveAccount: 'Sudah punya akun? ',
   authLoginHere: 'Masuk di sini',
   authBack: '← Kembali ke ikhtisar',
+  authContactAdmin: 'Hubungi administrator',
+  authLangToggleAria: 'Ganti bahasa ke Inggris',
   authErrMismatch:
     'Kata sandi dan konfirmasi kata sandi tidak cocok. Periksa kembali kedua isian tersebut.',
   authErrNeedUppercase:
@@ -432,6 +434,8 @@ const en: Record<StringKey, string> = {
   authHaveAccount: 'Already have an account? ',
   authLoginHere: 'Login here',
   authBack: '← Back to overview',
+  authContactAdmin: 'Contact administrator',
+  authLangToggleAria: 'Switch language to Indonesian',
   authErrMismatch:
     'Password and confirmation do not match. Check both fields and try again.',
   authErrNeedUppercase:

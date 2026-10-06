@@ -3,23 +3,43 @@ import { useAuth } from '../context/AuthContext';
 import { Lock, User, LogIn, UserPlus, Mail, Scale, Eye, EyeOff, ShieldCheck, Brain, Check, Circle } from 'lucide-react';
 import api, { isHttpError } from '../services/api';
 import { Link } from 'react-router-dom';
-import { useStrings } from '../i18n';
+import { useStrings, useLocale } from '../i18n';
+import { setSetting } from '../settings';
 
-type AuthField = 'username' | 'email' | 'password' | 'confirmPassword';
+type AuthField =
+  | 'username'
+  | 'email'
+  | 'password'
+  | 'confirmPassword'
+  // Account-page change-password codes, so SERVER_FIELD_ERRORS below can
+  // stay exhaustive against the backend's detail codes (auth.py).
+  | 'old_password'
+  | 'new_password';
 
 // Known backend auth error details (la-legpro-be/api/auth.py) mapped to the
 // form fields they refer to, used to highlight the offending inputs in red.
 // Unrecognized messages (network failures, backend rewording) degrade to
 // shake-only with no field highlight. Keep in sync with the BE detail strings.
 const SERVER_FIELD_ERRORS: Record<string, AuthField[]> = {
-  'Incorrect username or password': ['username', 'password'],
-  'Username already registered': ['username'],
-  'Email already registered': ['email'],
-  'Email must not contain whitespace': ['email'],
+  'INVALID_CREDENTIALS': ['username', 'password'],
+  'USERNAME_TAKEN': ['username'],
+  'EMAIL_TAKEN': ['email'],
+  'EMAIL_WHITESPACE': ['email'],
+  'PASSWORD_NEEDS_UPPERCASE': ['password'],
+  'PASSWORD_NEEDS_NUMBER': ['password'],
+  'PASSWORD_NEEDS_SYMBOL': ['password'],
+  'CURRENT_PASSWORD_INCORRECT': ['old_password'],
+  'PASSWORD_SAME_AS_OLD': ['new_password'],
 };
+
+// Owner-provided administrator contact (2026-10-05). Subject/body are the
+// owner's placeholders until real copy is supplied; keep the encoding as-is.
+const ADMIN_CONTACT_MAILTO =
+  'mailto:benzone009@gmail.com?subject=test%20admin&body=admin%20test';
 
 export default function Auth() {
   const t = useStrings();
+  const locale = useLocale();
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
@@ -122,11 +142,36 @@ export default function Auth() {
 
       login(response.data.access_token, response.data.user);
     } catch (err) {
-      const detail = isHttpError(err) ? err.response.data?.detail : undefined;
-      raiseError(
-        detail ? String(detail) : t.authErrFailed,
-        detail ? SERVER_FIELD_ERRORS[String(detail)] : undefined
-      );
+      const responseDetail = isHttpError(err) ? err.response.data?.detail : undefined;
+      let errCode: string | undefined;
+      let fieldErrs: AuthField[] | undefined;
+      if (responseDetail) {
+        if (Array.isArray(responseDetail) && responseDetail.length > 0) {
+          // Fallback: map known messages to codes. FastAPI validation errors
+          // arrive as [{ loc, msg, type }]; plain strings pass through.
+          const first = responseDetail[0] as { msg?: string } | string;
+          const msg = typeof first === 'string' ? first : (first.msg ?? '');
+          const MESSAGE_CODE_MAP: Record<string, string> = {
+            'Incorrect username or password': 'INVALID_CREDENTIALS',
+            'Username already registered': 'USERNAME_TAKEN',
+            'Email already registered': 'EMAIL_TAKEN',
+            'Email must not contain whitespace': 'EMAIL_WHITESPACE',
+            'Password must contain at least one uppercase letter': 'PASSWORD_NEEDS_UPPERCASE',
+            'Password must contain at least one number': 'PASSWORD_NEEDS_NUMBER',
+            'Password must contain at least one symbol': 'PASSWORD_NEEDS_SYMBOL',
+            'Current password is incorrect': 'CURRENT_PASSWORD_INCORRECT',
+            'New password must be different from the current password': 'PASSWORD_SAME_AS_OLD',
+          };
+          errCode = MESSAGE_CODE_MAP[msg] || 'VALIDATION_ERROR';
+        } else if (typeof responseDetail === 'string') {
+          errCode = responseDetail;
+        }
+        if (errCode) {
+          fieldErrs = SERVER_FIELD_ERRORS[errCode];
+        }
+      }
+      // Fallback to generic error if no code resolved
+      raiseError(errCode || t.authErrFailed, fieldErrs);
     } finally {
       setLoading(false);
     }
@@ -148,7 +193,7 @@ export default function Auth() {
           <div className="auth-features">
             <div className="auth-feature">
               <div className="auth-feature-icon">
-                <ShieldCheck size={24} color="var(--accent-color)" />
+                <ShieldCheck size={24} color="#fff" />
               </div>
               <div>
                 <h3>{t.authFeat1Title}</h3>
@@ -190,6 +235,14 @@ export default function Auth() {
           className={`auth-card${shake === 'on' ? ' auth-shake' : shake === 'settled' ? ' auth-shake-settled' : ''}`}
           onAnimationEnd={(e) => { if (e.animationName === 'authShake') setShake('settled'); }}
         >
+          <button
+            type="button"
+            className="auth-language-toggle"
+            aria-label={t.authLangToggleAria}
+            onClick={() => setSetting('locale', locale === 'id' ? 'en' : 'id')}
+          >
+            {locale === 'id' ? 'EN' : 'ID'}
+          </button>
           <div className="auth-header">
             <h2>{isLogin ? t.authWelcome : t.authRegisterTitle}</h2>
             <p>{isLogin ? t.authWelcomeSub : t.authRegisterSub}</p>
@@ -335,6 +388,12 @@ export default function Auth() {
             <button type="button" onClick={() => { setIsLogin(!isLogin); setError(''); setFieldErrors({}); }}>
               {isLogin ? t.authRegisterHere : t.authLoginHere}
             </button>
+          </div>
+
+          <div className="auth-toggle" style={{ marginTop: '8px' }}>
+            <a className="auth-contact-admin" href={ADMIN_CONTACT_MAILTO}>
+              {t.authContactAdmin}
+            </a>
           </div>
 
           <div className="auth-toggle" style={{ marginTop: '8px' }}>

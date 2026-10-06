@@ -2431,6 +2431,8 @@ h1, h2, h3, h4, h5, h6 {
 .brand-logo-img {
   width: 64px;
   height: 64px;
+  /* No filter: the mark is a dark glyph on the light plate above. An
+     invert() here once whitened it into invisibility (bug_reports 2026-10-05). */
   object-fit: contain;
 }
 
@@ -2560,6 +2562,10 @@ h1, h2, h3, h4, h5, h6 {
   width: 100%;
   max-width: 420px;
   margin: auto;
+  position: relative;
+  /* Top band reserved for the absolute language toggle so it never
+     overlaps the centered heading (`.auth-language-toggle`). */
+  padding-top: 36px;
   animation: fadeIn 0.5s ease-out forwards;
 }
 
@@ -2647,7 +2653,7 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--bg-element);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 12px 14px 12px 42px;
+  padding: 12px 56px 12px 42px;
   color: var(--text-primary);
   font-size: 0.95rem;
   transition: all 0.2s;
@@ -3593,6 +3599,31 @@ h1, h2, h3, h4, h5, h6 {
   margin-top: 10px;
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+/* Language toggle button on auth card (top‑right) */
+.auth-language-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--accent-color);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Owner-provided mailto helper link on the auth card; links use the
+   --accent-hover token (5.6:1) per ui_ux_design.md. */
+.auth-contact-admin {
+  color: var(--accent-hover);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.auth-contact-admin:hover,
+.auth-contact-admin:focus-visible {
+  text-decoration: underline;
 }
 
 /* Activity Feed Styles */
@@ -4837,3 +4868,150 @@ select::placeholder {
 /* Surfaces whose background does not follow the app theme (the KG wash):
    light label over the dark veil; the orb itself is pinned via prop. */
 .loading-orb--on-dark .loading-orb-label { color: #cbd5e1; }
+
+/* ═══════════════════════════════════════════════════════════════
+   TAXONOMY MANAGER (2026-10-06 critique remediation) — replaces the
+   screen's inline-style one-offs with the shared glass grammar:
+   .admin-view shell, .btn, .status-chip, .compliance-table,
+   .confirm-modal (choice dialog with the reversible deactivate path).
+   Adds the feedback states the critique missed: role=alert error with
+   a "Coba lagi" retry, role=status success notice. The old screen's
+   undefined var(--accent) button background and off-token Tailwind
+   green chip are gone with the inline styles. Mobile overrides live
+   in utilities.css.
+   ═══════════════════════════════════════════════════════════════ */
+.tax-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.tax-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0 0 8px;
+  color: var(--text-primary);
+}
+.tax-subtitle { margin: 0; color: var(--text-secondary); }
+
+.tax-add-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.1);
+}
+.tax-field { flex: 1 1 260px; }
+.tax-field label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.tax-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-element);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.95rem;
+  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tax-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.tax-input--inline {
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  border-radius: var(--radius-sm);
+}
+
+.tax-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 24px;
+  font-size: 0.9rem;
+}
+.tax-retry { margin-left: auto; }
+.tax-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--success-bg);
+  color: var(--success-text);
+  border: 1px solid var(--success-border);
+  border-radius: var(--radius-md);
+  margin-bottom: 24px;
+  font-size: 0.9rem;
+}
+
+/* Three columns need less runway than the 920px compliance table, but
+   keep the wrap's horizontal-scroll + sticky-first-column behavior. */
+.tax-table { min-width: 560px; }
+.tax-col-actions,
+.tax-cell-actions { text-align: right; }
+.tax-table td.tax-cell-center {
+  padding: 32px 14px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.tax-name { font-weight: 500; }
+.tax-row-inactive .tax-name { color: var(--text-secondary); }
+
+/* The status chip doubles as the activate/deactivate switch: same stamp
+   vocabulary, plus pointer affordance and the canonical hover wash. */
+button.status-chip.tax-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+button.status-chip.tax-chip:hover:not(:disabled) { border-color: var(--border-highlight); }
+button.status-chip.tax-chip:disabled { opacity: 0.6; cursor: wait; }
+
+.tax-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-left: 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tax-icon-btn:hover:not(:disabled) { background: var(--bg-element); color: var(--text-primary); }
+.tax-icon-btn--danger { color: var(--danger-text); }
+.tax-icon-btn--danger:hover:not(:disabled) { background: var(--danger-bg); color: var(--danger-text); }
+.tax-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
