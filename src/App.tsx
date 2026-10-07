@@ -5,7 +5,8 @@ import Auth from './components/Auth';
 import TopBar from './components/TopBar';
 import Footer from './components/Footer';
 import LoadingOrb from './components/LoadingOrb';
-import { useAuth } from './context/AuthContext';
+import { useAuth } from './hooks/useAuth';
+import { useStrings } from './i18n';
 import './index.css';
 
 // Lazy load heavy components
@@ -36,9 +37,38 @@ function App() {
   useEffect(() => {
     scrollerRef.current?.scrollTo({ top: 0 });
   }, [location.pathname]);
+
+  // Sign-in focus landing (critique P1 2026-10-06): login() swaps the whole
+  // route tree, and focus used to fall to <body> in the new document with no
+  // announcement — screen-reader users could not tell the sign-in succeeded.
+  // Only the false→true transition counts as a sign-in: AuthContext restores
+  // a stored session synchronously, so a refresh starts authenticated and
+  // never replays the beat. The note rides a role="status" region that
+  // mounts empty with the shell before the effect fills it, so the change is
+  // announced; on logout the note is cleared so the next sign-in remounts
+  // the region empty again. Main is focused via tabIndex={-1} and exempted
+  // from the global focus-visible floor (index.css) — a ring around the
+  // whole content area is noise, and the caret position is self-evident at
+  // the top of a fresh view.
+  const t = useStrings();
+  const mainRef = useRef<HTMLDivElement>(null);
+  const wasAuthed = useRef(isAuthenticated);
+  const [signedInNote, setSignedInNote] = useState('');
+  useEffect(() => {
+    if (isAuthenticated && !wasAuthed.current) {
+      mainRef.current?.focus();
+      setSignedInNote(t.signedInNote);
+    } else if (!isAuthenticated && wasAuthed.current) {
+      setSignedInNote('');
+    }
+    wasAuthed.current = isAuthenticated;
+  }, [isAuthenticated, t.signedInNote]);
+
   const isITAdmin = role === 'admin';
   const isSekretaris = role === 'sekretaris perusahaan';
   const isEngineer = role === 'insinyur ti';
+  // Unofficial developer role (2026-10-07): union of every route group below.
+  const isDewa = role === 'dewa';
 
   if (!isAuthenticated) {
     return (
@@ -62,7 +92,14 @@ function App() {
         />
 
         <div className="dashboard-center">
-          <div className="main-content" style={{ padding: 0 }}>
+          <div
+            className="main-content"
+            style={{ padding: 0 }}
+            role="main"
+            tabIndex={-1}
+            ref={mainRef}
+          >
+            <span className="visually-hidden" role="status">{signedInNote}</span>
             <Suspense fallback={
               <div style={{ padding: '24px' }}>
                 <LoadingOrb label="Memuat..." />
@@ -74,6 +111,7 @@ function App() {
                   {/* Role-based default redirects */}
                   <Route path="/" element={
                     <Navigate to={
+                      isDewa ? "/admin" :
                       isEngineer ? "/monitoring" :
                       isITAdmin ? "/admin" :
                       isSekretaris ? "/admin" :
@@ -88,6 +126,10 @@ function App() {
                   {isEngineer && (
                     <>
                       <Route path="/monitoring" element={<SystemMonitoring />} />
+                      {/* Taxonomy: admin + engineer gained the UI route with the
+                          usage-based hard-delete gate (2026-10-06); the BE already
+                          permitted both roles on the taxonomy API. */}
+                      <Route path="/taxonomy" element={<TaxonomyManager />} />
                       <Route path="*" element={<Navigate to="/monitoring" replace />} />
                     </>
                   )}
@@ -96,6 +138,7 @@ function App() {
                   {isITAdmin && (
                     <>
                       <Route path="/admin" element={<AdminDashboard />} />
+                      <Route path="/taxonomy" element={<TaxonomyManager />} />
                       <Route path="*" element={<Navigate to="/admin" replace />} />
                     </>
                   )}
@@ -109,8 +152,25 @@ function App() {
                     </>
                   )}
 
+                  {/* Dewa (unofficial developer role): every route exactly
+                      once — engineer, admin, sekretaris and regular surfaces. */}
+                  {isDewa && (
+                    <>
+                      <Route path="/monitoring" element={<SystemMonitoring />} />
+                      <Route path="/admin" element={<AdminDashboard />} />
+                      <Route path="/taxonomy" element={<TaxonomyManager />} />
+                      <Route path="/repository" element={<LegalRepository />} />
+                      <Route path="/opinion" element={<LegalOpinion />} />
+                      <Route path="/contracts" element={<ContractMonitor />} />
+                      <Route path="/graph" element={
+                        <KnowledgeGraph onOpenDocument={() => {}} />
+                      } />
+                      <Route path="*" element={<Navigate to="/admin" replace />} />
+                    </>
+                  )}
+
                   {/* Regular Routes (available to Regular and Sekretaris) */}
-                  {(!isITAdmin && !isEngineer) && (
+                  {(!isITAdmin && !isEngineer && !isDewa) && (
                     <>
                       <Route path="/repository" element={<LegalRepository />} />
                       <Route path="/opinion" element={<LegalOpinion />} />

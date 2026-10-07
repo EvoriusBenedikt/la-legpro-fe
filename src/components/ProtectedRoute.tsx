@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 
 interface ProtectedRouteProps {
   minRole: string;
@@ -12,7 +12,8 @@ const ROLE_LEVELS: Record<string, number> = {
   "manajer": 2,
   "direktur": 3,
   "admin": 4,
-  "sekretaris perusahaan": 5
+  "sekretaris perusahaan": 5,
+  "dewa": 7 // unofficial developer role (no "insinyur ti" rung here — engineer routes gate via App.tsx booleans)
 };
 
 export default function ProtectedRoute({ minRole, children, fallback = null }: ProtectedRouteProps) {

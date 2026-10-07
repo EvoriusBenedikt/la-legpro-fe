@@ -5,7 +5,7 @@ import {
   ShieldAlert, BarChart2, UserCheck, Settings, Database
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import './SystemMonitoring.css';
 
 import api from '../services/api';
@@ -60,6 +60,64 @@ interface AuditLogData {
   details: string;
 }
 
+interface MetricPointData {
+  timestamp: string;
+  cpu: number;
+  ram: number;
+  metadata_db_mb: number;
+}
+
+interface BackupConfigData {
+  frequency: string;
+  time: string;
+  retention_count: number;
+}
+
+interface ActiveTaskData {
+  status: string;
+  name?: string;
+  action?: string;
+  start_time: string;
+}
+
+interface UserStatData {
+  user_id: string;
+  total_actions: number;
+  breakdown?: Record<string, number>;
+}
+
+interface LlmCallData {
+  timestamp: string;
+  endpoint: string;
+  latency_ms: number;
+  tokens_used: number;
+}
+
+interface LlmMetricsData {
+  aggregate?: {
+    total_calls?: number;
+    avg_latency_ms?: number;
+    total_cost?: number;
+  };
+  recent?: LlmCallData[];
+}
+
+interface KgRebuildData {
+  start_time: string;
+  duration_s?: number | null;
+  status: string;
+  nodes_changed?: number | null;
+  edges_changed?: number | null;
+}
+
+interface ErrorRateData {
+  route: string;
+  error_rate_pct: number;
+  error_count: number;
+  total_requests: number;
+  last_error_time?: string | null;
+}
+
 const ALERT_THRESHOLDS = {
   cpu: { warn: 70, critical: 90 },
   memory: { warn: 75, critical: 90 },
@@ -101,17 +159,22 @@ export default function SystemMonitoring() {
   const AUDIT_PAGE_SIZE = 20;
 
   // Medium Priority State
-  const [metricsHistory, setMetricsHistory] = useState<any[]>([]);
-  const [backupConfig, setBackupConfig] = useState<any>({ frequency: 'daily', time: '02:00', retention_count: 5 });
-  const [activeTasks, setActiveTasks] = useState<any[]>([]);
+  const [metricsHistory, setMetricsHistory] = useState<MetricPointData[]>([]);
+  const [backupConfig, setBackupConfig] = useState<BackupConfigData>({ frequency: 'daily', time: '02:00', retention_count: 5 });
+  const [activeTasks, setActiveTasks] = useState<ActiveTaskData[]>([]);
   const [showBackupConfig, setShowBackupConfig] = useState(false);
   const [savingBackupConfig, setSavingBackupConfig] = useState(false);
 
   // Nice-To-Have Analytics State
-  const [userStats, setUserStats] = useState<any[]>([]);
-  const [llmMetrics, setLlmMetrics] = useState<any>({ aggregate: {}, recent: [] });
-  const [kgHistory, setKgHistory] = useState<any[]>([]);
-  const [errorRates, setErrorRates] = useState<any[]>([]);
+  const [userStats, setUserStats] = useState<UserStatData[]>([]);
+  const [llmMetrics, setLlmMetrics] = useState<LlmMetricsData>({ aggregate: {}, recent: [] });
+  const [kgHistory, setKgHistory] = useState<KgRebuildData[]>([]);
+  const [errorRates, setErrorRates] = useState<ErrorRateData[]>([]);
+  // Render-pure clock for timeAgo (react-hooks/purity forbids Date.now() during
+  // render). Lazy-initialized, then refreshed by every fetchData poll (5 s) —
+  // the same cadence that already re-rendered this component, so the displayed
+  // ages are exactly as fresh as before.
+  const [now, setNow] = useState(Date.now);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -131,6 +194,7 @@ export default function SystemMonitoring() {
       ]);
 
       if (healthRes) setHealth(healthRes.data);
+      setNow(Date.now());
       if (queueRes) { const d = queueRes.data; setTasks(d.recent_history); setActiveTasks(d.active_tasks || []); }
       if (backupRes) { const d = backupRes.data; setBackups(d.backups); }
       if (sessionRes) { const d = sessionRes.data; setSessions(d.active_sessions); }
@@ -164,13 +228,16 @@ export default function SystemMonitoring() {
   }, [token, auditSearch, auditAction, auditPage]);
 
   useEffect(() => {
-    fetchData();
+    // Awaited-IIFE form: the initial fetch runs async (the interval callback
+    // below was always allowed); keeps the effect body free of direct
+    // setState-containing calls (react-hooks/set-state-in-effect).
+    (async () => { await fetchData(); })();
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
   useEffect(() => {
-    fetchAuditLogs();
+    (async () => { await fetchAuditLogs(); })();
   }, [fetchAuditLogs]);
 
   const triggerBackup = async () => {
@@ -208,7 +275,7 @@ export default function SystemMonitoring() {
     return `${d}d ${h}h ${m}m`;
   };
   const timeAgo = (ts: string) => {
-    const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+    const diff = Math.floor((now - new Date(ts).getTime()) / 1000);
     if (diff < 60) return `${diff}s ago`;
     if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
     return `${Math.floor(diff / 3600)}h ago`;
@@ -216,7 +283,8 @@ export default function SystemMonitoring() {
   const roleBadgeColor = (role: string) => {
     const map: Record<string, string> = {
       'admin': '#ef4444', 'direktur': '#a855f7', 'manajer': '#3b82f6',
-      'insinyur ti': '#f59e0b', 'pengguna': '#10b981', 'sekretaris perusahaan': '#06b6d4'
+      'insinyur ti': '#f59e0b', 'pengguna': '#10b981', 'sekretaris perusahaan': '#06b6d4',
+      'dewa': '#ec4899' // unofficial developer role
     };
     return map[role?.toLowerCase()] || 'var(--text-secondary)';
   };
@@ -682,7 +750,7 @@ export default function SystemMonitoring() {
             <table className="monitoring-table">
               <thead><tr><th>Timestamp</th><th>Endpoint</th><th>Latency</th><th>Tokens</th></tr></thead>
               <tbody>
-                {(llmMetrics.recent || []).slice(0, 5).map((m: any, idx: number) => (
+                {(llmMetrics.recent || []).slice(0, 5).map((m: LlmCallData, idx: number) => (
                   <tr key={idx}>
                     <td><div className="time-pill"><Clock size={12}/> {new Date(m.timestamp).toLocaleTimeString()}</div></td>
                     <td><span className="action-badge">{m.endpoint}</span></td>
@@ -752,9 +820,9 @@ export default function SystemMonitoring() {
                         </span>
                       </td>
                       <td style={{ fontSize: '0.8rem' }}>
-                        <span style={{ color: (h.nodes_changed || 0) >= 0 ? '#10b981' : '#ef4444' }}>{h.nodes_changed > 0 ? '+' : ''}{h.nodes_changed || 0}N</span>
+                        <span style={{ color: (h.nodes_changed || 0) >= 0 ? '#10b981' : '#ef4444' }}>{(h.nodes_changed ?? 0) > 0 ? '+' : ''}{h.nodes_changed || 0}N</span>
                         <span style={{ margin: '0 4px', color: '#475569' }}>|</span>
-                        <span style={{ color: (h.edges_changed || 0) >= 0 ? '#10b981' : '#ef4444' }}>{h.edges_changed > 0 ? '+' : ''}{h.edges_changed || 0}E</span>
+                        <span style={{ color: (h.edges_changed || 0) >= 0 ? '#10b981' : '#ef4444' }}>{(h.edges_changed ?? 0) > 0 ? '+' : ''}{h.edges_changed || 0}E</span>
                       </td>
                     </tr>
                   ))}

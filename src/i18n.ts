@@ -20,6 +20,15 @@ import {
  */
 
 const id = {
+  /* Document <title> — applied to document.title at module load and on
+     every settings change (subscription at the bottom of this module).
+     The brand stays English; the tagline follows the locale. */
+  docTitle: 'Legal Analyzer — Kepatuhan terverifikasi sebelum Anda menandatangani',
+
+  /* App-shell announcement (critique P1 2026-10-06): read by the role=status
+     region in App.tsx when a fresh sign-in lands focus on the main region. */
+  signedInNote: 'Berhasil masuk.',
+
   /* TopBar + Sidebar chrome */
   searchEverywhere: 'Cari di mana saja…',
   openNav: 'Buka menu navigasi',
@@ -182,8 +191,10 @@ const id = {
   opGreetOffer: 'Bagaimana Sage dapat membantu Anda?',
 
   /* Auth view (migrated 2026-10-02: login/register literals routed through
-     useStrings(); the brand "Legal Analyzer" stays English per the
-     2026-09-30 decision) */
+     useStrings(); the brand "Legal Analyzer" stays English in both locales
+     per the 2026-09-30 decision — owner-confirmed 2026-10-06 as THE product
+     name, retiring the former "LA LegPro" display name; Lintasarta is the
+     parent company) */
   authTagline:
     'Pusat pengetahuan legal organisasi Anda: regulasi, kebijakan, dan kontrak dalam satu platform terverifikasi.',
   authFeat1Title: 'Kutipan Terverifikasi',
@@ -199,6 +210,9 @@ const id = {
   authWelcomeSub: 'Masuk untuk mengakses dasbor Anda',
   authRegisterTitle: 'Buat Akun',
   authRegisterSub: 'Daftar untuk memulai',
+  /* On-premises trust line under the header (2026-10-06, owner copy; "Anda"
+     capitalized per the formal register). */
+  authTrustNote: 'Data organisasi Anda tetap di server institusi Anda.',
   authUsername: 'Nama pengguna',
   authUsernamePh: 'Masukkan nama pengguna Anda',
   authEmail: 'Email',
@@ -212,6 +226,8 @@ const id = {
   authRuleSymbol: '1 simbol',
   authShowPassword: 'Tampilkan kata sandi',
   authHidePassword: 'Sembunyikan kata sandi',
+  /* Caps Lock warning while the modifier is detected on a password field. */
+  authCapsLockOn: 'Caps Lock aktif.',
   authSignIn: 'Masuk',
   authSignUp: 'Daftar',
   authProcessing: 'Memproses…',
@@ -220,8 +236,23 @@ const id = {
   authHaveAccount: 'Sudah punya akun? ',
   authLoginHere: 'Masuk di sini',
   authBack: '← Kembali ke ikhtisar',
-  authContactAdmin: 'Hubungi administrator',
+  /* Static guidance line (2026-10-06): replaces the authContactAdmin mailto —
+     no SMTP or real administrator contact is configured yet, so the row is
+     non-interactive copy instead of a dead link. */
+  authContactNote: 'Tidak dapat masuk? Hubungi administrator instansi Anda.',
+  /* Login-mode-only static sibling of authContactNote: the reset flow stays
+     parked in plans/2026-10-05-forgot-password.md, so this row gets the same
+     non-interactive treatment (2026-10-06 user decision). */
+  authForgotNote:
+    'Lupa kata sandi? Administrator instansi Anda dapat membantu mengatur ulang.',
   authLangToggleAria: 'Ganti bahasa ke Inggris',
+  /* Empty-field gates: the form is noValidate (native bubbles are
+     English-only and unstyleable), so required checks raise localized
+     errors through the same banner/highlight/shake path. */
+  authErrUsernameRequired: 'Nama pengguna wajib diisi.',
+  authErrEmailRequired: 'Email wajib diisi.',
+  authErrPasswordRequired: 'Kata sandi wajib diisi.',
+  authErrConfirmRequired: 'Konfirmasi kata sandi wajib diisi.',
   authErrMismatch:
     'Kata sandi dan konfirmasi kata sandi tidak cocok. Periksa kembali kedua isian tersebut.',
   authErrNeedUppercase:
@@ -234,6 +265,19 @@ const id = {
     'Email tidak boleh mengandung spasi. Hapus spasinya lalu ketik ulang alamat email.',
   authErrEmailFormat:
     'Format email tidak valid. Contoh: nama@domain.com',
+  /* Localized copy for normalized backend detail codes (SERVER_MESSAGE_KEYS
+     in Auth.tsx). Unknown codes fall back to authErrFailed — raw server
+     text or bare codes never render. */
+  authErrInvalidCredentials:
+    'Nama pengguna atau kata sandi salah. Periksa kembali isian Anda lalu coba lagi.',
+  authErrUsernameTaken:
+    'Nama pengguna sudah terdaftar. Pilih nama pengguna lain lalu coba lagi.',
+  authErrEmailTaken:
+    'Email sudah terdaftar. Gunakan alamat email lain atau hubungi administrator instansi Anda.',
+  authErrDeactivated:
+    'Akun Anda dinonaktifkan. Hubungi administrator sistem untuk memulihkan akses.',
+  authErrNetwork:
+    'Tidak dapat menghubungi server. Periksa koneksi Anda lalu coba lagi; jika berlanjut, hubungi administrator sistem Anda.',
   authErrFailed:
     'Autentikasi gagal. Periksa kembali nama pengguna dan kata sandi Anda; jika berlanjut, hubungi administrator sistem Anda.',
 } as const;
@@ -241,6 +285,8 @@ const id = {
 export type StringKey = keyof typeof id;
 
 const en: Record<StringKey, string> = {
+  docTitle: 'Legal Analyzer — Compliance, verified before you sign',
+  signedInNote: 'Signed in.',
   searchEverywhere: 'Search everywhere...',
   openNav: 'Open navigation menu',
   openSearch: 'Open search',
@@ -413,6 +459,7 @@ const en: Record<StringKey, string> = {
   authWelcomeSub: 'Sign in to access your dashboard',
   authRegisterTitle: 'Create Account',
   authRegisterSub: 'Register to get started',
+  authTrustNote: 'Your organization\'s data stays on your institution\'s servers.',
   authUsername: 'Username',
   authUsernamePh: 'Enter your username',
   authEmail: 'Email',
@@ -426,6 +473,7 @@ const en: Record<StringKey, string> = {
   authRuleSymbol: '1 symbol',
   authShowPassword: 'Show password',
   authHidePassword: 'Hide password',
+  authCapsLockOn: 'Caps Lock is on.',
   authSignIn: 'Sign In',
   authSignUp: 'Sign Up',
   authProcessing: 'Processing…',
@@ -434,8 +482,14 @@ const en: Record<StringKey, string> = {
   authHaveAccount: 'Already have an account? ',
   authLoginHere: 'Login here',
   authBack: '← Back to overview',
-  authContactAdmin: 'Contact administrator',
+  authContactNote: 'Trouble signing in? Contact your organization\'s administrator.',
+  authForgotNote:
+    'Forgot your password? Your organization\'s administrator can help reset it.',
   authLangToggleAria: 'Switch language to Indonesian',
+  authErrUsernameRequired: 'Username is required.',
+  authErrEmailRequired: 'Email is required.',
+  authErrPasswordRequired: 'Password is required.',
+  authErrConfirmRequired: 'Password confirmation is required.',
   authErrMismatch:
     'Password and confirmation do not match. Check both fields and try again.',
   authErrNeedUppercase:
@@ -448,6 +502,16 @@ const en: Record<StringKey, string> = {
     'Email must not contain whitespace. Remove the spaces and retype the email address.',
   authErrEmailFormat:
     'Invalid email format. Example: name@domain.com',
+  authErrInvalidCredentials:
+    'Incorrect username or password. Check your details and try again.',
+  authErrUsernameTaken:
+    'That username is already registered. Choose a different username and try again.',
+  authErrEmailTaken:
+    'That email is already registered. Use a different email address or contact your organization\'s administrator.',
+  authErrDeactivated:
+    'Your account has been deactivated. Contact your system administrator to restore access.',
+  authErrNetwork:
+    'Cannot reach the server. Check your connection and try again; if this persists, contact your system administrator.',
   authErrFailed:
     'Authentication failed. Check your username and password; if this persists, contact your system administrator.',
 };
@@ -481,3 +545,17 @@ export function useLocale(): Locale {
 export function useStrings(): Record<StringKey, string> {
   return STRINGS[useLocale()];
 }
+
+/* Runtime <title> sync (2026-10-06, owner decision): index.html's static
+   title is the Indonesian default for the pre-JS paint; this applies the
+   localized docTitle at module load — covering a stored 'en' locale the
+   pre-paint script cannot localize — and on every settings change. Lives
+   here rather than in settings.ts to keep the import direction one-way
+   (settings importing i18n would be circular). Note: LegalRepository
+   renders its own hoisted <title> while mounted (pre-existing pattern);
+   this sync only re-fires on settings changes. */
+function applyDocTitle() {
+  document.title = STRINGS[getLocale()].docTitle;
+}
+subscribeSettings(applyDocTitle);
+applyDocTitle();

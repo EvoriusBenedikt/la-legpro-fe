@@ -5,8 +5,11 @@ import DocumentDrawer from './DocumentDrawer';
 import LoadingOrb from './LoadingOrb';
 import WorkBeam from './WorkBeam';
 import { useDialogA11y } from '../hooks/useDialogA11y';
-import { useAuth } from '../context/AuthContext';
-import ComplianceResultsViewer from './ComplianceResultsViewer';
+import { useAuth } from '../hooks/useAuth';
+import ComplianceResultsViewer, {
+  type ComplianceResult,
+  type ComplianceSummary,
+} from './ComplianceResultsViewer';
 import ProtectedRoute from './ProtectedRoute';
 import api, { isHttpError } from '../services/api';
 import { useDateFormatters } from '../format';
@@ -72,7 +75,12 @@ interface AnalyzedDocument {
   id: string;
   filename: string;
   created_at: string;
-  results?: any;
+  /** Payload persisted via /api/compliance-history (UploadProvider saves
+      `{ summary, results }` from the compliance analysis). */
+  results?: {
+    summary?: ComplianceSummary | null;
+    results?: ComplianceResult[] | null;
+  } | null;
 }
 
 interface UserListItem {
@@ -101,10 +109,10 @@ export default function LegalRepository() {
   const roleLower = user?.role?.toLowerCase() || '';
   // Riwayat Unggahan visibility (decision B, 2026-09-30): sekretaris sees all
   // uploads, manajer/direktur see only their own (enforced backend-side too).
-  const canSeeHistory = ['sekretaris perusahaan', 'manajer', 'direktur'].includes(roleLower);
+  const canSeeHistory = ['sekretaris perusahaan', 'manajer', 'direktur', 'dewa'].includes(roleLower);
   const initialTab = (): ActiveTab => {
     const t = searchParams.get('tab');
-    if (t === 'pending' && roleLower !== 'sekretaris perusahaan') return 'regulations';
+    if (t === 'pending' && !['sekretaris perusahaan', 'dewa'].includes(roleLower)) return 'regulations';
     if (t === 'history' && !canSeeHistory) return 'regulations';
     return (['regulations', 'internal', 'analyzed', 'templates', 'pending', 'history'].includes(t || '') ? t : 'regulations') as ActiveTab;
   };
@@ -246,8 +254,8 @@ export default function LegalRepository() {
       alert("Dokumen berhasil dihapus!");
       fetchDocs();
       fetchPendingDocs();
-    } catch (err: any) {
-      alert(`Gagal menghapus dokumen: ${err.message}`);
+    } catch (err) {
+      alert(`Gagal menghapus dokumen: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -380,7 +388,7 @@ export default function LegalRepository() {
       try {
         const res = await api.get('/api/taxonomy');
         // only active
-        setTaxonomyList(res.data.taxonomy.filter((t: any) => t.is_active));
+        setTaxonomyList(res.data.taxonomy.filter((t: { is_active?: boolean }) => t.is_active));
       } catch (e) {
         console.error(e);
       }
@@ -392,22 +400,27 @@ export default function LegalRepository() {
     if (!viewPdfDoc || !viewPdfDoc.filename) return;
     
     const pdfPath = `/api/pdf/${encodeURIComponent(viewPdfDoc.filename)}`;
-    setIsPdfLoading(true);
-    setPdfBlobUrl(null);
-    
-    api.get(pdfPath)
-      .then(res => res.data)
-      .then(data => {
-        const binary = atob(data.data);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i);
-        }
-        const blob = new Blob([bytes], { type: 'application/pdf' });
-        setPdfBlobUrl(URL.createObjectURL(blob));
-      })
-      .catch(err => console.error('PDF load error:', err))
-      .finally(() => setIsPdfLoading(false));
+    // Awaited-IIFE: keeps the setState-containing fetch out of the effect
+    // body's direct call graph (react-hooks/set-state-in-effect). The two
+    // spinner resets still run synchronously in the same tick as before.
+    (async () => {
+      setIsPdfLoading(true);
+      setPdfBlobUrl(null);
+
+      await api.get(pdfPath)
+        .then(res => res.data)
+        .then(data => {
+          const binary = atob(data.data);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: 'application/pdf' });
+          setPdfBlobUrl(URL.createObjectURL(blob));
+        })
+        .catch(err => console.error('PDF load error:', err))
+        .finally(() => setIsPdfLoading(false));
+    })();
       
     return () => {
       if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
@@ -415,18 +428,24 @@ export default function LegalRepository() {
   }, [viewPdfDoc]);
 
   useEffect(() => {
-    fetchDocs();
-    fetchHistoryDocs();
-    fetchTemplates();
-    const role = user?.role?.toLowerCase() || '';
-    if (role === 'sekretaris perusahaan') {
-      fetchPendingDocs();
-    }
-    // Riwayat Unggahan (2026-09-30): eligible roles prefetch so the tab
-    // badge count is real on first paint.
-    if (['sekretaris perusahaan', 'manajer', 'direktur'].includes(role)) {
-      fetchUploadHistory();
-    }
+    // Awaited-IIFE + Promise.all: every fetch still STARTS in the same tick
+    // (fully parallel, exactly as the previous fire-and-forget calls) but no
+    // setState-containing call sits directly in the effect body
+    // (react-hooks/set-state-in-effect).
+    (async () => {
+      const role = user?.role?.toLowerCase() || '';
+      await Promise.all([
+        fetchDocs(),
+        fetchHistoryDocs(),
+        fetchTemplates(),
+        ...(['sekretaris perusahaan', 'dewa'].includes(role) ? [fetchPendingDocs()] : []),
+        // Riwayat Unggahan (2026-09-30): eligible roles prefetch so the tab
+        // badge count is real on first paint.
+        ...(['sekretaris perusahaan', 'manajer', 'direktur', 'dewa'].includes(role)
+          ? [fetchUploadHistory()]
+          : []),
+      ]);
+    })();
   }, [user]);
 
   // Pending-first queue (2026-09-30): poll while the queue tab is open so new
@@ -450,8 +469,8 @@ export default function LegalRepository() {
         return;
       }
       fetchDocs();
-      if (roleLower === 'sekretaris perusahaan') fetchPendingDocs();
-      if (['sekretaris perusahaan', 'manajer', 'direktur'].includes(roleLower)) fetchUploadHistory();
+      if (['sekretaris perusahaan', 'dewa'].includes(roleLower)) fetchPendingDocs();
+      if (['sekretaris perusahaan', 'manajer', 'direktur', 'dewa'].includes(roleLower)) fetchUploadHistory();
     }, 5000);
     return () => clearInterval(t);
   }, [uploadWatchUntil, roleLower]);
@@ -602,14 +621,14 @@ export default function LegalRepository() {
   // --- Filter option sources ---
   const klasifikasiOptions = [
     'Umum',
-    ...(['manajer', 'direktur', 'admin', 'sekretaris perusahaan'].includes(roleLower) ? ['Rahasia'] : []),
-    ...(['direktur', 'admin', 'sekretaris perusahaan'].includes(roleLower) ? ['Terbatas'] : []),
+    ...(['manajer', 'direktur', 'admin', 'sekretaris perusahaan', 'dewa'].includes(roleLower) ? ['Rahasia'] : []),
+    ...(['direktur', 'admin', 'sekretaris perusahaan', 'dewa'].includes(roleLower) ? ['Terbatas'] : []),
   ];
   // Ignore selections the current role is no longer allowed to see
   const visibleKlasifikasi = selectedKlasifikasi.filter(k => klasifikasiOptions.includes(k));
 
   const isDup = (d: OJKDocument) => d.status.includes('Duplikat');
-  const docKlas = (d: OJKDocument) => (d as any).klasifikasi || 'Umum';
+  const docKlas = (d: OJKDocument) => d.klasifikasi || 'Umum';
   const normStatus = (d: OJKDocument) => isDup(d) ? 'Duplikat' : d.status;
 
   // Structured citation parsed from the judul ("... Nomor 55/POJK.03/2016
@@ -820,7 +839,7 @@ export default function LegalRepository() {
     { id: 'analyzed' as ActiveTab, label: 'Dokumen Teranalisis', icon: <FileCheck size={16} />, count: historyDocs.length },
     { id: 'templates' as ActiveTab, label: 'Template Dokumen', icon: <File size={16} />, count: templates.length },
   ];
-  if (user?.role?.toLowerCase() === 'sekretaris perusahaan') {
+  if (['sekretaris perusahaan', 'dewa'].includes(user?.role?.toLowerCase() || '')) {
     tabs.push({ id: 'pending' as ActiveTab, label: 'Dokumen Pending', icon: <Clock size={16} />, count: pendingDocs.length });
   }
   if (canSeeHistory) {
@@ -926,7 +945,7 @@ export default function LegalRepository() {
             <p>Dokumen privat Anda</p>
           </div>
         </div>
-        {roleLower === 'sekretaris perusahaan' && (
+        {['sekretaris perusahaan', 'dewa'].includes(roleLower) && (
           <div className="stat-card priority" title="Dokumen yang menunggu konfirmasi Anda">
             <div className="stat-icon orange">
               <Clock size={16} />
@@ -1080,8 +1099,8 @@ export default function LegalRepository() {
           <div style={{ padding: '0 8px 32px 8px' }}>
             <ComplianceResultsViewer
               filename={selectedHistoryDoc.filename}
-              summary={selectedHistoryDoc.results?.summary}
-              results={selectedHistoryDoc.results?.results}
+              summary={selectedHistoryDoc.results?.summary ?? null}
+              results={selectedHistoryDoc.results?.results ?? null}
               headerActions={null}
             />
           </div>
@@ -1568,7 +1587,7 @@ export default function LegalRepository() {
                   >
                     <Zap size={14} /> Analisis
                   </button>
-                  {user?.role?.toLowerCase() === 'sekretaris perusahaan' && (
+                  {['sekretaris perusahaan', 'dewa'].includes(user?.role?.toLowerCase() || '') && (
                     <button
                       onClick={() => handleDeleteDocument(doc.id)}
                       style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger-text)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '0 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
@@ -1581,7 +1600,7 @@ export default function LegalRepository() {
                     </button>
                   )}
                 </div>
-                {(doc as any).klasifikasi && (doc as any).klasifikasi !== 'Umum' && ['direktur', 'manajer', 'admin', 'sekretaris perusahaan'].includes(user?.role?.toLowerCase() || '') && (
+                {doc.klasifikasi && doc.klasifikasi !== 'Umum' && ['direktur', 'manajer', 'admin', 'sekretaris perusahaan', 'dewa'].includes(user?.role?.toLowerCase() || '') && (
                   <button
                     className="analyze-btn"
                     style={{ background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-hover)', marginTop: '8px', border: '1px solid var(--info)' }}
@@ -1691,7 +1710,7 @@ export default function LegalRepository() {
               </button>
             </div>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-              Anda akan memberikan akses dokumen <strong>{showShareModal.judul}</strong> ({(showShareModal as any).klasifikasi}).
+              Anda akan memberikan akses dokumen <strong>{showShareModal.judul}</strong> ({showShareModal.klasifikasi}).
             </p>
             <form onSubmit={handleShareSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

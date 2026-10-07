@@ -4,8 +4,11 @@ import {
   XCircle, Clock, Edit2, Trash2, Eye, Calendar, Building,
   TrendingUp, ShieldCheck, X, Upload, RefreshCw
 } from 'lucide-react';
-import { useContractUpload } from '../context/ContractUploadContext';
-import ComplianceResultsViewer from './ComplianceResultsViewer';
+import { useContractUpload } from '../hooks/useContractUpload';
+import ComplianceResultsViewer, {
+  type ComplianceResult,
+  type ComplianceSummary,
+} from './ComplianceResultsViewer';
 import ContractUploadModal from './ContractUploadModal';
 import LoadingOrb from './LoadingOrb';
 import api, { isHttpError } from '../services/api';
@@ -18,7 +21,12 @@ interface AnalyzedDocument {
   company_name: string | null;
   expiration_date: string | null;
   created_at: string;
-  results?: any;
+  /** Payload persisted via /api/compliance-history (UploadProvider saves
+      `{ summary, results }` from the compliance analysis). */
+  results?: {
+    summary?: ComplianceSummary | null;
+    results?: ComplianceResult[] | null;
+  } | null;
 }
 
 type FilterTab = 'all' | 'active' | 'expiring' | 'expired';
@@ -97,7 +105,7 @@ export default function ContractMonitor() {
   };
 
   useEffect(() => {
-    fetchDocs();
+    (async () => { await fetchDocs(); })();
     // Refresh the list whenever a background analysis job finishes
     return subscribe(() => { fetchDocs(); });
   }, [subscribe]);
@@ -387,8 +395,8 @@ export default function ContractMonitor() {
                     </button>
                     <ComplianceResultsViewer
                       filename={viewingDoc.filename}
-                      summary={viewingDoc.results?.summary}
-                      results={viewingDoc.results?.results}
+                      summary={viewingDoc.results?.summary ?? null}
+                      results={viewingDoc.results?.results ?? null}
                       headerActions={null}
                     />
                   </div>

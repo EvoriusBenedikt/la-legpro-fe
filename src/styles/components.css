@@ -2348,9 +2348,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Chancery migration 2026-10-02 (critique P1): the panel wash, grid and orbs
-   moved from the legacy purple family to the Chancery/ink-navy family per the
-   DESIGN.md frontmatter gradient for this brand surface. Text values are
-   pinned light because this surface never theme-flips. */
+   moved from the legacy purple family to the Chancery/ink-navy family. The
+   wash starts at the Chancery Gradient's #1E40AF but deliberately ends
+   ink-navy instead of #3B82F6 — the dark end keeps the pinned-light body
+   text at AA (white on a #3B82F6 end measures ≈3.3:1). The dark-end variant
+   is the record (DESIGN.md brand surfaces, ui_ux_design.md 2026-10-02).
+   Text values are pinned light because this surface never theme-flips. */
 .auth-brand-side {
   flex: 6;
   position: relative;
@@ -2367,14 +2370,15 @@ h1, h2, h3, h4, h5, h6 {
   overflow-x: hidden;
 }
 
-/* Animated glowing orbs */
+/* Static ambient orbs (2026-10-06 polish): the legacy `float` keyframe —
+   DESIGN.md's flagged never-propagate one-off — is retired; the blurred
+   washes keep their depth without motion. */
 .auth-brand-side::before, .auth-brand-side::after {
   content: '';
   position: absolute;
   border-radius: 50%;
   filter: blur(100px);
   z-index: 0;
-  animation: float 20s infinite ease-in-out;
 }
 .auth-brand-side::before {
   width: 400px;
@@ -2389,14 +2393,6 @@ h1, h2, h3, h4, h5, h6 {
   background: rgba(96, 165, 250, 0.12);
   bottom: 20%;
   right: 10%;
-  animation-delay: -10s;
-}
-
-@keyframes float {
-  0%, 100% { transform: translate(0, 0); }
-  25% { transform: translate(50px, -50px); }
-  50% { transform: translate(-20px, 40px); }
-  75% { transform: translate(-40px, -20px); }
 }
 
 .brand-content {
@@ -2448,9 +2444,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Pinned light values: this surface never theme-flips, so theme tokens here
-   shipped invisible text in the default light theme (critique P1). */
+   shipped invisible text in the default light theme (critique P1).
+   #d2dae6 (2026-10-06, was #cbd5e1 at 4.43:1 — just under AA) measures
+   4.67:1 against the panel's brightest zone, rgba(30,64,175,0.88) over
+   the orb glow. */
 .brand-tagline {
-  color: #cbd5e1;
+  color: #d2dae6;
   font-size: 1.2rem;
   max-width: 400px;
   line-height: 1.6;
@@ -2485,7 +2484,7 @@ h1, h2, h3, h4, h5, h6 {
 .auth-feature p {
   margin: 0;
   font-size: 0.85rem;
-  color: #cbd5e1;
+  color: #d2dae6;
 }
 
 .auth-credit {
@@ -2495,7 +2494,7 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #cbd5e1;
+  color: #d2dae6;
 }
 
 .auth-credit-dot {
@@ -2563,9 +2562,18 @@ h1, h2, h3, h4, h5, h6 {
   max-width: 420px;
   margin: auto;
   position: relative;
-  /* Top band reserved for the absolute language toggle so it never
-     overlaps the centered heading (`.auth-language-toggle`). */
-  padding-top: 36px;
+  box-sizing: border-box;
+  /* Canonical card-glass recipe (DESIGN.md): the auth card is the system's
+     signature material and previously rendered glassless (critique 2026-10-06
+     P2 — every other card carries blur + hairline + card-rest shadow). */
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.1);
+  /* 48px top band seats the 44px language toggle (top:4px) clear of the
+     centered heading (`.auth-language-toggle`). */
+  padding: 48px 24px 24px;
   animation: fadeIn 0.5s ease-out forwards;
 }
 
@@ -2617,6 +2625,34 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 0.95rem;
   margin: 0;
 }
+
+/* On-premises trust line under the header (2026-10-06, owner copy): quiet
+   secondary text; `.auth-header .auth-trust-note` outranks the `.auth-header
+   p` rule above for size/margin. The icon inherits the secondary color —
+   tinting it verdict-green would repeat the decorative-triad drift. */
+.auth-header .auth-trust-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  font-size: 0.8rem;
+}
+.auth-trust-note svg { flex-shrink: 0; }
+
+/* Caps Lock hint (critique P3): --warning-text is the AA-hardened token for
+   small text on glass in both themes; rendered only while the modifier is
+   detected on a case-sensitive field — username (critique P2 2026-10-06)
+   or either password. */
+.auth-caps-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--warning-text);
+}
+.auth-caps-hint svg { flex-shrink: 0; }
 
 .auth-form {
   display: flex;
@@ -2698,16 +2734,34 @@ h1, h2, h3, h4, h5, h6 {
   gap: 10px;
   transition: all 0.2s;
   margin-top: 8px;
+  /* Resting glow absorbed from the removed btn-primary class (critique P2
+     2026-10-06): .btn-primary:hover guards on :not(:disabled) only and
+     leaked its lift+glow escalation while the submit button is
+     aria-disabled. The guarded :hover below escalates the lift, never the
+     glow (DESIGN.md). Same literal as .btn-primary's resting shadow. */
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.2);
 }
 
-.auth-button:hover:not(:disabled) {
+.auth-button:hover:not([aria-disabled="true"]) {
   background: var(--accent-hover);
   transform: translateY(-1px);
 }
 
-.auth-button:disabled {
+/* aria-disabled, not disabled (critique P2): a truly disabled button drops
+   focus to <body> mid-submit; this keeps keyboard users anchored while the
+   handler ignores re-entry. cursor:progress tells the truth — the click is
+   not rejected, it is being processed. */
+.auth-button[aria-disabled="true"] {
   opacity: 0.7;
-  cursor: not-allowed;
+  cursor: progress;
+}
+
+/* Inline orb in the submit button: the button supplies gap + centering;
+   the wrapper shrinks to the canvas (`--row` already sets width:auto, this
+   guards the column default). */
+.auth-button .loading-orb {
+  width: auto;
+  gap: 0;
 }
 
 .auth-error {
@@ -2755,17 +2809,23 @@ h1, h2, h3, h4, h5, h6 {
     flex: none;
     border-right: none;
     border-bottom: 1px solid var(--border-color);
-    padding: 32px 16px;
+    padding: 24px 16px;
   }
   .auth-features, .brand-tagline, .auth-credit { display: none; }
-  .brand-content { gap: 12px; }
-  .brand-content h1 { font-size: 2rem; }
-  .brand-logo-container { width: 72px; height: 72px; border-radius: 20px; }
-  .brand-logo-img { width: 40px; height: 40px; }
+  /* Compact lockup (critique P2 Jordan): the brand block is context, not
+     the task — trimming it keeps the submit above the fold at 390x844 in
+     both modes. */
+  .brand-content { gap: 8px; }
+  .brand-content h1 { font-size: 1.6rem; }
+  .brand-logo-container { width: 56px; height: 56px; border-radius: 16px; }
+  .brand-logo-img { width: 32px; height: 32px; }
   .auth-form-side {
     flex: none;
     padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
   }
+  /* Card padding tightens to the 20px mobile convention; the top band
+     stays 48px for the language toggle. */
+  .auth-card { padding: 48px 20px 20px; }
 }
 
 /* Account Profile View Styles */
@@ -3604,25 +3664,47 @@ h1, h2, h3, h4, h5, h6 {
 /* Language toggle button on auth card (top‑right) */
 .auth-language-toggle {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 4px;
+  right: 4px;
+  /* 44px hit area at every width (critique P2 — it measured ~20px tall);
+     the card's 48px padding-top band seats it clear of the heading. */
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
+  border-radius: var(--radius-sm);
   color: var(--accent-color);
   font-weight: 600;
   cursor: pointer;
 }
 
-/* Owner-provided mailto helper link on the auth card; links use the
-   --accent-hover token (5.6:1) per ui_ux_design.md. */
-.auth-contact-admin {
-  color: var(--accent-hover);
+/* Card footer rows (2026-10-06): the contact line is static secondary copy
+   — no SMTP/administrator contact is configured yet, so it carries no link
+   semantics and no hover state (the old personal-Gmail mailto and a
+   glowing dead-click alternative were both rejected). Tight rhythm
+   replaces the former inline marginTop styles. */
+.auth-contact-note {
+  margin: 8px 0 0;
+  text-align: center;
   font-size: 0.85rem;
-  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.auth-toggle--tight {
+  margin-top: 8px;
+}
+
+.auth-back-link {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
   text-decoration: none;
 }
-.auth-contact-admin:hover,
-.auth-contact-admin:focus-visible {
+.auth-back-link:hover,
+.auth-back-link:focus-visible {
+  color: var(--accent-color);
   text-decoration: underline;
 }
 
@@ -4829,6 +4911,95 @@ select::placeholder {
 .admin-icon-btn--danger:hover { background: var(--danger-bg); color: var(--danger-text); }
 .admin-icon-btn:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
 
+/* ── User management + audit hardening (2026-10-06 critique remediation
+      P0/P1/P2): reactivate action tone, row-level role select, self chip,
+      inactive-row wash, date-filter sizing, export buttons, dismissible
+      persistent error, truncated-cell hints (same contract as the
+      2026-09-29 .status-chip[data-hint] pattern: paints on hover AND
+      focus-visible), dialog pending/error states. ── */
+.admin-icon-btn--success:hover { background: var(--success-bg); color: var(--success-text); }
+
+.admin-select--row { padding: 6px 10px; font-size: 0.8rem; max-width: 200px; }
+.admin-self-chip { margin-left: 8px; }
+.admin-row-inactive .admin-entity-name { color: var(--text-secondary); }
+
+.admin-toolbar .admin-date { flex: 0 1 170px; min-width: 150px; }
+.admin-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+.admin-feedback-dismiss {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.admin-feedback-dismiss:hover { background: var(--bg-element); }
+.admin-feedback-dismiss:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+
+/* Truncated-cell hint host: the OUTER span carries data-hint and stays
+   overflow-visible so the tooltip escapes; the INNER span does the
+   ellipsis (a ::after inside an overflow:hidden box would be clipped). */
+.admin-hint-cell {
+  position: relative;
+  display: inline-block;
+  max-width: 220px; /* matches .admin-cell-truncate's cap */
+  vertical-align: bottom;
+  cursor: help;
+}
+.admin-hint-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-hint-cell[data-hint]:hover::after,
+.admin-hint-cell[data-hint]:focus-visible::after {
+  content: attr(data-hint);
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -8px;
+  z-index: 40;
+  width: max-content;
+  max-width: 280px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 12px 28px -8px rgba(15, 23, 42, 0.45);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  line-height: 1.45;
+  text-transform: none;
+  white-space: normal;
+  text-align: left;
+  pointer-events: none;
+}
+.admin-hint-cell:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+
+/* ConfirmDialog pending/error states — the dialog now stays open until the
+   mutation settles (critique P2 feedback-transience fix). */
+.confirm-modal-error {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--danger-text);
+}
+
 /* Loading / error states */
 .admin-loading { width: 100%; padding: 24px 0; }
 .admin-skeleton { width: 100%; max-width: 720px; gap: 16px; }
@@ -4979,6 +5150,9 @@ select::placeholder {
   text-align: center;
   color: var(--text-secondary);
 }
+/* Load-failure row (2026-10-06 clarify pass, critique F4): the shared error
+   banner grammar reused inside the table body, minus its page-flow margin. */
+.tax-cell-center .tax-error { margin-bottom: 0; }
 .tax-name { font-weight: 500; }
 .tax-row-inactive .tax-name { color: var(--text-secondary); }
 
@@ -5015,3 +5189,24 @@ button.status-chip.tax-chip:disabled { opacity: 0.6; cursor: wait; }
 .tax-icon-btn--danger { color: var(--danger-text); }
 .tax-icon-btn--danger:hover:not(:disabled) { background: var(--danger-bg); color: var(--danger-text); }
 .tax-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Hardening/polish additions (2026-10-06, second pass): keyboard focus rings
+   follow the .msg-action-btn convention; a blocked hard-delete explains itself
+   in the choice dialog; the empty state centers its label + CTA. */
+.tax-icon-btn:focus-visible,
+button.status-chip.tax-chip:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+.confirm-modal-note {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.tax-empty-inner {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}

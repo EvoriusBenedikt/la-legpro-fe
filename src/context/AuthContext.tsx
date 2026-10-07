@@ -1,21 +1,8 @@
-import React, { createContext, useContext, useState } from 'react';
-
-interface User {
-  id: string;
-  username: string;
-  role?: string;
-  email?: string;
-}
-
-interface AuthContextType {
-  user: User | null;
-  token: string | null;
-  login: (token: string, user: User) => void;
-  logout: () => void;
-  isAuthenticated: boolean;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+import React, { useState } from 'react';
+/* User, the context object and the useAuth hook moved to hooks/useAuth.ts
+   (2026-10-06) so this file exports only the AuthProvider component
+   (react-refresh/only-export-components). */
+import { AuthContext, type User } from '../hooks/useAuth';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(() => {
@@ -49,12 +36,4 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 };

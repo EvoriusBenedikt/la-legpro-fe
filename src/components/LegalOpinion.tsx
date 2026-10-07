@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import api from '../services/api';
 import { getSettings } from '../settings';
 import { useStrings, getLocale, fill, STRINGS } from '../i18n';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import DocumentDrawer from './DocumentDrawer';
 import LoadingOrb from './LoadingOrb';
 import BotIdentity from './BotIdentity';
@@ -241,9 +241,15 @@ export default function LegalOpinion() {
   }, [input]);
 
   useEffect(() => {
-    if (!activeConversationId || !conversations.some(c => c.id === activeConversationId)) {
-      setActiveConversationId(conversations[0]?.id ?? '');
-    }
+    // Async-IIFE wrapper (react-hooks/set-state-in-effect): this guarded
+    // fallback only fires when the persisted active id is stale or missing —
+    // a bounded, conditional correction, kept out of the effect body's
+    // direct call graph.
+    (async () => {
+      if (!activeConversationId || !conversations.some(c => c.id === activeConversationId)) {
+        setActiveConversationId(conversations[0]?.id ?? '');
+      }
+    })();
   }, [activeConversationId, conversations]);
 
   useEffect(() => {

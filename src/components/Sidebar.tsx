@@ -1,7 +1,7 @@
 import { Database, Scale, User, BarChart2, ShieldCheck, Network, FolderTree } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { NavLink } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { useStrings } from '../i18n';
 
 interface SidebarProps {
@@ -18,18 +18,20 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   const isITAdmin = role === 'admin';
   const isSekretaris = role === 'sekretaris perusahaan';
   const isEngineer = role === 'insinyur ti';
+  const isDewa = role === 'dewa'; // unofficial developer role
 
   const userLevel = user?.role ? getRoleLevel(user.role) : 1;
 
   function getRoleLevel(role: string): number {
     const levels: Record<string, number> = {
-      pengguna: 1, manajer: 2, direktur: 3, admin: 4, 'sekretaris perusahaan': 5, 'insinyur ti': 6
+      pengguna: 1, manajer: 2, direktur: 3, admin: 4, 'sekretaris perusahaan': 5, 'insinyur ti': 6, dewa: 7
     };
     return levels[role.toLowerCase()] ?? 1;
   }
 
   const adminTabs = [
     { path: '/admin', name: t.navAdmin, icon: <ShieldCheck size={20} /> },
+    { path: '/taxonomy', name: t.navTaxonomy, icon: <FolderTree size={20} /> },
     { path: '/account', name: t.navAccount, icon: <User size={20} /> },
   ];
 
@@ -42,11 +44,21 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
 
   const engineerTabs = [
     { path: '/monitoring', name: t.navMonitoring, icon: <BarChart2 size={20} /> },
+    { path: '/taxonomy', name: t.navTaxonomy, icon: <FolderTree size={20} /> },
     { path: '/account', name: t.navAccount, icon: <User size={20} /> },
   ];
 
   let tabs = regularTabs;
-  if (isEngineer) {
+  if (isDewa) {
+    // Unofficial developer role: every destination, each listed once.
+    tabs = [
+      { path: '/admin', name: t.navAdmin, icon: <ShieldCheck size={20} /> },
+      { path: '/monitoring', name: t.navMonitoring, icon: <BarChart2 size={20} /> },
+      { path: '/taxonomy', name: t.navTaxonomy, icon: <FolderTree size={20} /> },
+      ...regularTabs,
+      { path: '/account', name: t.navAccount, icon: <User size={20} /> },
+    ];
+  } else if (isEngineer) {
     tabs = engineerTabs;
   } else if (isITAdmin) {
     tabs = adminTabs;

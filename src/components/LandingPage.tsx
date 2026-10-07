@@ -64,7 +64,7 @@ export default function LandingPage() {
         <div className="lp-inner lp-nav-row">
           <Link to="/" className="lp-brand">
             <span className="lp-brand-mark"><Scale size={18} /></span>
-            LA Legal-Analyzer
+            Legal Analyzer
           </Link>
           <nav className="lp-links">
             <a href="#capabilities">Capabilities</a>
@@ -84,7 +84,7 @@ export default function LandingPage() {
             <span className="lp-eyebrow">IN-HOUSE LEGAL COMPLIANCE</span>
             <h1>Compliance, <span className="lp-accent">verified</span> before you sign.</h1>
             <p className="lp-lede">
-              LA Legal-Analyzer scans contracts and internal documents against
+              Legal Analyzer scans contracts and internal documents against
               applicable laws and regulations — mapping every clause to its source
               text and flagging gaps before they become liabilities.
             </p>
@@ -374,7 +374,7 @@ export default function LandingPage() {
         <div className="lp-inner lp-footer-row">
           <Link to="/" className="lp-brand" style={{ fontSize: '0.9rem' }}>
             <span className="lp-brand-mark" style={{ width: 26, height: 26 }}><Scale size={14} /></span>
-            LA Legal-Analyzer
+            Legal Analyzer
           </Link>
           <span>Compliance, verified before you sign.</span>
           <nav>

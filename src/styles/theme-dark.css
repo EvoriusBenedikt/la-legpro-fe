@@ -28,7 +28,7 @@
 }
 
 :root[data-theme="dark"] .btn-primary:hover:not(:disabled),
-:root[data-theme="dark"] .auth-button:hover:not(:disabled) {
+:root[data-theme="dark"] .auth-button:hover:not([aria-disabled="true"]) {
   background: #1d4ed8;
 }
 

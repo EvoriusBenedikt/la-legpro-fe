@@ -45,6 +45,40 @@ interface SelectedNode extends KGNode {
   relations: ConnectedRelation[];
 }
 
+/* Item shapes fed into the vis-network DataSets by renderGraph. They mirror
+   the subset of vis-network Node/Edge options actually used, so the datasets
+   stay typed (no DataSet<any>) while remaining structurally assignable to
+   what the Network constructor / setData expect. */
+interface VisGraphNode {
+  id: string;
+  label: string;
+  title: string;
+  font: { color: string; size: number; face: string; bold: boolean };
+  shape?: string;
+  size?: number;
+  margin?: { top: number; right: number; bottom: number; left: number };
+  borderWidth?: number;
+  color?: {
+    background: string;
+    border: string;
+    highlight: string | { background: string; border: string };
+    /** Present on the scenario-highlight partial updates, which send only
+        `{ opacity }` (vis-data merges it into the stored color). */
+    opacity?: number;
+  };
+}
+
+interface VisGraphEdge {
+  id: number;
+  from: string;
+  to: string;
+  title: string;
+  color: { color: string; opacity: number };
+  arrows: { to: { enabled: boolean; scaleFactor: number } };
+  width: number;
+  smooth: { enabled: boolean; type: 'curvedCW'; roundness: number };
+}
+
 const NODE_COLORS: Record<string, { background: string; border: string; highlight: string }> = {
   regulasi: { background: '#1e3a5f', border: '#38BDF8', highlight: '#2563eb' },
   entitas:  { background: '#3b1f5e', border: '#A855F7', highlight: '#7c3aed' },
@@ -93,6 +127,24 @@ const TYPE_LABELS: Record<string, string> = {
   entitas: 'Entitas',
   topik: 'Topik',
 };
+
+/* One 36px icon button of the graph zoom controls. Extracted to module scope
+   so the controls no longer need a render-time array of {icon, action}
+   objects — react-hooks/refs flags ref-touching functions stored in such
+   arrays even though they only ever run from event handlers. Styles are
+   copied verbatim from the previous .map() markup. */
+const GraphControlButton = ({ onClick, children }: {
+  onClick: () => void;
+  children: React.ReactNode;
+}) => (
+  <button type="button" onClick={onClick} style={{
+    background: 'var(--bg-element)', border: '1px solid var(--border-color)',
+    borderRadius: '8px', width: '36px', height: '36px', cursor: 'pointer',
+    color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  }}>
+    {children}
+  </button>
+);
 
 const NodeListCard = ({ node, kgData, onNavigate }: { node: KGNode, kgData: KGData, onNavigate: (id: string) => void }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -152,8 +204,8 @@ const NodeListCard = ({ node, kgData, onNavigate }: { node: KGNode, kgData: KGDa
 export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (docId: string) => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
-  const nodesDataset = useRef<DataSet<any>>(new DataSet([]));
-  const edgesDataset = useRef<DataSet<any>>(new DataSet([]));
+  const nodesDataset = useRef<DataSet<VisGraphNode>>(new DataSet<VisGraphNode>([]));
+  const edgesDataset = useRef<DataSet<VisGraphEdge>>(new DataSet<VisGraphEdge>([]));
 
   const [kgData, setKgData] = useState<KGData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -294,24 +346,10 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
     }
   }, [hoveredRelationId, selectedNode]);
 
-  const fetchGraph = useCallback(async (s = search, t = filterType) => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (s) params.set('search', s);
-      if (t) params.set('node_type', t);
-      const res = await api.get(`/api/knowledge-graph?${params}`);
-      const data: KGData = res.data;
-      setKgData(data);
-      renderGraph(data);
-    } catch (e) {
-      console.error('KG fetch error:', e);
-    } finally {
-      setLoading(false);
-    }
-  }, [search, filterType]);
-
-  const renderGraph = (data: KGData) => {
+  // renderGraph is declared BEFORE fetchGraph because fetchGraph calls it:
+  // react-hooks/immutability rejects textual use-before-declare even for
+  // hoisted function declarations, so the source order is what matters.
+  function renderGraph(data: KGData) {
     // 1. Calculate degree (number of connections) for each node
     const nodeDegrees = new Map<string, number>();
     data.edges.forEach(e => {
@@ -357,7 +395,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
         ? { color: '#ffffff', size: Math.min(32, 16 + (degree * 0.2)), face: 'Inter, sans-serif', bold: true }
         : { color: 'var(--text-primary)', size: 10, face: 'Inter, sans-serif', bold: false };
 
-      const nodeProps: any = {
+      const nodeProps: VisGraphNode = {
         id: n.id,
         label: n.label.length > 25 ? n.label.slice(0, 23) + '…' : n.label,
         title: n.label,
@@ -385,7 +423,7 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
     });
 
     // 5. Render all edges, inheriting source node color for cluster cohesion
-    const visEdges = data.edges.map((e) => {
+    const visEdges: VisGraphEdge[] = data.edges.map((e) => {
       let edgeColor = RELATION_COLORS[e.relation] ?? '#94A3B8';
       
       // Inherit edge color from source node's cluster
@@ -413,10 +451,20 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
     nodesDataset.current.add(visNodes);
     edgesDataset.current.add(visEdges);
 
+    /* vis-network 10 typings declare font.bold as string | FontStyles, but the
+       runtime (and the library's own docs) still accept the boolean values this
+       graph has always passed. The datasets keep the runtime-truthful item
+       types; the mismatch is cast away once, at the Network boundary — no
+       `any`, and no weakened VisGraphNode. */
+    const graphData = {
+      nodes: nodesDataset.current,
+      edges: edgesDataset.current,
+    } as unknown as Parameters<Network['setData']>[0];
+
     if (!networkRef.current && containerRef.current) {
       networkRef.current = new Network(
         containerRef.current,
-        { nodes: nodesDataset.current, edges: edgesDataset.current },
+        graphData,
         {
           physics: {
             enabled: true,
@@ -469,12 +517,29 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
         networkRef.current?.setOptions({ physics: { enabled: false } });
       });
     } else if (networkRef.current) {
-      networkRef.current.setData({ nodes: nodesDataset.current, edges: edgesDataset.current });
+      networkRef.current.setData(graphData);
     }
-  };
+  }
+
+  const fetchGraph = useCallback(async (s = search, t = filterType) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (s) params.set('search', s);
+      if (t) params.set('node_type', t);
+      const res = await api.get(`/api/knowledge-graph?${params}`);
+      const data: KGData = res.data;
+      setKgData(data);
+      renderGraph(data);
+    } catch (e) {
+      console.error('KG fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [search, filterType]);
 
   useEffect(() => {
-    fetchGraph();
+    (async () => { await fetchGraph(); })();
     return () => {
       if (networkRef.current) {
         networkRef.current.destroy();
@@ -487,6 +552,19 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
     e.preventDefault();
     fetchGraph(search, filterType);
   };
+
+  // Zoom/fit controls: body-defined event handlers (the pattern this file
+  // already uses for handleSearch), passed straight to JSX props. vis-network
+  // 10 types getScale(), so the old `as any` casts are gone.
+  const handleZoomIn = () => {
+    const network = networkRef.current;
+    if (network) network.moveTo({ scale: network.getScale() * 1.3 });
+  };
+  const handleZoomOut = () => {
+    const network = networkRef.current;
+    if (network) network.moveTo({ scale: network.getScale() * 0.77 });
+  };
+  const fitGraph = () => { networkRef.current?.fit({ animation: true }); };
 
   const handleReset = () => {
     setSearch('');
@@ -719,19 +797,9 @@ export default function KnowledgeGraph({ onOpenDocument }: { onOpenDocument?: (d
               position: 'absolute', bottom: '20px', right: '20px',
               display: 'flex', flexDirection: 'column', gap: '8px',
             }}>
-              {[
-                { icon: <ZoomIn size={16} />, action: () => networkRef.current?.moveTo({ scale: (networkRef.current as any).getScale() * 1.3 }) },
-                { icon: <ZoomOut size={16} />, action: () => networkRef.current?.moveTo({ scale: (networkRef.current as any).getScale() * 0.77 }) },
-                { icon: <Maximize2 size={16} />, action: () => networkRef.current?.fit({ animation: true }) },
-              ].map((btn, i) => (
-                <button type="button" key={i} onClick={btn.action} style={{
-                  background: 'var(--bg-element)', border: '1px solid var(--border-color)',
-                  borderRadius: '8px', width: '36px', height: '36px', cursor: 'pointer',
-                  color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {btn.icon}
-                </button>
-              ))}
+              <GraphControlButton onClick={handleZoomIn}><ZoomIn size={16} /></GraphControlButton>
+              <GraphControlButton onClick={handleZoomOut}><ZoomOut size={16} /></GraphControlButton>
+              <GraphControlButton onClick={fitGraph}><Maximize2 size={16} /></GraphControlButton>
             </div>
           </div>
 

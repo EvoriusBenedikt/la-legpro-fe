@@ -18,8 +18,13 @@
    accent ring inside the composer on top of the container's
    :focus-within chancery ring — the "inner blue ring" of the
    2026-10-01 review. The container ring already covers mouse AND
-   keyboard focus there, so the field itself is exempt. */
-:focus-visible:not(.chat-input) {
+   keyboard focus there, so the field itself is exempt.
+   Exception (2026-10-06 critique P1): the app-shell main region. It is
+   focused programmatically as the sign-in focus landing (App.tsx), is
+   never tab-reachable, and a 2px ring around the entire content area
+   would be noise — the caret position is self-evident at the top of a
+   fresh view. */
+:focus-visible:not(.chat-input):not(.main-content) {
   outline: 2px solid var(--accent-color) !important;
   outline-offset: 2px;
 }

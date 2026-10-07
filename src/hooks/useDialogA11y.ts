@@ -16,7 +16,12 @@ export function useDialogA11y(
   panelRef: RefObject<HTMLDivElement | null>,
 ) {
   const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  // Latest-ref pattern, updated post-commit (react-hooks/refs forbids ref
+  // writes during render). Escape handlers read closeRef.current at event
+  // time, so an effect-assigned ref is always current when it matters.
+  useEffect(() => {
+    closeRef.current = onClose;
+  });
 
   useEffect(() => {
     if (!open) return;

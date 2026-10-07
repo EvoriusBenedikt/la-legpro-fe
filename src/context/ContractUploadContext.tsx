@@ -1,29 +1,16 @@
-import React, { createContext, useCallback, useContext, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle, RefreshCw, X } from 'lucide-react';
 import api from '../services/api';
-
-export interface UploadJob {
-  id: string;
-  filename: string;
-  status: 'processing' | 'done' | 'error';
-  error?: string;
-}
+/* UploadJob, the context object and the useContractUpload hook moved to
+   hooks/useContractUpload.ts (2026-10-06) so this file exports only the
+   UploadProvider component (react-refresh/only-export-components). */
+import { ContractUploadContext, type UploadJob } from '../hooks/useContractUpload';
 
 interface UploadToast {
   id: number;
   kind: 'info' | 'success' | 'error';
   message: string;
 }
-
-interface ContractUploadContextType {
-  jobs: UploadJob[];
-  /** Queue an analyze → save-to-history job that keeps running across route changes */
-  startUpload: (file: File, useOCR: boolean) => void;
-  /** Listen for finished jobs (done or error); returns an unsubscribe function */
-  subscribe: (listener: (job: UploadJob) => void) => () => void;
-}
-
-const ContractUploadContext = createContext<ContractUploadContextType | undefined>(undefined);
 
 const MAX_JOBS = 20;
 
@@ -114,12 +101,4 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       </div>
     </ContractUploadContext.Provider>
   );
-};
-
-export const useContractUpload = () => {
-  const context = useContext(ContractUploadContext);
-  if (context === undefined) {
-    throw new Error('useContractUpload must be used within an UploadProvider');
-  }
-  return context;
 };

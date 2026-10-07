@@ -1,70 +1,222 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Edit2, Trash2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react';
 import api, { isHttpError } from '../services/api';
+import { useAuth } from '../hooks/useAuth';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import LoadingOrb from './LoadingOrb';
 
 interface Taxonomy {
   id: number;
   name: string;
-  parent_id: number | null;
   is_active: boolean;
   usage_count: number;
 }
 
+/* House network-failure copy (short form of Auth's authErrNetwork banner) —
+   every mutation lane surfaces this instead of failing silently to the
+   console (2026-10-06 shape pass fold-in, user-approved). */
+const NETWORK_ERROR = 'Tidak dapat menghubungi server. Periksa koneksi Anda lalu coba lagi.';
+
 /** System-consistent choice dialog (mirrors AdminDashboard's ConfirmDialog
     pattern): replaces window.confirm for the destructive delete, and offers
-    the reversible deactivate path first (2026-10-06 critique remediation). */
+    the reversible deactivate path first (2026-10-06 critique remediation).
+    State-aware since the 2026-10-06 clarify pass (critique F1): an
+    already-inactive type has nothing to deactivate, so the toggle is dropped
+    from the dialog — the Status chip owns re-activation — and title, body,
+    and buttons all read the row's real state.
+    Hardened 2026-10-06 (critique F2+F5) onto the full ConfirmDialog contract:
+    useDialogA11y focus trap, per-action pending state (spinner + "Memproses..."
+    + aria-busy), failures rendered inline via .confirm-modal-error so they can
+    never hide behind the dialog, and Escape/backdrop blocked mid-mutation. */
 const ChoiceDialog = ({
   tax,
-  busy,
-  onCancel,
+  canDelete,
+  onClose,
   onDeactivate,
   onDelete,
 }: {
   tax: Taxonomy;
-  busy: boolean;
-  onCancel: () => void;
-  onDeactivate: () => void;
-  onDelete: () => void;
+  canDelete: boolean;
+  onClose: () => void;
+  onDeactivate: () => Promise<void>;
+  onDelete: () => Promise<void>;
 }) => {
-  const cancelRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const [pending, setPending] = useState<'deactivate' | 'delete' | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    cancelRef.current?.focus();
-  }, []);
+  // Mounted only while open, so `open` is a constant true. While a mutation
+  // is in flight Escape gets a no-op handler — the dialog cannot vanish
+  // mid-action — and the backdrop mousedown below ignores clicks for the same
+  // reason. The hook traps Tab and restores focus to the trigger on unmount.
+  useDialogA11y(true, pending ? () => undefined : onClose, dialogRef);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onCancel]);
+  const run = async (which: 'deactivate' | 'delete', action: () => Promise<void>, fallback: string) => {
+    setPending(which);
+    setError(null);
+    try {
+      await action();
+      onClose();
+    } catch (e) {
+      // Stay open: the user sees why it failed and can retry or cancel — the
+      // failure renders inside the dialog, never behind it (critique F2).
+      setError(isHttpError(e)
+        ? (e.response.data?.detail || fallback)
+        : NETWORK_ERROR);
+    } finally {
+      setPending(null);
+    }
+  };
 
   const used = tax.usage_count > 0;
 
   return (
     <div
       className="modal-overlay"
-      onMouseDown={e => { if (e.target === e.currentTarget) onCancel(); }}
+      onMouseDown={e => { if (e.target === e.currentTarget && !pending) onClose(); }}
     >
-      <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="tax-choice-title">
+      <div
+        ref={dialogRef}
+        className="confirm-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tax-choice-title"
+        aria-busy={pending !== null}
+        tabIndex={-1}
+      >
         <h3 className="confirm-modal-title" id="tax-choice-title">
-          Nonaktifkan atau hapus “{tax.name}”?
+          {tax.is_active
+            ? `Nonaktifkan atau hapus “${tax.name}”?`
+            : `Hapus “${tax.name}”?`}
         </h3>
         <p className="confirm-modal-body">
-          {used
-            ? `${tax.usage_count} dokumen di repositori menggunakan jenis ini. Menonaktifkan menyembunyikannya dari unggahan dan klasifikasi baru tanpa menghapus riwayat, dan dapat dibatalkan kapan saja.`
-            : 'Tidak ada dokumen yang menggunakan jenis ini. Menonaktifkan dapat dibatalkan kapan saja.'}
+          {tax.is_active
+            ? used
+              ? `${tax.usage_count} dokumen di repositori menggunakan jenis ini. Menonaktifkan menyembunyikannya dari unggahan dan klasifikasi baru tanpa menghapus riwayat, dan dapat dibatalkan kapan saja.`
+              : 'Tidak ada dokumen yang menggunakan jenis ini. Menonaktifkan dapat dibatalkan kapan saja.'
+            : used
+              ? `Jenis ini sudah nonaktif dan tersembunyi dari unggahan serta klasifikasi baru, tetapi ${tax.usage_count} dokumen di repositori masih tercatat menggunakannya.`
+              : 'Jenis ini sudah nonaktif dan tidak ada dokumen yang menggunakannya.'}
           {' '}Menghapus menghilangkan jenis ini secara permanen dari sistem.
         </p>
+        {!canDelete && (
+          <p className="confirm-modal-note">
+            {tax.is_active
+              ? 'Jenis ini masih digunakan — penghapusan permanen memerlukan admin atau Insinyur TI. Anda tetap dapat menonaktifkannya.'
+              : 'Jenis ini masih digunakan — penghapusan permanen memerlukan admin atau Insinyur TI. Jenis ini tetap nonaktif sampai dihapus.'}
+          </p>
+        )}
+        {error && <p className="confirm-modal-error" role="alert">{error}</p>}
         <div className="confirm-modal-actions">
-          <button ref={cancelRef} type="button" className="btn btn-secondary" onClick={onCancel} disabled={busy}>
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={pending !== null}>
             Batal
           </button>
-          <button type="button" className="btn btn-primary" onClick={onDeactivate} disabled={busy}>
-            Nonaktifkan
+          {tax.is_active && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => { void run('deactivate', onDeactivate, 'Gagal mengubah status jenis dokumen'); }}
+              disabled={pending !== null}
+            >
+              {pending === 'deactivate' && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
+              {pending === 'deactivate' ? 'Memproses...' : 'Nonaktifkan'}
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={() => { void run('delete', onDelete, 'Gagal menghapus jenis dokumen'); }}
+            disabled={pending !== null || !canDelete}
+            title={canDelete ? undefined : 'Memerlukan admin atau Insinyur TI'}
+          >
+            {pending === 'delete' && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
+            {pending === 'delete' ? 'Memproses...' : 'Hapus Permanen'}
           </button>
-          <button type="button" className="btn btn-danger" onClick={onDelete} disabled={busy}>
-            Hapus Permanen
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/** Consequence gate for renaming an in-use type (2026-10-06 shape pass,
+    critique F3): the BE links documents to their type by NAME string
+    (`r.jenis = t.name`, taxonomy.py), so renaming silently detaches every
+    classified document and drops the type's usage_count to 0 — the
+    widest-blast-radius mutation on the screen now says so before it fires.
+    Same dialog contract as ChoiceDialog: useDialogA11y trap, pending state,
+    inline failure, retry = click again. */
+const RenameDialog = ({
+  from,
+  to,
+  usage,
+  onClose,
+  onConfirm,
+}: {
+  from: string;
+  to: string;
+  usage: number;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Escape is a no-op mid-mutation; the hook traps Tab and restores focus to
+  // the inline edit input on unmount (the input stays open behind this dialog).
+  useDialogA11y(true, pending ? () => undefined : onClose, dialogRef);
+
+  const run = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      await onConfirm();
+      onClose();
+    } catch (e) {
+      // Stay open: the failure renders inside the dialog, never behind it.
+      setError(isHttpError(e)
+        ? (e.response.data?.detail || 'Gagal memperbarui jenis dokumen')
+        : NETWORK_ERROR);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div
+      className="modal-overlay"
+      onMouseDown={e => { if (e.target === e.currentTarget && !pending) onClose(); }}
+    >
+      <div
+        ref={dialogRef}
+        className="confirm-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tax-rename-title"
+        aria-busy={pending}
+        tabIndex={-1}
+      >
+        <h3 className="confirm-modal-title" id="tax-rename-title">
+          Ubah nama “{from}”?
+        </h3>
+        <p className="confirm-modal-body">
+          {usage} dokumen di repositori saat ini diklasifikasikan sebagai “{from}”. Sistem
+          mengaitkan dokumen ke jenis berdasarkan namanya — setelah diganti menjadi “{to}”,
+          klasifikasi {usage} dokumen tersebut tidak lagi terhubung ke jenis ini.
+        </p>
+        {error && <p className="confirm-modal-error" role="alert">{error}</p>}
+        <div className="confirm-modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={pending}>
+            Batal
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => { void run(); }}
+            disabled={pending}
+          >
+            {pending && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
+            {pending ? 'Memproses...' : 'Ubah Nama'}
           </button>
         </div>
       </div>
@@ -73,10 +225,20 @@ const ChoiceDialog = ({
 };
 
 export default function TaxonomyManager() {
+  const { user } = useAuth();
+  // Usage-based dual gate (2026-10-06, user decision): admin / insinyur ti may
+  // hard-delete in-use types; other writer roles only when usage_count is 0.
+  // The BE enforces the same rule on DELETE — this mirrors it for button state.
+  const privileged = ['admin', 'insinyur ti', 'dewa'].includes((user?.role || '').toLowerCase());
   const [taxonomyList, setTaxonomyList] = useState<Taxonomy[]>([]);
   const [loading, setLoading] = useState(true);
+  // Two error lanes (2026-10-06 clarify pass, critique F4): mutation failures
+  // (add/rename/toggle/delete) surface in the page banner with a retry
+  // closure; a failed load renders inside the table body instead, so the
+  // "no data" empty state can never contradict a load failure.
   const [error, setError] = useState('');
   const [retry, setRetry] = useState<(() => void) | null>(null);
+  const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState('');
 
   // States for Adding
@@ -92,6 +254,18 @@ export default function TaxonomyManager() {
 
   // Delete-or-deactivate choice dialog target
   const [choice, setChoice] = useState<Taxonomy | null>(null);
+
+  // Rename consequence-gate target (critique F3): set when an in-use type's
+  // inline edit commits; the PUT waits for the dialog's confirm.
+  const [renameConfirm, setRenameConfirm] = useState<{ id: number; from: string; to: string; usage: number } | null>(null);
+
+  // Focus management (critique F5): useDialogA11y restores focus to the
+  // trigger when a dialog closes normally. Mutations that REMOVE the focused
+  // element (delete takes the opener row, rename takes the inline input) end
+  // with a deliberate landing on the table itself — the dialog's restore is a
+  // no-op on the detached node, so the landing survives the unmount — while
+  // the role=status notice announces the outcome.
+  const tableRef = useRef<HTMLTableElement>(null);
 
   const fail = (message: string, again: () => void) => {
     setError(message);
@@ -110,18 +284,19 @@ export default function TaxonomyManager() {
     try {
       const res = await api.get('/api/taxonomy');
       setTaxonomyList(res.data.taxonomy);
+      setLoadError('');
+      // A confirmed-fresh list also retires any stale mutation banner
       setError('');
       setRetry(null);
     } catch (e) {
-      fail(isHttpError(e) ? 'Gagal memuat data taksonomi.' : 'Kesalahan jaringan.', fetchTaxonomy);
+      setLoadError(isHttpError(e) ? 'Gagal memuat jenis dokumen.' : 'Kesalahan jaringan.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchTaxonomy();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    (async () => { await fetchTaxonomy(); })();
   }, []);
 
   const handleAdd = async () => {
@@ -132,13 +307,14 @@ export default function TaxonomyManager() {
       await api.post('/api/taxonomy', { name });
       setNewName('');
       setAdding(false);
-      setNotice('Taksonomi berhasil ditambahkan.');
+      setNotice('Jenis dokumen berhasil ditambahkan.');
       await fetchTaxonomy();
     } catch (e) {
       if (isHttpError(e)) {
-        fail(e.response.data?.detail || 'Gagal menambahkan taksonomi', handleAdd);
+        fail(e.response.data?.detail || 'Gagal menambahkan jenis dokumen', handleAdd);
       } else {
         console.error(e);
+        fail(NETWORK_ERROR, handleAdd);
       }
     } finally {
       setBusy(false);
@@ -155,8 +331,42 @@ export default function TaxonomyManager() {
     setEditName('');
   };
 
-  // Enter = save, Escape = cancel, blur = cancel; a PUT fires only when the
-  // value actually changed (2026-10-06 critique remediation).
+  // Throwable core (same split as toggleActive/deleteTax): the rename dialog
+  // runs it under its own pending state with inline failures; commitRename
+  // below is the no-dialog lane (page banner + retry).
+  const renameTax = async (id: number, name: string) => {
+    await api.put(`/api/taxonomy/${id}`, { name });
+    cancelEdit();
+    setNotice('Nama jenis dokumen berhasil diperbarui.');
+    await fetchTaxonomy();
+    // The inline input is gone by now — land focus on the table so keyboard
+    // users don't drop to <body> (critique F5 pattern, applied to rename).
+    tableRef.current?.focus();
+  };
+
+  // The retry closure captures (id, name) instead of re-reading editName:
+  // clicking "Coba lagi" blurs the input, and blur-cancel used to empty the
+  // state the retry depended on — a guaranteed silent no-op (critique F3b).
+  const commitRename = async (id: number, name: string) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await renameTax(id, name);
+    } catch (e) {
+      if (isHttpError(e)) {
+        fail(e.response.data?.detail || 'Gagal memperbarui jenis dokumen', () => commitRename(id, name));
+      } else {
+        console.error(e);
+        fail(NETWORK_ERROR, () => commitRename(id, name));
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Enter = save, Escape = cancel, blur = cancel (suppressed while the rename
+  // dialog is open); a PUT fires only when the value actually changed. An
+  // in-use type gates behind the consequence dialog first (critique F3a).
   const commitEdit = async (id: number) => {
     const original = taxonomyList.find(t => t.id === id);
     const name = editName.trim();
@@ -165,75 +375,66 @@ export default function TaxonomyManager() {
       return;
     }
     if (busy) return;
-    setBusy(true);
-    try {
-      await api.put(`/api/taxonomy/${id}`, { name });
-      cancelEdit();
-      setNotice('Nama taksonomi berhasil diperbarui.');
-      await fetchTaxonomy();
-    } catch (e) {
-      if (isHttpError(e)) {
-        fail(e.response.data?.detail || 'Gagal memperbarui taksonomi', () => commitEdit(id));
-      } else {
-        console.error(e);
-      }
-    } finally {
-      setBusy(false);
+    if (original.usage_count > 0) {
+      setRenameConfirm({ id, from: original.name, to: name, usage: original.usage_count });
+      return;
     }
+    await commitRename(id, name);
+  };
+
+  // Throwable cores: the dialog runs these under its own pending state and
+  // renders failures inline (critique F2). The chip wrapper below keeps the
+  // page-banner + retry behavior for toggles started outside the dialog.
+  const toggleActive = async (tax: Taxonomy) => {
+    await api.put(`/api/taxonomy/${tax.id}`, { is_active: !tax.is_active });
+    setNotice(tax.is_active ? 'Jenis dokumen dinonaktifkan.' : 'Jenis dokumen diaktifkan kembali.');
+    await fetchTaxonomy();
+  };
+
+  const deleteTax = async (tax: Taxonomy) => {
+    await api.delete(`/api/taxonomy/${tax.id}`);
+    setNotice('Jenis dokumen berhasil dihapus.');
+    await fetchTaxonomy();
+    // The opener row just vanished — land focus on the table; the dialog's
+    // opener-restore is a no-op on the detached button (critique F5).
+    tableRef.current?.focus();
   };
 
   const handleToggleActive = async (tax: Taxonomy) => {
     if (busy) return;
     setBusy(true);
     try {
-      await api.put(`/api/taxonomy/${tax.id}`, { is_active: !tax.is_active });
-      setNotice(tax.is_active ? 'Taksonomi dinonaktifkan.' : 'Taksonomi diaktifkan kembali.');
-      await fetchTaxonomy();
+      await toggleActive(tax);
     } catch (e) {
       if (isHttpError(e)) {
-        fail(e.response.data?.detail || 'Gagal mengubah status taksonomi', () => handleToggleActive(tax));
+        fail(e.response.data?.detail || 'Gagal mengubah status jenis dokumen', () => handleToggleActive(tax));
       } else {
         console.error(e);
+        fail(NETWORK_ERROR, () => handleToggleActive(tax));
       }
     } finally {
       setBusy(false);
     }
   };
 
-  const handleDelete = async (tax: Taxonomy) => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await api.delete(`/api/taxonomy/${tax.id}`);
-      setChoice(null);
-      setNotice('Taksonomi berhasil dihapus.');
-      await fetchTaxonomy();
-    } catch (e) {
-      if (isHttpError(e)) {
-        fail(e.response.data?.detail || 'Gagal menghapus taksonomi', () => handleDelete(tax));
-      } else {
-        console.error(e);
-      }
-    } finally {
-      setBusy(false);
-    }
-  };
+  const toggleAdd = () => { setAdding(a => !a); setNewName(''); };
+  const openAdd = () => { setAdding(true); setNewName(''); };
 
   return (
     <div className="admin-view">
       <div className="tax-head">
         <div>
-          <h2 className="tax-title">Manajemen Taksonomi Dokumen</h2>
-          <p className="tax-subtitle">Kelola jenis dan sub-jenis dokumen yang tersedia di sistem.</p>
+          <h1 className="tax-title">Manajemen Taksonomi Dokumen</h1>
+          <p className="tax-subtitle">Kelola jenis dokumen yang tersedia di sistem.</p>
         </div>
         <button
           type="button"
           className="btn btn-primary"
-          onClick={() => { setAdding(!adding); setNewName(''); }}
+          onClick={toggleAdd}
           disabled={busy}
         >
           {adding ? <XCircle size={16} /> : <Plus size={16} />}
-          {adding ? 'Batal' : 'Tambah Taksonomi'}
+          {adding ? 'Batal' : 'Tambah Jenis Dokumen'}
         </button>
       </div>
 
@@ -251,6 +452,7 @@ export default function TaxonomyManager() {
               value={newName}
               onChange={e => setNewName(e.target.value)}
               placeholder="Contoh: Peraturan Direksi"
+              maxLength={100}
               autoFocus
             />
           </div>
@@ -280,24 +482,50 @@ export default function TaxonomyManager() {
       )}
 
       <div className="compliance-table-wrap">
-        <table className="compliance-table tax-table">
+        <table
+          ref={tableRef}
+          className="compliance-table tax-table"
+          tabIndex={-1}
+          aria-label="Daftar jenis dokumen"
+        >
           <thead>
             <tr>
               <th scope="col">Nama Jenis Dokumen</th>
               <th scope="col">Status</th>
+              <th scope="col">Digunakan</th>
               <th scope="col" className="tax-col-actions">Aksi</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={3} className="tax-cell-center">
-                  <LoadingOrb size={32} label="Memuat taksonomi..." />
+                <td colSpan={4} className="tax-cell-center">
+                  <LoadingOrb size={32} label="Memuat jenis dokumen..." />
+                </td>
+              </tr>
+            ) : loadError ? (
+              <tr>
+                <td colSpan={4} className="tax-cell-center">
+                  <div className="tax-error" role="alert">
+                    <AlertCircle size={18} />
+                    <span>{loadError}</span>
+                    <button type="button" className="btn btn-secondary tax-retry" onClick={fetchTaxonomy} disabled={busy}>
+                      Coba lagi
+                    </button>
+                  </div>
                 </td>
               </tr>
             ) : taxonomyList.length === 0 ? (
               <tr>
-                <td colSpan={3} className="tax-cell-center">Belum ada data taksonomi</td>
+                <td colSpan={4} className="tax-cell-center">
+                  <div className="tax-empty-inner">
+                    <span>Belum ada jenis dokumen</span>
+                    <button type="button" className="btn btn-primary" onClick={openAdd}>
+                      <Plus size={16} />
+                      Tambah Jenis Dokumen
+                    </button>
+                  </div>
+                </td>
               </tr>
             ) : taxonomyList.map(tax => (
               <tr key={tax.id} className={tax.is_active ? undefined : 'tax-row-inactive'}>
@@ -308,13 +536,14 @@ export default function TaxonomyManager() {
                       type="text"
                       value={editName}
                       onChange={e => setEditName(e.target.value)}
-                      onBlur={cancelEdit}
+                      maxLength={100}
+                      onBlur={() => { if (!renameConfirm) cancelEdit(); }}
                       onKeyDown={e => {
                         if (e.key === 'Enter') { e.preventDefault(); commitEdit(tax.id); }
                         else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
                       }}
                       autoFocus
-                      aria-label={`Ubah nama taksonomi ${tax.name}`}
+                      aria-label={`Nama baru untuk ${tax.name}`}
                     />
                   ) : (
                     <span className="tax-name">{tax.name}</span>
@@ -326,7 +555,7 @@ export default function TaxonomyManager() {
                     className={`status-chip tax-chip ${tax.is_active ? 'status-chip--success' : 'status-chip--neutral'}`}
                     role="switch"
                     aria-checked={tax.is_active}
-                    title={tax.is_active ? 'Klik untuk menonaktifkan' : 'Klik untuk mengaktifkan'}
+                    data-hint={tax.is_active ? 'Klik untuk menonaktifkan' : 'Klik untuk mengaktifkan'}
                     onClick={() => handleToggleActive(tax)}
                     disabled={busy}
                   >
@@ -334,6 +563,7 @@ export default function TaxonomyManager() {
                     {tax.is_active ? 'Aktif' : 'Nonaktif'}
                   </button>
                 </td>
+                <td>{tax.usage_count > 0 ? `${tax.usage_count} dokumen` : 'Belum digunakan'}</td>
                 <td className="tax-cell-actions">
                   <button
                     type="button"
@@ -348,8 +578,8 @@ export default function TaxonomyManager() {
                   <button
                     type="button"
                     className="tax-icon-btn tax-icon-btn--danger"
-                    title="Hapus atau nonaktifkan"
-                    aria-label={`Hapus atau nonaktifkan ${tax.name}`}
+                    title={tax.is_active ? 'Hapus atau nonaktifkan' : 'Hapus'}
+                    aria-label={tax.is_active ? `Hapus atau nonaktifkan ${tax.name}` : `Hapus ${tax.name}`}
                     onClick={() => setChoice(tax)}
                     disabled={busy}
                   >
@@ -365,10 +595,20 @@ export default function TaxonomyManager() {
       {choice && (
         <ChoiceDialog
           tax={choice}
-          busy={busy}
-          onCancel={() => setChoice(null)}
-          onDeactivate={() => { const t = choice; setChoice(null); handleToggleActive(t); }}
-          onDelete={() => handleDelete(choice)}
+          canDelete={privileged || choice.usage_count === 0}
+          onClose={() => setChoice(null)}
+          onDeactivate={() => toggleActive(choice)}
+          onDelete={() => deleteTax(choice)}
+        />
+      )}
+
+      {renameConfirm && (
+        <RenameDialog
+          from={renameConfirm.from}
+          to={renameConfirm.to}
+          usage={renameConfirm.usage}
+          onClose={() => setRenameConfirm(null)}
+          onConfirm={() => renameTax(renameConfirm.id, renameConfirm.to)}
         />
       )}
     </div>

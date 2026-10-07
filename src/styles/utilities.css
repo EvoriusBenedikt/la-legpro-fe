@@ -289,6 +289,11 @@
   .analyze-btn { padding: 12px; }
   .upload-btn { padding: 12px 16px; }
   .auth-button { min-height: 48px; }
+  /* Auth footer-row controls (critique P2): the register/login toggle and
+     the back link join the ≥44px rule; the language toggle carries it in
+     its base rule (components.css) at every width. */
+  .auth-toggle button { padding: 12px 8px; }
+  .auth-back-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; }
 
   /* View + modal padding for narrow screens */
   .repository-view { padding: 16px 12px !important; }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Search, Bell, ShieldCheck, User, Menu, X } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { Search, Bell, ShieldCheck, User, Menu, X, Code } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useStrings } from '../i18n';
 import SettingsDialog from './SettingsDialog';
@@ -32,6 +32,7 @@ export default function TopBar({ onMenu }: TopBarProps) {
 
   const getRoleIcon = () => {
     const role = user?.role?.toLowerCase() || '';
+    if (role === 'dewa') return <Code size={14} className="role-icon" />;
     if (role === 'admin' || role === 'sekretaris perusahaan') return <ShieldCheck size={14} className="role-icon" />;
     return <User size={14} className="role-icon" />;
   };
@@ -89,7 +90,7 @@ export default function TopBar({ onMenu }: TopBarProps) {
           </div>
           <div className="topbar-role-badge">
             {getRoleIcon()}
-            <span>{user?.role || t.fallbackRole}</span>
+            <span>{user?.role?.toLowerCase() === 'dewa' ? 'Developer' : (user?.role || t.fallbackRole)}</span>
           </div>
         </div>
       </div>

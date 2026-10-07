@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { FileText, Upload, UploadCloud, X } from 'lucide-react';
-import { useContractUpload } from '../context/ContractUploadContext';
+import { useContractUpload } from '../hooks/useContractUpload';
 
 interface ContractUploadModalProps {
   /** Close the modal (close button, overlay click, Escape) */

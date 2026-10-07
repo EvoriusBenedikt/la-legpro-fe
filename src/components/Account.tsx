@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import api, { isHttpError } from '../services/api';
 import { User, LogOut, ShieldCheck, Mail, Calendar, Key, Award, Lock } from 'lucide-react';
 
@@ -72,7 +72,7 @@ export default function Account() {
           <h2>{user?.username || 'User'}</h2>
           <p>ID: {user?.id?.split('-')[0] || 'Unknown'}</p>
           <div style={{ marginTop: '12px', padding: '4px 12px', background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', border: '1px solid rgba(168, 85, 247, 0.3)' }}>
-            {user?.role || 'Pengguna'}
+            {user?.role?.toLowerCase() === 'dewa' ? 'Developer' : (user?.role || 'Pengguna')}
           </div>
 
           <div className="profile-divider" />
@@ -122,7 +122,7 @@ export default function Account() {
 
               <div className="info-item">
                 <label><Award size={14} /> Authority Level</label>
-                <div className="info-value" style={{ textTransform: 'capitalize' }}>{user?.role || 'Pengguna'}</div>
+                <div className="info-value" style={{ textTransform: 'capitalize' }}>{user?.role?.toLowerCase() === 'dewa' ? 'Developer' : (user?.role || 'Pengguna')}</div>
               </div>
 
               <div className="info-item">

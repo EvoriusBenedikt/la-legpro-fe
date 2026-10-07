@@ -46,4 +46,12 @@ export function isHttpError(e: unknown): e is HttpError {
   return axios.isAxiosError(e) && !!e.response;
 }
 
+/** True when an axios request failed with no server response at all — backend
+    unreachable, DNS failure, timeout, or CORS. Distinct from isHttpError: an
+    infrastructure failure, not an HTTP status, so auth surfaces must not
+    report it as a credential problem (critique P2 2026-10-06). */
+export function isNetworkError(e: unknown): boolean {
+  return axios.isAxiosError(e) && !e.response;
+}
+
 export default api;

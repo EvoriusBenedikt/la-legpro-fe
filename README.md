@@ -1,4 +1,4 @@
-# LA LegPro — Frontend
+# Legal Analyzer — Frontend
 
 React 19 + TypeScript + Vite SPA for the Legal Analyzer platform (Indonesian
 regulatory compliance). Talks to the FastAPI backend (`la-legpro-be`, :8080

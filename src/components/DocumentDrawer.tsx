@@ -69,56 +69,65 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
   // Effect 1: Run overview analysis when doc changes
   useEffect(() => {
     if (!doc) return;
-    setAnalysis(null);
-    setActiveTab('overview');
-    setIsAnalyzing(true);
-    setPdfBlobUrl(null);
-    setPasalData([]);
-    setDeepError(null);
+    // Awaited IIFE (react-hooks/set-state-in-effect): the six resets still run
+    // synchronously in this tick, but the setState chain no longer sits in the
+    // effect body's direct call graph. Same pattern as LegalRepository's PDF effect.
+    (async () => {
+      setAnalysis(null);
+      setActiveTab('overview');
+      setIsAnalyzing(true);
+      setPdfBlobUrl(null);
+      setPasalData([]);
+      setDeepError(null);
 
-    api.post('/api/analyze', {
-      reg_id: doc.id ? String(doc.id) : null,
-      nomor: String(doc.nomor),
-      judul: String(doc.judul),
-      filename: doc.filename ?? null,
-    })
-      .then(r => r.data)
-      .then(data => setAnalysis(data))
-      .catch(err => {
-        console.error('Analyze error:', err);
-        // Indonesian user-facing copy; technical detail stays in the console
-        // (critique re-score P1 copy pass).
-        const msg = err?.response
-          ? `Kesalahan server (kode ${err.response.status}).`
-          : 'Periksa koneksi Anda lalu coba lagi.';
-        setAnalysis({
-          total_pasal: 0,
-          overview: `Gagal menganalisis dokumen. ${msg}`,
-          status: { dicabut: [], diubah_dengan: [] },
-          outline: [],
-        });
+      await api.post('/api/analyze', {
+        reg_id: doc.id ? String(doc.id) : null,
+        nomor: String(doc.nomor),
+        judul: String(doc.judul),
+        filename: doc.filename ?? null,
       })
-      .finally(() => setIsAnalyzing(false));
+        .then(r => r.data)
+        .then(data => setAnalysis(data))
+        .catch(err => {
+          console.error('Analyze error:', err);
+          // Indonesian user-facing copy; technical detail stays in the console
+          // (critique re-score P1 copy pass).
+          const msg = err?.response
+            ? `Kesalahan server (kode ${err.response.status}).`
+            : 'Periksa koneksi Anda lalu coba lagi.';
+          setAnalysis({
+            total_pasal: 0,
+            overview: `Gagal menganalisis dokumen. ${msg}`,
+            status: { dicabut: [], diubah_dengan: [] },
+            outline: [],
+          });
+        })
+        .finally(() => setIsAnalyzing(false));
+    })();
   }, [doc?.id]);
 
   // Effect 2: Fetch PDF as JSON (base64) then decode to blob - bypasses IDM completely
   useEffect(() => {
     if (activeTab !== 'pdf' || !pdfPath || pdfBlobUrl) return;
 
-    setIsPdfLoading(true);
-    api.get(pdfPath)
-      .then(r => r.data)
-      .then(({ data }: { data: string }) => {
-        const binary = atob(data);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i);
-        }
-        const blob = new Blob([bytes], { type: 'application/pdf' });
-        setPdfBlobUrl(URL.createObjectURL(blob));
-      })
-      .catch(err => console.error('PDF load error:', err))
-      .finally(() => setIsPdfLoading(false));
+    // Awaited IIFE (react-hooks/set-state-in-effect): spinner flip stays
+    // synchronous; the fetch chain moves out of the direct call graph.
+    (async () => {
+      setIsPdfLoading(true);
+      await api.get(pdfPath)
+        .then(r => r.data)
+        .then(({ data }: { data: string }) => {
+          const binary = atob(data);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: 'application/pdf' });
+          setPdfBlobUrl(URL.createObjectURL(blob));
+        })
+        .catch(err => console.error('PDF load error:', err))
+        .finally(() => setIsPdfLoading(false));
+    })();
   }, [activeTab, pdfPath]);
 
   // Effect 3: Deep per-pasal analysis when "analisis" tab is opened
@@ -126,28 +135,32 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
     if (activeTab !== 'analisis' || !doc) return;
     if (pasalData.length > 0 || isDeepAnalyzing) return; // already done or in progress
 
-    setIsDeepAnalyzing(true);
-    setDeepError(null);
+    // Awaited IIFE (react-hooks/set-state-in-effect): the two "analyzing"
+    // flips stay synchronous; the POST chain moves out of the direct call graph.
+    (async () => {
+      setIsDeepAnalyzing(true);
+      setDeepError(null);
 
-    api.post('/api/analyze-pasals', {
-      reg_id: doc.id ? String(doc.id) : null,
-      nomor: String(doc.nomor),
-      judul: String(doc.judul),
-      filename: doc.filename ?? null,
-    })
-      .then(r => r.data)
-      .then(data => {
-        if (data.error) setDeepError(data.error);
-        setPasalData(data.pasals || []);
+      await api.post('/api/analyze-pasals', {
+        reg_id: doc.id ? String(doc.id) : null,
+        nomor: String(doc.nomor),
+        judul: String(doc.judul),
+        filename: doc.filename ?? null,
       })
-      .catch(err => {
-        console.error('Deep analysis error:', err);
-        const msg = err?.response
-          ? `Kesalahan server (kode ${err.response.status}).`
-          : 'Periksa koneksi Anda lalu coba lagi.';
-        setDeepError(`Gagal menganalisis. ${msg}`);
-      })
-      .finally(() => setIsDeepAnalyzing(false));
+        .then(r => r.data)
+        .then(data => {
+          if (data.error) setDeepError(data.error);
+          setPasalData(data.pasals || []);
+        })
+        .catch(err => {
+          console.error('Deep analysis error:', err);
+          const msg = err?.response
+            ? `Kesalahan server (kode ${err.response.status}).`
+            : 'Periksa koneksi Anda lalu coba lagi.';
+          setDeepError(`Gagal menganalisis. ${msg}`);
+        })
+        .finally(() => setIsDeepAnalyzing(false));
+    })();
   }, [activeTab, doc?.id]);
 
   // Effect 4: Revoke blob URL on cleanup

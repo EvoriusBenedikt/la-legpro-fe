@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { MessageSquare, ShieldCheck, ChevronDown } from 'lucide-react';
 import api from '../services/api';
 
@@ -10,6 +10,20 @@ interface Activity {
   /** Raw ISO timestamp — never displayed; used only for sorting below. */
   date: string;
   detail: string;
+}
+
+/** Row shape consumed from GET /api/chat-sessions (only the fields mapped below). */
+interface ChatSessionRow {
+  id: string;
+  title: string;
+  created_at: string;
+}
+
+/** Row shape consumed from GET /api/compliance-history (only the fields mapped below). */
+interface ComplianceHistoryRow {
+  id: string;
+  filename: string;
+  created_at: string;
 }
 
 export default function ActivityFeed() {
@@ -29,7 +43,7 @@ export default function ActivityFeed() {
         if (chatRes) {
           const chatsData = chatRes.data;
           const chats = chatsData.sessions || [];
-          const chatActivities = chats.map((c: any) => ({
+          const chatActivities: Activity[] = chats.map((c: ChatSessionRow) => ({
             id: c.id,
             type: 'chat',
             title: c.title,
@@ -42,7 +56,7 @@ export default function ActivityFeed() {
         if (compRes) {
           const compsData = compRes.data;
           const comps = compsData.history || [];
-          const compActivities = comps.map((c: any) => ({
+          const compActivities: Activity[] = comps.map((c: ComplianceHistoryRow) => ({
             id: c.id,
             type: 'compliance',
             title: c.filename,
