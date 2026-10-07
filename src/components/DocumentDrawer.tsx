@@ -57,6 +57,12 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [isPdfLoading, setIsPdfLoading] = useState(false);
+  // PDF load failure gets an honest, user-visible state (bug_reports.md
+  // 2026-10-07): the catch used to be console-only, leaving a bare
+  // "Gagal memuat PDF." with no reason and no way to retry. retryable=false
+  // only for 404 — a missing corpus file won't reappear on a second click.
+  const [pdfError, setPdfError] = useState<{ msg: string; retryable: boolean } | null>(null);
+  const [pdfAttempt, setPdfAttempt] = useState(0);
   const [pasalData, setPasalData] = useState<PasalItem[]>([]);
   const [isDeepAnalyzing, setIsDeepAnalyzing] = useState(false);
   const [deepError, setDeepError] = useState<string | null>(null);
@@ -77,6 +83,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
       setActiveTab('overview');
       setIsAnalyzing(true);
       setPdfBlobUrl(null);
+      setPdfError(null);
       setPasalData([]);
       setDeepError(null);
 
@@ -114,6 +121,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
     // synchronous; the fetch chain moves out of the direct call graph.
     (async () => {
       setIsPdfLoading(true);
+      setPdfError(null);
       await api.get(pdfPath)
         .then(r => r.data)
         .then(({ data }: { data: string }) => {
@@ -125,10 +133,17 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
           const blob = new Blob([bytes], { type: 'application/pdf' });
           setPdfBlobUrl(URL.createObjectURL(blob));
         })
-        .catch(err => console.error('PDF load error:', err))
+        .catch(err => {
+          console.error('PDF load error:', err);
+          // 404 = the corpus file is genuinely not on the server (a data gap,
+          // not the user's fault); anything else gets the house network copy.
+          setPdfError(err?.response?.status === 404
+            ? { msg: 'Berkas PDF untuk dokumen ini tidak tersedia di server.', retryable: false }
+            : { msg: 'Gagal memuat PDF. Periksa koneksi Anda lalu coba lagi.', retryable: true });
+        })
         .finally(() => setIsPdfLoading(false));
     })();
-  }, [activeTab, pdfPath]);
+  }, [activeTab, pdfPath, pdfAttempt]);
 
   // Effect 3: Deep per-pasal analysis when "analisis" tab is opened
   useEffect(() => {
@@ -324,7 +339,12 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
               ) : (
                 <div className="empty-pdf">
                   <FileText size={48} style={{ opacity: 0.3 }} />
-                  <p>Gagal memuat PDF.</p>
+                  <p>{pdfError?.msg ?? 'Gagal memuat PDF.'}</p>
+                  {(pdfError?.retryable ?? true) && (
+                    <button className="btn btn-primary" onClick={() => setPdfAttempt(a => a + 1)}>
+                      Coba lagi
+                    </button>
+                  )}
                 </div>
               )}
             </div>

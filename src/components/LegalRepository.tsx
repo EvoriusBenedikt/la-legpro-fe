@@ -199,6 +199,7 @@ export default function LegalRepository() {
   const [shareUser, setShareUser] = useState('');
   const [shareReason, setShareReason] = useState('');
   const [shareExpiry, setShareExpiry] = useState('');
+  const [shareError, setShareError] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfModalRef = useRef<HTMLDivElement>(null);
@@ -335,9 +336,10 @@ export default function LegalRepository() {
       const res = await api.get('/api/auth/users');
       const data = res.data;
       setUsersList(data.users || []);
-      if (data.users && data.users.length > 0) {
-        setShareUser(data.users[0].id);
-      }
+      // No prefill: the field used to be pre-seeded with users[0].id (an
+      // arbitrary UUID from an unordered SELECT), so a reason-only submit
+      // granted access to a user nobody picked. The grantee must be an
+      // explicit choice (the input is `required`).
     } catch (e) {
       console.error(e);
     }
@@ -346,17 +348,33 @@ export default function LegalRepository() {
   const handleShareSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!showShareModal) return;
+    // Resolve the free-text field to a real user BEFORE posting: visibility
+    // joins access_grants.granted_to against users.id (UUID), so a typed
+    // username/email was stored verbatim and became a dead grant that the
+    // UI still reported as "Akses berhasil diberikan."
+    const q = shareUser.trim().toLowerCase();
+    const grantee = usersList.find(u =>
+      u.id.toLowerCase() === q ||
+      u.username.toLowerCase() === q ||
+      (u.email || '').toLowerCase() === q
+    );
+    if (!grantee) {
+      setShareError('Pengguna tidak ditemukan. Pilih dari daftar atau ketik ID, username, atau email yang persis.');
+      return;
+    }
+    setShareError(null);
     setIsSharing(true);
     
     try {
       const res = await api.post(`/api/documents/${showShareModal.id}/grant-access`, {
-        granted_to: shareUser,
+        granted_to: grantee.id,
         reason: shareReason,
         expires_at: shareExpiry || null
       });
       
       alert(res.data.message || 'Akses berhasil diberikan.');
       setShowShareModal(null);
+      setShareUser('');
       setShareReason('');
       setShareExpiry('');
     } catch (e) {
@@ -637,21 +655,30 @@ export default function LegalRepository() {
   // reference lives in the title prose (critique remediation P1).
   const citationInfo = useMemo(() => {
     const map = new Map<string, { citation: string | null; year: number | null }>();
+    // A regulation can never be from the future. Hex ingest slugs embedded in
+    // judul carry spurious year-like runs ("cb774ecfe2044f5b..." -> 2044),
+    // which floated hash-titled docs above every real doc in "Tahun terbaru".
+    const currentYear = new Date().getFullYear();
+    const saneYear = (y: number | null): number | null =>
+      y !== null && y <= currentYear ? y : null;
     for (const d of documents) {
       const t = d.judul || '';
       const m1 = t.match(/Nomor\s+([0-9]+(?:\/[A-Za-z0-9.]+)+\/(?:19|20)\d{2})/i);
       if (m1) {
         const y = m1[1].match(/(?:19|20)\d{2}$/);
-        map.set(d.id, { citation: m1[1], year: y ? Number(y[0]) : null });
+        map.set(d.id, { citation: m1[1], year: saneYear(y ? Number(y[0]) : null) });
         continue;
       }
       const m2 = t.match(/Nomor\s+([0-9]+)\s+Tahun\s+((?:19|20)\d{2})/i);
       if (m2) {
-        map.set(d.id, { citation: `${m2[1]} Tahun ${m2[2]}`, year: Number(m2[2]) });
+        map.set(d.id, { citation: `${m2[1]} Tahun ${m2[2]}`, year: saneYear(Number(m2[2])) });
         continue;
       }
-      const y2 = t.match(/(?:19|20)\d{2}/);
-      map.set(d.id, { citation: null, year: y2 ? Number(y2[0]) : null });
+      // Scan ALL year-like tokens and keep the first plausible one — a lone
+      // .match() would return a slug-embedded future year and stop there.
+      const candidates = t.match(/(?:19|20)\d{2}/g) ?? [];
+      const valid = candidates.map(Number).find(y => y <= currentYear);
+      map.set(d.id, { citation: null, year: valid ?? null });
     }
     return map;
   }, [documents]);
@@ -972,6 +999,10 @@ export default function LegalRepository() {
             >
               <Trash2 size={16} /> Bersihkan Duplikat
             </button>
+            {/* The facets filter the regulations/internal doc lists only —
+                on analyzed/templates/history the panel used to show internal
+                -doc counts while doing nothing to the rendered list. */}
+            {(activeTab === 'regulations' || activeTab === 'internal') && (
             <div ref={filterRef} style={{ position: 'relative' }}>
               <button
                 onClick={() => setFilterOpen(o => !o)}
@@ -1072,6 +1103,7 @@ export default function LegalRepository() {
                 </div>
               )}
             </div>
+            )}
             <button className="upload-btn" onClick={() => fileInputRef.current?.click()} style={{ background: 'var(--accent-color)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Upload size={18} /> Tambah PDF
             </button>
@@ -1604,7 +1636,7 @@ export default function LegalRepository() {
                   <button
                     className="analyze-btn"
                     style={{ background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-hover)', marginTop: '8px', border: '1px solid var(--info)' }}
-                    onClick={() => { setShowShareModal(doc); fetchUsersList(); }}
+                    onClick={() => { setShowShareModal(doc); setShareError(null); fetchUsersList(); }}
                   >
                     <FolderOpen size={14} /> Beri Akses
                   </button>
@@ -1720,8 +1752,10 @@ export default function LegalRepository() {
                   required
                   list="users-list"
                   value={shareUser}
-                  onChange={(e) => setShareUser(e.target.value)}
+                  onChange={(e) => { setShareUser(e.target.value); setShareError(null); }}
                   placeholder="Ketik ID, Username, atau Email..."
+                  aria-invalid={shareError ? true : undefined}
+                  aria-describedby={shareError ? 'share-user-error' : undefined}
                   style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)' }}
                 />
                 <datalist id="users-list">
@@ -1729,6 +1763,9 @@ export default function LegalRepository() {
                     <option key={u.id} value={u.id}>{u.username} - {u.email || 'Tanpa Email'} ({u.role})</option>
                   ))}
                 </datalist>
+                {shareError && (
+                  <p id="share-user-error" role="alert" className="confirm-modal-error">{shareError}</p>
+                )}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <label htmlFor="share-reason" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Alasan *</label>
