@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, useId } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, ChevronDown, ChevronLeft, ChevronRight, User, Search, Plus, Trash2, MoreHorizontal, Pencil, FileText, Link2, MessagesSquare, Sparkles, Copy, Check, RotateCw } from 'lucide-react';
+import { Send, ChevronDown, ChevronLeft, ChevronRight, User, Search, Plus, Trash2, MoreHorizontal, Pencil, FileText, Link2, MessagesSquare, Copy, Check, RotateCw, Square, AlertCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import api from '../services/api';
+import api, { isAbortError, isTimeoutError, isNetworkError } from '../services/api';
 import { getSettings } from '../settings';
 import { useStrings, getLocale, fill, STRINGS } from '../i18n';
 import { useAuth } from '../hooks/useAuth';
@@ -20,6 +20,10 @@ interface Source {
   judul: string;
   snippet: string;
   rerank_score?: number;
+  /** Corpus file backing this source, when the retrieval row resolves to a
+      regulations entry (2026-10-08 critique remediation P2-5): enables the
+      drawer's PDF tab from chat sources. Null/absent = no file on server. */
+  filename?: string | null;
 }
 
 interface Message {
@@ -27,10 +31,14 @@ interface Message {
   role: 'user' | 'ai';
   content: string;
   sources?: Source[];
-  /** Set on the seeded first message of a fresh conversation; renders the
-      bot mascot above the bubble copy. Absent on older stored history —
-      cosmetic only, fully backwards-compatible. */
-  kind?: 'greeting';
+  /** 'greeting': set on the seeded first message of a fresh conversation;
+      renders the bot mascot above the bubble copy. Absent on older stored
+      history — cosmetic only, fully backwards-compatible.
+      'error' (2026-10-08 critique remediation P1-3): a failed generation,
+      rendered as a first-class failure row with its own retry action —
+      never as an AI-shaped apology bubble — and excluded from the LLM
+      context of later requests. */
+  kind?: 'greeting' | 'error';
 }
 
 interface Conversation {
@@ -54,6 +62,7 @@ type DrawerDoc = {
   judul: string;
   jenis: string;
   sektor: string;
+  filename?: string;
 };
 
 /* Chat history is per-account data: both keys carry the logged-in username as
@@ -88,6 +97,19 @@ const HISTORY_COLLAPSED_KEY = 'la_op_history_collapsed';
 const BOT_IDLE_BEFORE_NAP_MS = 60_000;
 const BOT_NAP_MS = 30_000;
 
+/* Wait-state hardening (2026-10-08 critique remediation P1-2): the chat
+   request gets its own deadline slightly above the backend's 60s LLM
+   timeout, so a wedged round trip surfaces as a retryable error row
+   instead of an endless spinner. */
+const CHAT_TIMEOUT_MS = 90_000;
+
+/* Relevance chip thresholds (2026-10-08 critique remediation P2-4): raw
+   cross-encoder logits (ms-marco-MiniLM-L-6-v2, observed ≈3.0–5.4 on this
+   corpus) mapped to honest labels. The former UI fabricated a percentage
+   bar from (logit+5)×10 — pure relevance theater. */
+const REL_HIGH = 4.0;
+const REL_MED = 1.5;
+
 /* Time-of-day greeting for the empty-conversation hero: morning
    05:00–11:59, afternoon 12:00–17:59, night otherwise; the offer line
    names the assistant (Sage). Emitted as a markdown H2 so the hero
@@ -110,10 +132,40 @@ function greetingContent(locale: ReturnType<typeof getLocale>): string {
    conversations from before 2026-10-01). The first question ends both
    cases; in the current shape the user's message simply becomes the
    first row of history. */
+/* Event-time timestamp (2026-10-08 critique remediation). react-hooks/purity
+   (React Compiler RC) flags a direct Date.now() call in handleSend's body
+   once handleSend also calls runGeneration — a component-scope function
+   never passed to a JSX event prop directly, which apparently pulls the
+   handler into the compiler's render-validated scope (removing either the
+   call or the builtin clears the error; await vs void makes no difference).
+   handleSend provably runs only from the composer's onClick/onKeyDown, so
+   reading the clock there is event-time and safe. Wrapping the read in a
+   module function satisfies the check without a suppression comment — the
+   same restructure-don't-suppress convention as the async-IIFE workarounds
+   for react-hooks/set-state-in-effect elsewhere in this codebase. */
+function nowMs(): number {
+  return Date.now();
+}
+
 function isFreshGreeting(messages: Message[], loading: boolean): boolean {
   if (loading) return false;
   if (messages.length === 0) return true;
   return messages.length === 1 && messages[0].kind === 'greeting';
+}
+
+/* Citation linkification (2026-10-08 critique remediation P1-1): the model
+   is instructed to end sourced claims with [n] markers (system-prompt
+   guideline 5). Rewrite in-range markers as same-document markdown links so
+   the ReactMarkdown `a` override renders them as citation-badge buttons
+   scrolling to source card n. Out-of-range numbers and existing [n](url)
+   links stay untouched — a fabricated link is worse than no link. */
+function linkifyCitations(text: string, sourceCount: number): string {
+  if (sourceCount <= 0) return text;
+  return text.replace(/\[(\d{1,2})\](?!\()/g, (match, digits: string) => {
+    const n = Number(digits);
+    if (n < 1 || n > sourceCount) return match;
+    return `[${digits}](#cite-${n})`;
+  });
 }
 
 function createConversation(title?: string): Conversation {
@@ -191,6 +243,9 @@ export default function LegalOpinion() {
   };
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  /* Whole seconds the current round trip has been running, shown next to
+     the loading copy (2026-10-08 critique remediation P1-2). */
+  const [elapsed, setElapsed] = useState(0);
 
   /* Bot mascot nap rhythm (2026-10-01 review, refined same day): ONE
      identity shared by every BotIdentity in the view — 'working' while
@@ -214,6 +269,9 @@ export default function LegalOpinion() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatBoxRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  /* Live /api/chat request, abortable by the stop control and on unmount
+     (2026-10-08 critique remediation P1-2). */
+  const abortRef = useRef<AbortController | null>(null);
 
   const resizeTextarea = () => {
     const el = textareaRef.current;
@@ -344,6 +402,20 @@ export default function LegalOpinion() {
     }, 5_000);
     return () => window.clearInterval(iv);
   }, []);
+  /* Honest wait feedback (2026-10-08 critique remediation P1-2): a 1s
+     ticker counts the round trip's whole seconds. setState fires only
+     from the interval callback, never from the effect body
+     (react-hooks/set-state-in-effect). */
+  useEffect(() => {
+    if (!isLoading) return;
+    const started = Date.now();
+    const iv = window.setInterval(() => {
+      setElapsed(Math.round((Date.now() - started) / 1000));
+    }, 1_000);
+    return () => window.clearInterval(iv);
+  }, [isLoading]);
+  /* Unmount safety: never leave a chat request in flight behind. */
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
   const botState: 'default' | 'working' | 'sleeping' = isLoading
     ? 'working'
     : botPhase === 'sleeping'
@@ -391,12 +463,104 @@ export default function LegalOpinion() {
     }
   };
 
+  /* Citation click (2026-10-08 critique remediation P1-1): scroll the chat
+     box — never scrollIntoView, which drags ancestor scrollers (bug
+     2026-09-29) — to the numbered source card, then flash it. */
+  const flashSourceCard = (elId: string) => {
+    const el = document.getElementById(elId);
+    const box = chatBoxRef.current;
+    if (!el || !box) return;
+    const behavior: ScrollBehavior = getSettings().reduceMotion ? 'auto' : 'smooth';
+    const elRect = el.getBoundingClientRect();
+    const boxRect = box.getBoundingClientRect();
+    const top = Math.max(0, box.scrollTop + (elRect.top - boxRect.top) - 16);
+    box.scrollTo({ top, behavior });
+    el.classList.add('cite-target');
+    window.setTimeout(() => el.classList.remove('cite-target'), 1600);
+  };
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
   const updateConversation = (conversationId: string, updater: (c: Conversation) => Conversation) => {
     setConversations(prev => prev.map(c => (c.id === conversationId ? updater(c) : c)));
+  };
+
+  /* Shared generation flow (2026-10-08 critique remediation P1-2/P1-3):
+     send, retry-an-answer and retry-after-error all run through here, so
+     abort, timeout and error handling exist exactly once. prefix is the
+     history the answer should follow; kind:'error' rows are filtered out
+     of the LLM context — a stored apology replayed as if the assistant
+     had really answered was the poisoning vector. Failures land as
+     first-class error rows with their own retry action; the copy is
+     frozen at creation time from the locale active then. */
+  const runGeneration = async (conversationId: string, prefix: Message[]) => {
+    setIsLoading(true);
+    setElapsed(0);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const apiMessages = prefix
+        .filter((msg) => msg.kind !== 'error')
+        .map((msg) => ({
+          role: msg.role === 'ai' ? 'assistant' : 'user',
+          content: msg.content
+        }));
+      const response = await api.post('/api/chat', { messages: apiMessages }, {
+        timeout: CHAT_TIMEOUT_MS,
+        signal: controller.signal
+      });
+      const data = response.data;
+      updateConversation(conversationId, (c) => ({
+        ...c,
+        updatedAt: Date.now(),
+        messages: [
+          ...c.messages,
+          {
+            id: Date.now() + 1,
+            role: 'ai',
+            content: data.answer,
+            sources: data.sources
+          }
+        ]
+      }));
+    } catch (error) {
+      console.error(error);
+      const s = STRINGS[getLocale()];
+      let content = s.opServerError;
+      if (isAbortError(error)) {
+        content = s.opErrorAborted;
+      } else if (isTimeoutError(error)) {
+        content = fill(s.opErrorTimeout, { s: Math.round(CHAT_TIMEOUT_MS / 1000) });
+      } else if (isNetworkError(error)) {
+        content = s.opErrorNetwork;
+      }
+      updateConversation(conversationId, (c) => ({
+        ...c,
+        updatedAt: Date.now(),
+        messages: [
+          ...c.messages,
+          {
+            id: Date.now() + 1,
+            role: 'ai',
+            kind: 'error',
+            content
+          }
+        ]
+      }));
+    } finally {
+      abortRef.current = null;
+      setIsLoading(false);
+    }
+  };
+
+  /* Stop control (2026-10-08 critique remediation P1-2): aborts the live
+     request; the catch above records the abort as an honest error row.
+     The composer stays usable while waiting — the user can draft the next
+     question or copy text out of the conversation. */
+  const handleStop = () => {
+    abortRef.current?.abort();
   };
 
   const handleCreateConversation = () => {
@@ -473,9 +637,11 @@ export default function LegalOpinion() {
   };
 
   const handleSend = async () => {
-    if (!input.trim() || !activeConversation) return;
+    /* isLoading guard (2026-10-08 critique remediation P1-2): Enter during
+       a live round trip must not queue a second request. */
+    if (isLoading || !input.trim() || !activeConversation) return;
 
-    const now = Date.now();
+    const now = nowMs();
     const userContent = input.trim();
     const userMessage: Message = {
       id: now,
@@ -494,50 +660,9 @@ export default function LegalOpinion() {
       messages: [...c.messages, userMessage],
     }));
     setInput('');
-    setIsLoading(true);
     if (textareaRef.current) textareaRef.current.style.height = '40px';
 
-    try {
-      const apiMessages = [...existingMessages, userMessage].map(msg => ({
-        role: msg.role === 'ai' ? 'assistant' : 'user',
-        content: msg.content
-      }));
-
-      const response = await api.post('/api/chat', { messages: apiMessages });
-
-      const data = response.data;
-
-      updateConversation(activeConversation.id, (c) => ({
-        ...c,
-        updatedAt: Date.now(),
-        messages: [
-          ...c.messages,
-          {
-            id: Date.now() + 1,
-            role: 'ai',
-            content: data.answer,
-            sources: data.sources
-          }
-        ]
-      }));
-
-    } catch (error) {
-      console.error(error);
-      updateConversation(activeConversation.id, (c) => ({
-        ...c,
-        updatedAt: Date.now(),
-        messages: [
-          ...c.messages,
-          {
-            id: Date.now() + 1,
-            role: 'ai',
-            content: STRINGS[getLocale()].opServerError
-          }
-        ]
-      }));
-    } finally {
-      setIsLoading(false);
-    }
+    await runGeneration(activeConversation.id, [...existingMessages, userMessage]);
   };
 
   /* Claude-style message actions (2026-10-01 review). Copy writes the raw
@@ -579,51 +704,27 @@ export default function LegalOpinion() {
 
   const handleRetry = async (messageId: number) => {
     if (isLoading || !activeConversation) return;
-    const idx = activeConversation.messages.findIndex((m) => m.id === messageId && m.role === 'ai');
+    const idx = activeConversation.messages.findIndex((m) => m.id === messageId && m.role === 'ai' && m.kind !== 'error');
     if (idx < 1 || activeConversation.messages[idx - 1].role !== 'user') return;
     const prefix = activeConversation.messages.slice(0, idx);
     const conversationId = activeConversation.id;
 
     updateConversation(conversationId, (c) => ({ ...c, messages: c.messages.slice(0, idx) }));
-    setIsLoading(true);
+    await runGeneration(conversationId, prefix);
+  };
 
-    try {
-      const apiMessages = prefix.map((msg) => ({
-        role: msg.role === 'ai' ? 'assistant' : 'user',
-        content: msg.content
-      }));
-      const response = await api.post('/api/chat', { messages: apiMessages });
-      const data = response.data;
-      updateConversation(conversationId, (c) => ({
-        ...c,
-        updatedAt: Date.now(),
-        messages: [
-          ...c.messages,
-          {
-            id: Date.now() + 1,
-            role: 'ai',
-            content: data.answer,
-            sources: data.sources
-          }
-        ]
-      }));
-    } catch (error) {
-      console.error(error);
-      updateConversation(conversationId, (c) => ({
-        ...c,
-        updatedAt: Date.now(),
-        messages: [
-          ...c.messages,
-          {
-            id: Date.now() + 1,
-            role: 'ai',
-            content: STRINGS[getLocale()].opServerError
-          }
-        ]
-      }));
-    } finally {
-      setIsLoading(false);
-    }
+  /* "Coba lagi" on a kind:'error' row (2026-10-08 critique remediation
+     P1-3): drops the failed row and regenerates from the question it
+     followed, so a successful retry leaves no trace of the failure. */
+  const handleRetryError = async (messageId: number) => {
+    if (isLoading || !activeConversation) return;
+    const idx = activeConversation.messages.findIndex((m) => m.id === messageId && m.kind === 'error');
+    if (idx < 1 || activeConversation.messages[idx - 1].role !== 'user') return;
+    const prefix = activeConversation.messages.slice(0, idx);
+    const conversationId = activeConversation.id;
+
+    updateConversation(conversationId, (c) => ({ ...c, messages: c.messages.slice(0, idx) }));
+    await runGeneration(conversationId, prefix);
   };
 
   return (
@@ -755,6 +856,26 @@ export default function LegalOpinion() {
               </div>
             )}
             {!isFreshGreeting(messages, isLoading) && messages.map((msg) => (
+              msg.kind === 'error' ? (
+                /* First-class failure row (2026-10-08 critique remediation
+                   P1-3): toast grammar — semantic danger edge + icon — and
+                   no avatar/name: an error is not the assistant speaking.
+                   Its retry drops the row and regenerates. */
+                <div key={msg.id} className="message-error" role="alert">
+                  <AlertCircle size={18} className="message-error-icon" aria-hidden="true" />
+                  <div className="message-error-body">
+                    <p>{msg.content}</p>
+                    <button
+                      type="button"
+                      className="btn btn-primary message-error-retry"
+                      onClick={() => handleRetryError(msg.id)}
+                      disabled={isLoading}
+                    >
+                      <RotateCw size={14} /> {t.opTryAgain}
+                    </button>
+                  </div>
+                </div>
+              ) : (
               <div key={msg.id} className={`message-item ${msg.role}`}>
                 {/* Avatar column (2026-10-01 review): the sender name lives
                     BELOW the avatar instead of inside the bubble, so the
@@ -775,8 +896,35 @@ export default function LegalOpinion() {
                     <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{msg.content}</div>
                   ) : (
                     <div className="markdown-body">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {normalizeMarkdown(msg.content)}
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          /* [n] markers (linkified below) render through the
+                             signature Citation Badge as buttons that jump to
+                             source card n (2026-10-08 critique remediation
+                             P1-1). Anything else keeps the plain anchor. */
+                          a: (props) => {
+                            const citeMatch = String(props.href ?? '').match(/^#cite-(\d{1,2})$/);
+                            if (citeMatch && msg.sources && msg.sources.length > 0) {
+                              const n = Number(citeMatch[1]);
+                              if (n >= 1 && n <= msg.sources.length) {
+                                return (
+                                  <button
+                                    type="button"
+                                    className="citation-badge citation-marker"
+                                    aria-label={fill(t.opCiteAria, { n })}
+                                    onClick={() => flashSourceCard(`source-${msg.id}-${n}`)}
+                                  >
+                                    {props.children}
+                                  </button>
+                                );
+                              }
+                            }
+                            return <a href={props.href}>{props.children}</a>;
+                          },
+                        }}
+                      >
+                        {linkifyCitations(normalizeMarkdown(msg.content), msg.sources?.length ?? 0)}
                       </ReactMarkdown>
                     </div>
                   )}
@@ -788,8 +936,10 @@ export default function LegalOpinion() {
                         <SourceAccordion
                           key={source.id + index}
                           source={source}
+                          index={index}
+                          messageId={msg.id}
                           onOpenDocument={(s) =>
-                            setDrawerDoc({ id: s.id, nomor: s.nomor, judul: s.judul, jenis: s.jenis, sektor: s.sektor })
+                            setDrawerDoc({ id: s.id, nomor: s.nomor, judul: s.judul, jenis: s.jenis, sektor: s.sektor, filename: s.filename ?? undefined })
                           }
                         />
                       ))}
@@ -820,12 +970,25 @@ export default function LegalOpinion() {
                   )}
                 </div>
               </div>
+              )
             ))}
             {isLoading && (
               <div className="message-item ai">
-                <BotIdentity state="working" size={32} />
-                <div className="bubble bubble-pending" style={{ background: 'transparent', border: 'none', padding: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <LoadingOrb inline size={20} state="composing" label={t.opLoading} />
+                {/* Standard anatomy (plan Task 2 Step 6): avatar column with
+                    the sender name, identical to a landed AI row — the
+                    pending row no longer shifts the layout when the real
+                    answer replaces it. */}
+                <div className="msg-avatar-col">
+                  <BotIdentity size={32} state="working" />
+                  <span className="msg-name">{t.opAiName}</span>
+                </div>
+                <div className="bubble bubble-pending">
+                  <LoadingOrb
+                    inline
+                    size={20}
+                    state="composing"
+                    label={elapsed > 0 ? `${t.opLoading} · ${fill(t.opElapsed, { s: elapsed })}` : t.opLoading}
+                  />
                 </div>
               </div>
             )}
@@ -849,16 +1012,31 @@ export default function LegalOpinion() {
                       handleSend();
                     }
                   }}
-                  disabled={isLoading}
                 />
-                <button
-                  className="send-button btn-primary"
-                  onClick={handleSend}
-                  disabled={!input.trim() || isLoading}
-                  aria-label={t.opSend}
-                >
-                  <Send size={18} />
-                </button>
+                {/* While waiting the send button morphs into the stop
+                    control — same slot, same primary chrome (One Blue
+                    Rule): an exit from the wait without a second button
+                    competing for the row (2026-10-08 critique remediation
+                    P1-2). The textarea stays enabled for drafting. */}
+                {isLoading ? (
+                  <button
+                    className="send-button btn-primary"
+                    onClick={handleStop}
+                    aria-label={t.opStop}
+                    title={t.opStop}
+                  >
+                    <Square size={14} fill="currentColor" aria-hidden="true" />
+                  </button>
+                ) : (
+                  <button
+                    className="send-button btn-primary"
+                    onClick={handleSend}
+                    disabled={!input.trim()}
+                    aria-label={t.opSend}
+                  >
+                    <Send size={18} />
+                  </button>
+                )}
               </div>
             </WorkBeam>
             <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
@@ -902,16 +1080,25 @@ export default function LegalOpinion() {
   );
 }
 
-function SourceAccordion({ source, onOpenDocument }: { source: Source; onOpenDocument: (source: Source) => void }) {
+function SourceAccordion({ source, index, messageId, onOpenDocument }: { source: Source; index: number; messageId: number; onOpenDocument: (source: Source) => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const t = useStrings();
   const contentId = useId();
 
-  const rawScore = source.rerank_score ?? 0;
-  const percentScore = Math.min(100, Math.max(10, (rawScore + 5) * 10));
+  /* Honest relevance (2026-10-08 critique remediation P2-4): the raw
+     cross-encoder logit maps to a labeled threshold chip; the fabricated
+     percent bar and the raw "Skor" badge are gone. The number survives
+     only in the tooltip/aria-label for anyone who wants it. */
+  const rawScore = source.rerank_score;
+  const relLevel: 'high' | 'med' | 'low' | null =
+    rawScore == null ? null : rawScore >= REL_HIGH ? 'high' : rawScore >= REL_MED ? 'med' : 'low';
+  const relLabel = relLevel === 'high' ? t.opRelHigh : relLevel === 'med' ? t.opRelMed : t.opRelLow;
+  const relTip = rawScore == null ? '' : fill(t.opRelTip, { score: rawScore.toFixed(2) });
 
   return (
-    <div className={`evidence-card ${isOpen ? 'open' : ''}`}>
+    /* Anchor target for inline [n] citation markers; the number chip makes
+       the marker ↔ card pairing legible without counting (P1-1). */
+    <div className={`evidence-card ${isOpen ? 'open' : ''}`} id={`source-${messageId}-${index + 1}`}>
       <button
         type="button"
         className="evidence-card-header"
@@ -919,6 +1106,7 @@ function SourceAccordion({ source, onOpenDocument }: { source: Source; onOpenDoc
         aria-controls={contentId}
         onClick={() => setIsOpen(!isOpen)}
       >
+        <span className="source-number">{index + 1}</span>
         <span style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <FileText size={14} color="var(--text-secondary)" />
@@ -929,32 +1117,29 @@ function SourceAccordion({ source, onOpenDocument }: { source: Source; onOpenDoc
           <span className="evidence-badges">
             <span className={`jenis-badge ${source.jenis}`}>{source.jenis}</span>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{source.sektor}</span>
-            {source.rerank_score != null && (
-              <span className="rerank-badge">
-                <Sparkles size={12} />
-                {t.opScore}: {source.rerank_score.toFixed(2)}
+            {relLevel && (
+              <span
+                className={`relevance-chip relevance-chip--${relLevel}`}
+                title={relTip}
+                aria-label={`${t.opRelevance}: ${relLabel}. ${relTip}`}
+              >
+                {t.opRelevance}: {relLabel}
               </span>
             )}
           </span>
         </span>
         <ChevronDown size={18} color="var(--text-secondary)" style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.3s' }} />
       </button>
-      
-      {source.rerank_score != null && (
-        <div className="relevance-bar-container" aria-hidden="true">
-          <div className="relevance-bar" style={{ width: `${percentScore}%` }} />
-        </div>
-      )}
 
       <div className="evidence-content" id={contentId}>
         <div className="evidence-snippet">
           {source.snippet}
         </div>
-        <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-end' }}>
+        <div className="evidence-open-row">
           <button
             type="button"
+            className="evidence-open-btn"
             onClick={() => onOpenDocument(source)}
-            style={{ background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '6px 12px', fontSize: '0.75rem', color: 'var(--text-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <Link2 size={12} />
             {t.opOpenDoc}

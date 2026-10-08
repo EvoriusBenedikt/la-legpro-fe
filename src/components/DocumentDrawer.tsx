@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, FileText, List, Eye, AlertCircle, BookOpen, ChevronRight, BarChart2 } from 'lucide-react';
+import { X, FileText, List, Eye, AlertCircle, BookOpen, ChevronRight, BarChart2, FolderOpen, ExternalLink } from 'lucide-react';
 import api from '../services/api';
 import { useDialogA11y } from '../hooks/useDialogA11y';
+import { useStrings, getLocale, fill, STRINGS } from '../i18n';
 import LoadingOrb from './LoadingOrb';
 
 interface OutlineItem {
@@ -66,6 +67,12 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
   const [pasalData, setPasalData] = useState<PasalItem[]>([]);
   const [isDeepAnalyzing, setIsDeepAnalyzing] = useState(false);
   const [deepError, setDeepError] = useState<string | null>(null);
+  /* Drawer copy follows the app locale (2026-10-08 critique remediation
+     P2-5); async catches read STRINGS[getLocale()] at throw time because
+     hooks cannot run inside effect callbacks. */
+  const t = useStrings();
+  /* Roving-tabindex tablist: refs for the arrow-key focus moves. */
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   // Use /api/pdf/ route (not StaticFiles /pdfs/) so CORS headers are applied correctly
   const pdfPath = doc?.filename
@@ -99,12 +106,13 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
           console.error('Analyze error:', err);
           // Indonesian user-facing copy; technical detail stays in the console
           // (critique re-score P1 copy pass).
+          const s = STRINGS[getLocale()];
           const msg = err?.response
-            ? `Kesalahan server (kode ${err.response.status}).`
-            : 'Periksa koneksi Anda lalu coba lagi.';
+            ? fill(s.drawerErrServer, { code: err.response.status })
+            : s.drawerErrNetwork;
           setAnalysis({
             total_pasal: 0,
-            overview: `Gagal menganalisis dokumen. ${msg}`,
+            overview: fill(s.drawerErrAnalyze, { msg }),
             status: { dicabut: [], diubah_dengan: [] },
             outline: [],
           });
@@ -137,9 +145,10 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
           console.error('PDF load error:', err);
           // 404 = the corpus file is genuinely not on the server (a data gap,
           // not the user's fault); anything else gets the house network copy.
+          const s = STRINGS[getLocale()];
           setPdfError(err?.response?.status === 404
-            ? { msg: 'Berkas PDF untuk dokumen ini tidak tersedia di server.', retryable: false }
-            : { msg: 'Gagal memuat PDF. Periksa koneksi Anda lalu coba lagi.', retryable: true });
+            ? { msg: s.drawerErrPdfMissing, retryable: false }
+            : { msg: s.drawerErrPdfNet, retryable: true });
         })
         .finally(() => setIsPdfLoading(false));
     })();
@@ -169,10 +178,11 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
         })
         .catch(err => {
           console.error('Deep analysis error:', err);
+          const s = STRINGS[getLocale()];
           const msg = err?.response
-            ? `Kesalahan server (kode ${err.response.status}).`
-            : 'Periksa koneksi Anda lalu coba lagi.';
-          setDeepError(`Gagal menganalisis. ${msg}`);
+            ? fill(s.drawerErrServer, { code: err.response.status })
+            : s.drawerErrNetwork;
+          setDeepError(fill(s.drawerErrDeep, { msg }));
         })
         .finally(() => setIsDeepAnalyzing(false));
     })();
@@ -192,12 +202,34 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
 
   if (!doc) return null;
 
+  /* The PDF tab only exists when the document actually has a corpus file
+     (2026-10-08 critique remediation P2-5): a tab that can only ever say
+     "not available" is a dead control. Chat sources gained filename
+     plumbing the same day; internal/legacy docs without one simply see
+     three tabs. */
   const tabs = [
-    { id: 'overview' as DrawerTab, label: 'Ikhtisar', icon: <Eye size={14} /> },
-    { id: 'pdf' as DrawerTab, label: 'PDF', icon: <FileText size={14} /> },
-    { id: 'outline' as DrawerTab, label: 'Kerangka', icon: <List size={14} /> },
-    { id: 'analisis' as DrawerTab, label: 'Analisis', icon: <BarChart2 size={14} /> },
+    { id: 'overview' as DrawerTab, label: t.drawerTabOverview, icon: <Eye size={14} /> },
+    ...(doc.filename ? [{ id: 'pdf' as DrawerTab, label: t.drawerTabPdf, icon: <FileText size={14} /> }] : []),
+    { id: 'outline' as DrawerTab, label: t.drawerTabOutline, icon: <List size={14} /> },
+    { id: 'analisis' as DrawerTab, label: t.drawerTabAnalysis, icon: <BarChart2 size={14} /> },
   ];
+
+  /* Tablist keyboard model (ARIA APG): arrows move focus AND selection
+     (automatic activation — the panel content is light), Home/End jump
+     to the ends. */
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    const ids = tabs.map(x => x.id);
+    const cur = ids.indexOf(activeTab);
+    let next = -1;
+    if (e.key === 'ArrowRight') next = (cur + 1) % ids.length;
+    else if (e.key === 'ArrowLeft') next = (cur - 1 + ids.length) % ids.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = ids.length - 1;
+    if (next < 0) return;
+    e.preventDefault();
+    setActiveTab(ids[next]);
+    tabRefs.current[ids[next]]?.focus();
+  };
 
   return createPortal(
     <>
@@ -218,20 +250,30 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
           <div className="drawer-title-area">
             <span className="drawer-badge">{doc.jenis}</span>
             <h3 className="drawer-title">{doc.judul}</h3>
-            <span className="drawer-sub">{doc.sektor} · Nomor {doc.nomor}</span>
+            <span className="drawer-sub">{doc.sektor} · {t.drawerNomorPrefix} {doc.nomor}</span>
           </div>
-          <button className="drawer-close" onClick={onClose} aria-label="Tutup detail dokumen">
+          <button className="drawer-close" onClick={onClose} aria-label={t.drawerClose}>
             <X size={20} />
           </button>
         </div>
 
-        {/* Tab Bar */}
-        <div className="drawer-tabs">
+        {/* Tab Bar — a real ARIA tablist now (2026-10-08 critique
+            remediation P2-5): tab/tabpanel roles, aria-selected, roving
+            tabindex and arrow-key navigation replace four look-alike
+            buttons carrying no semantics. */}
+        <div className="drawer-tabs" role="tablist" aria-label={t.drawerTabsLabel}>
           {tabs.map(tab => (
             <button
               key={tab.id}
+              ref={(el) => { tabRefs.current[tab.id] = el; }}
+              role="tab"
+              id={`drawer-tab-${tab.id}`}
+              aria-selected={activeTab === tab.id}
+              aria-controls="drawer-panel"
+              tabIndex={activeTab === tab.id ? 0 : -1}
               className={`drawer-tab ${activeTab === tab.id ? 'active' : ''}`}
               onClick={() => setActiveTab(tab.id)}
+              onKeyDown={onTabKeyDown}
             >
               {tab.icon} {tab.label}
             </button>
@@ -239,7 +281,13 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
         </div>
 
         {/* Tab Content */}
-        <div className={`drawer-content${activeTab === 'pdf' ? ' drawer-content--pdf' : ''}`}>
+        <div
+          className={`drawer-content${activeTab === 'pdf' ? ' drawer-content--pdf' : ''}`}
+          role="tabpanel"
+          id="drawer-panel"
+          aria-labelledby={`drawer-tab-${activeTab}`}
+          tabIndex={-1}
+        >
 
           {/* ── IKHTISAR TAB ── */}
           {activeTab === 'overview' && (
@@ -250,11 +298,11 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
               {doc.status?.startsWith('Berlaku (') && (
                 <div className="drawer-status-note" role="note">
                   <AlertCircle size={16} />
-                  <span>Status berlaku dengan catatan — periksa tab Analisis untuk pasal yang dicabut/diubah.</span>
+                  <span>{t.drawerStatusNote}</span>
                 </div>
               )}
               <div className="stat-card">
-                <span className="stat-label">Total Pasal</span>
+                <span className="stat-label">{t.drawerTotalPasal}</span>
                 {isAnalyzing
                   ? <div className="skeleton-line wide" />
                   : <span className="stat-value">{analysis?.total_pasal ?? '—'}</span>
@@ -262,7 +310,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
               </div>
 
               <div className="drawer-section">
-                <div className="drawer-section-title"><BookOpen size={16} /> Ringkasan Dokumen</div>
+                <div className="drawer-section-title"><BookOpen size={16} /> {t.drawerOverviewTitle}</div>
                 {isAnalyzing ? (
                   <div className="skeleton-block">
                     <div className="skeleton-line" />
@@ -275,12 +323,12 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
               </div>
 
               <div className="drawer-section">
-                <div className="drawer-section-title"><AlertCircle size={16} /> Status Peraturan Dokumen Level</div>
+                <div className="drawer-section-title"><AlertCircle size={16} /> {t.drawerStatusDocLevel}</div>
                 {isAnalyzing ? (
                   <div className="skeleton-block"><div className="skeleton-line medium" /></div>
                 ) : (
                   <div className="status-group">
-                    <div className="status-label">Dicabut :</div>
+                    <div className="status-label">{t.drawerRevokedLabel}</div>
                     {analysis?.status?.dicabut && analysis.status.dicabut.length > 0 ? (
                       <ul className="status-list">
                         {analysis.status.dicabut.map((item, i) => (
@@ -288,19 +336,19 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
                         ))}
                       </ul>
                     ) : (
-                      <span className="status-none">Tidak ada informasi pencabutan</span>
+                      <span className="status-none">{t.drawerNoRevocation}</span>
                     )}
                   </div>
                 )}
               </div>
 
               <div className="drawer-section">
-                <div className="drawer-section-title"><AlertCircle size={16} /> Status Peraturan Pasal/Subpasal Level</div>
+                <div className="drawer-section-title"><AlertCircle size={16} /> {t.drawerStatusArticleLevel}</div>
                 {isAnalyzing ? (
                   <div className="skeleton-block"><div className="skeleton-line medium" /></div>
                 ) : (
                   <div className="status-group">
-                    <div className="status-label">Diubah dengan :</div>
+                    <div className="status-label">{t.drawerAmendedLabel}</div>
                     {analysis?.status?.diubah_dengan && analysis.status.diubah_dengan.length > 0 ? (
                       <ul className="status-list">
                         {analysis.status.diubah_dengan.map((item, i) => (
@@ -308,7 +356,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
                         ))}
                       </ul>
                     ) : (
-                      <span className="status-none">Tidak ada informasi perubahan</span>
+                      <span className="status-none">{t.drawerNoAmendment}</span>
                     )}
                   </div>
                 )}
@@ -322,27 +370,30 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
               {!pdfPath ? (
                 <div className="empty-pdf">
                   <FileText size={48} style={{ opacity: 0.3 }} />
-                  <p>File PDF tidak tersedia untuk dokumen ini.</p>
+                  <p>{t.drawerPdfUnavailable}</p>
                 </div>
               ) : isPdfLoading ? (
                 <div className="empty-pdf">
                   <FileText size={48} style={{ color: 'var(--accent-color)', opacity: 0.7 }} />
-                  <p>Memuat PDF...</p>
+                  <p>{t.drawerPdfLoading}</p>
                 </div>
               ) : pdfBlobUrl ? (
                 <>
-                  <iframe src={pdfBlobUrl} title="Penampil PDF" className="pdf-object" />
+                  <iframe src={pdfBlobUrl} title={t.drawerPdfViewerTitle} className="pdf-object" />
+                  {/* The ↗ glyph was a unicode stand-in for the icon system
+                      that already exists (craft floor); ExternalLink carries
+                      the same meaning in the house stroke. */}
                   <a href={pdfBlobUrl} target="_blank" rel="noopener noreferrer" className="pdf-open-link">
-                    ↗ Buka PDF di Tab Baru
+                    <ExternalLink size={13} aria-hidden="true" /> {t.drawerPdfOpenNewTab}
                   </a>
                 </>
               ) : (
                 <div className="empty-pdf">
                   <FileText size={48} style={{ opacity: 0.3 }} />
-                  <p>{pdfError?.msg ?? 'Gagal memuat PDF.'}</p>
+                  <p>{pdfError?.msg ?? t.drawerPdfFailed}</p>
                   {(pdfError?.retryable ?? true) && (
                     <button className="btn btn-primary" onClick={() => setPdfAttempt(a => a + 1)}>
-                      Coba lagi
+                      {t.drawerTryAgain}
                     </button>
                   )}
                 </div>
@@ -362,13 +413,16 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
               ) : analysis?.outline && analysis.outline.length > 0 ? (
                 analysis.outline.map((item, i) => (
                   <div key={i} className={`outline-item ${item.type}`}>
-                    {item.type === 'bab' ? '📂' : '📄'} {item.text}
+                    {item.type === 'bab'
+                      ? <FolderOpen size={14} aria-hidden="true" />
+                      : <FileText size={13} aria-hidden="true" />}
+                    <span>{item.text}</span>
                   </div>
                 ))
               ) : (
                 <div className="empty-pdf">
                   <List size={48} style={{ opacity: 0.3 }} />
-                  <p>Tidak ada kerangka yang dapat diekstrak dari dokumen ini.</p>
+                  <p>{t.drawerOutlineEmpty}</p>
                 </div>
               )}
             </div>
@@ -380,8 +434,8 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
               {isDeepAnalyzing ? (
                 <div className="deep-loading">
                   <LoadingOrb state="solving" size={64} />
-                  <h4>Menganalisis Setiap Pasal...</h4>
-                  <p>LLM sedang membaca dan menganalisis setiap pasal secara mendalam.<br />Ini memerlukan waktu 1–3 menit.</p>
+                  <h4>{t.drawerDeepLoadingTitle}</h4>
+                  <p>{t.drawerDeepLoadingBody}<br />{t.drawerDeepLoadingEta}</p>
                   <div className="deep-loading-bar">
                     <div className="deep-loading-bar-inner" />
                   </div>
@@ -394,12 +448,12 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
               ) : pasalData.length === 0 ? (
                 <div className="empty-pdf">
                   <BarChart2 size={48} style={{ opacity: 0.3 }} />
-                  <p>Tidak ada data analisis.</p>
+                  <p>{t.drawerDeepEmpty}</p>
                 </div>
               ) : (
                 <>
                   <div className="pasal-analysis-header">
-                    <span>Analisis mendalam atas {pasalData.length} pasal teratas</span>
+                    <span>{fill(t.drawerDeepHeader, { n: pasalData.length })}</span>
                   </div>
                   {pasalData.map((item, idx) => (
                     <div key={idx} className="pasal-card">
@@ -420,11 +474,11 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
                       {/* Analysis sections */}
                       <div className="pasal-analysis-sections">
                         <div className="pasal-analysis-block">
-                          <span className="pasal-analysis-chip">Perbandingan Dengan Regulasi Yang Dicabut</span>
+                          <span className="pasal-analysis-chip">{t.drawerDeepCompare}</span>
                           <p>{item.perbandingan}</p>
                         </div>
                         <div className="pasal-analysis-block">
-                          <span className="pasal-analysis-chip pasal-analysis-chip--blue">Hubungan dengan Regulasi yang Lebih Tinggi</span>
+                          <span className="pasal-analysis-chip pasal-analysis-chip--blue">{t.drawerDeepRelation}</span>
                           <p>{item.hubungan}</p>
                         </div>
                       </div>

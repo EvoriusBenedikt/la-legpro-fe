@@ -54,4 +54,19 @@ export function isNetworkError(e: unknown): boolean {
   return axios.isAxiosError(e) && !e.response;
 }
 
+/** True when the request was canceled through its AbortController — the user
+    pressed the stop control (critique remediation P1-2, 2026-10-08). Checked
+    BEFORE isNetworkError at call sites: a canceled request also carries no
+    response, but it is the user's decision, not an infrastructure failure. */
+export function isAbortError(e: unknown): boolean {
+  return axios.isCancel(e) || (axios.isAxiosError(e) && e.code === 'ERR_CANCELED');
+}
+
+/** True when axios' own per-request timeout fired before the server answered
+    (critique remediation P1-2, 2026-10-08). Also response-less — same
+    ordering caveat as isAbortError. */
+export function isTimeoutError(e: unknown): boolean {
+  return axios.isAxiosError(e) && (e.code === 'ECONNABORTED' || e.code === 'ETIMEDOUT');
+}
+
 export default api;

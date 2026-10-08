@@ -25,7 +25,7 @@
   
   --success: #10B981;
   --success-bg: rgba(16, 185, 129, 0.1);
-  --success-border: rgba(16, 185, 129, 0.3);  /* matching border tint (chip grammar ≈25–30%); adopted by rerank-badge 2026-09-28 */
+  --success-border: rgba(16, 185, 129, 0.3);  /* matching border tint (chip grammar ≈25–30%); adopted by the relevance chip 2026-10-08 (formerly rerank-badge) */
   --success-text: #047857;   /* AA-hardened variant for small text on light glass */
   --warning: #F59E0B;
   --warning-bg: rgba(245, 158, 11, 0.1);

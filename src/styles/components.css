@@ -868,6 +868,14 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-primary);
 }
 
+/* Pending-row bubble (2026-10-08 critique remediation P1-2): boxless like
+   every AI bubble above; the former TSX inline styles moved here. Flex
+   keeps the inline LoadingOrb vertically centered as the only content. */
+.bubble-pending {
+  display: flex;
+  align-items: center;
+}
+
 /* Messenger anatomy (2026-10-01 review): the bot avatar sits outside the
    bubble as a 32px BotIdentity column. Since the same day's Claude-style
    review the AI bubble is boxless and grows NO tail (plain text on the
@@ -939,6 +947,31 @@ h1, h2, h3, h4, h5, h6 {
   outline: 2px solid var(--accent-color);
   outline-offset: 1px;
 }
+
+/* First-class failure row (2026-10-08 critique remediation P1-3): chat
+   errors are no longer AI-shaped apology bubbles. Grammar follows
+   .upload-toast--error — glass surface, 4px semantic danger edge,
+   danger-toned icon and copy — with the recovery action inline. */
+.message-error {
+  align-self: flex-start;
+  max-width: 80%;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--danger-text);
+  border-radius: var(--radius-sm);
+  color: var(--danger-text);
+  font-size: 0.9rem;
+  line-height: calc(1.6 * var(--reading-lh-mult, 1));
+  animation: fadeIn 0.3s ease-out;
+}
+.message-error-icon { flex-shrink: 0; margin-top: 2px; }
+.message-error-body { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.message-error-body p { margin: 0; }
+.message-error-retry { align-self: flex-start; }
 
 .bubble p { margin: 0 0 1em 0; }
 .bubble p:last-child { margin: 0; }
@@ -1581,6 +1614,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 .drawer-tab:hover { color: var(--text-primary); }
 .drawer-tab.active { color: var(--accent-color); border-bottom-color: var(--accent-color); }
+/* Keyboard focus for the tablist (2026-10-08 critique remediation P2-5):
+   the roving tabindex parks Tab focus on the active tab, so the ring must
+   be visible there. */
+.drawer-tab:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
 
 /* Drawer Content */
 .drawer-content {
@@ -1719,7 +1759,13 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: 8px;
   font-size: 0.85rem;
   line-height: 1.4;
+  /* Icon + text row since the 2026-10-08 critique remediation (P2-5):
+     lucide FolderOpen/FileText replaced the 📂/📄 emoji. */
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
 }
+.outline-item svg { flex-shrink: 0; margin-top: 2px; }
 .outline-item.bab {
   background: rgba(56, 189, 248, 0.08);
   color: var(--accent-color);
@@ -4347,6 +4393,55 @@ select::placeholder {
   font-weight: 500;
 }
 
+/* Inline citation machinery (2026-10-08 critique remediation P1-1): [n]
+   markers in AI answers render through the signature citation badge as
+   buttons; clicking one scrolls the chat box to the numbered source card
+   and flashes it. Cards carry the matching .source-number chip so the
+   marker ↔ card pairing is legible without counting. */
+.citation-marker {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: inherit;
+  padding: 1px 6px;
+  margin: 0 2px;
+  vertical-align: baseline;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.citation-marker:hover {
+  border-color: var(--accent-color);
+  background: var(--accent-glow);
+}
+.citation-marker:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+.source-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--info-bg);
+  border: 1px solid var(--border-highlight);
+  color: var(--accent-color);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* Flash state on the source card a citation just jumped to. Ring grammar
+   matches .stat-card--filter.stat-card--active (accent + 3px glow). */
+.evidence-card.cite-target {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
 
 
 /* Markdown Styles — chat answers: clean sans-serif, light-theme legible */
@@ -4403,7 +4498,7 @@ select::placeholder {
   border-radius: 8px;
   margin-bottom: 12px;
   overflow: hidden;
-  transition: border-color 0.2s, background 0.2s;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.3s;
 }
 
 .evidence-card:hover {
@@ -4423,6 +4518,9 @@ select::placeholder {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Breathing room for the .source-number chip added 2026-10-08
+     (critique remediation P1-1). */
+  gap: 10px;
   user-select: none;
 }
 
@@ -4450,29 +4548,39 @@ select::placeholder {
   letter-spacing: 0.5px;
 }
 
-.rerank-badge {
-  display: flex;
+/* Honest relevance chip (2026-10-08 critique remediation P2-4): replaces
+   the fabricated percent bar (.relevance-bar, width = (logit+5)×10 —
+   relevance theater) and the raw-logit "Skor" badge (.rerank-badge).
+   Thresholds live in LegalOpinion.tsx (REL_HIGH/REL_MED on raw
+   cross-encoder logits); the raw number survives only in the tooltip.
+   Tone reuse follows the chip grammar; "Rendah" stays NEUTRAL — the
+   danger red belongs to legal status (dicabut/fatal), never to a merely
+   weak match (Riwayat Unggahan precedent). */
+.relevance-chip {
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: var(--success-bg);
-  color: var(--success-text);
-  border: 1px solid var(--success-border);
   padding: 2px 8px;
   border-radius: 12px;
   font-size: 0.7rem;
   font-weight: 600;
+  border: 1px solid transparent;
+  cursor: help;
 }
-
-.relevance-bar-container {
-  height: 2px;
-  background: var(--border-color);
-  width: 100%;
+.relevance-chip--high {
+  background: var(--success-bg);
+  color: var(--success-text);
+  border-color: var(--success-border);
 }
-
-.relevance-bar {
-  height: 100%;
-  background: var(--info);
-  transition: width 0.5s ease-out;
+.relevance-chip--med {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  border-color: var(--warning-border);
+}
+.relevance-chip--low {
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border-color: var(--border-color);
 }
 
 .evidence-content {
@@ -4497,6 +4605,37 @@ select::placeholder {
   border-left: 3px solid var(--accent-color);
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Open-document action row inside an expanded evidence card — moved out of
+   TSX inline styles (2026-10-08 critique remediation) so hover/focus
+   states exist. Quiet secondary grammar: the card's primary action is the
+   header toggle, this one leaves the chat for the drawer. */
+.evidence-open-row {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+.evidence-open-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.evidence-open-btn:hover {
+  background: var(--bg-card);
+  border-color: var(--border-highlight);
+}
+.evidence-open-btn:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
 }
 
 /* Corporate footer (modeled on lintasarta.co.id) — lives INSIDE the scroll
