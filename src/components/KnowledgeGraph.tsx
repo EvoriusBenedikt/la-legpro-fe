@@ -434,6 +434,14 @@ export default function KnowledgeGraph() {
   const appliedRef = useRef({ search: initialParams().q, type: initialParams().type });
   const lastAttemptRef = useRef({ search: initialParams().q, type: initialParams().type });
   const pendingNodeRef = useRef<string | null>(initialParams().node || null);
+  /* One-shot latch for the mount fetch (v5 deep-link race): StrictMode's
+     simulated remount runs the mount effect twice, so a second fetchGraph
+     success landed after the first response had consumed pendingNodeRef —
+     and every fetch success clears selectedNode (dataset-rebuild doctrine),
+     wiping the deep-linked selection again. Refs persist across the
+     simulated remount, so each instance fetches exactly once; a real route
+     remount builds a fresh ref and fetches normally. */
+  const mountFetchDoneRef = useRef(false);
   const centerOnViewRef = useRef(false);
   const typeDebounceRef = useRef<number | null>(null);
   const fetchGraphRef = useRef<((s?: string, t?: string) => Promise<void>) | null>(null);
@@ -1120,8 +1128,14 @@ export default function KnowledgeGraph() {
   useEffect(() => {
     // First load honors a deep-linked ?q=/?type= — fetchGraph's defaults read
     // appliedRef, which is seeded from the URL. fetchGraph's identity is
-    // stable (ref-based defaults), so this dep never re-fires.
-    (async () => { await fetchGraph(); })();
+    // stable (ref-based defaults), so this dep never re-fires. One-shot per
+    // instance: see mountFetchDoneRef (StrictMode double-fetch used to race
+    // the ?node= deep-link consumption and clear the panel right after it
+    // opened).
+    if (!mountFetchDoneRef.current) {
+      mountFetchDoneRef.current = true;
+      (async () => { await fetchGraph(); })();
+    }
     return () => {
       if (typeDebounceRef.current) window.clearTimeout(typeDebounceRef.current);
       scenarioAbortRef.current?.abort();
