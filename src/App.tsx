@@ -7,6 +7,7 @@ import Footer from './components/Footer';
 import LoadingOrb from './components/LoadingOrb';
 import { useAuth } from './hooks/useAuth';
 import { useStrings } from './i18n';
+import { LEGACY_LOGIN } from './config';
 import './index.css';
 
 // Lazy load heavy components
@@ -19,6 +20,7 @@ const KnowledgeGraph = React.lazy(() => import('./components/KnowledgeGraph'));
 const SystemMonitoring = React.lazy(() => import('./components/SystemMonitoring'));
 const TaxonomyManager = React.lazy(() => import('./components/TaxonomyManager'));
 const LandingPage = React.lazy(() => import('./components/LandingPage'));
+const AuthLegacy = React.lazy(() => import('./components/AuthLegacy'));
 
 function App() {
   const { isAuthenticated, user } = useAuth();
@@ -75,6 +77,7 @@ function App() {
       <Suspense fallback={<div style={{ padding: '48px', textAlign: 'center' }}>Loading…</div>}>
         <Routes>
           <Route path="/login" element={<Auth />} />
+          {LEGACY_LOGIN && <Route path="/login/legacy" element={<AuthLegacy />} />}
           <Route path="/" element={<LandingPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
