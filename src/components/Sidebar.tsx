@@ -1,4 +1,4 @@
-import { Database, Scale, User, BarChart2, ShieldCheck, Network, FolderTree } from 'lucide-react';
+import { Database, Scale, User, BarChart2, ShieldCheck, Network, FolderTree, CalendarClock } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
@@ -38,7 +38,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   const regularTabs = [
     { path: '/repository', name: t.navRepository, icon: <Database size={20} /> },
     { path: '/opinion', name: t.navOpinion, icon: <Scale size={20} /> },
-    { path: '/contracts', name: t.navContracts, icon: <BarChart2 size={20} /> },
+    { path: '/contracts', name: t.navContracts, icon: <CalendarClock size={20} /> },
     ...(userLevel >= 2 ? [{ path: '/graph', name: t.navGraph, icon: <Network size={20} /> }] : []),
   ];
 
