@@ -64,6 +64,11 @@ export interface SettingsState {
       hexes, chosen in Settings › Conversation. Render-time only,
       like botAvatar. */
   botAvatarColor: string;
+  /** Contracts "Riwayat Analisis" retention: finished job records older
+      than this many days are pruned from localStorage; 0 = off (keep
+      until "Bersihkan"). Render-time only: no <html> attribute, no
+      pre-paint mirror. */
+  jobRetentionDays: number;
 }
 
 /** Curated body colours offered for the Sage mascot (Settings ›
@@ -80,6 +85,12 @@ export const BOT_AVATAR_COLORS: { slug: string; hex: string }[] = [
 
 /** Discrete UI-scale presets offered by the typography section. */
 export const UI_SCALE_PRESETS = [90, 100, 110, 125, 150, 175];
+
+/** Ages (in days) offered as retention presets for Contracts job-panel
+    records; any integer 1..JOB_RETENTION_MAX_DAYS is a valid custom
+    value (Settings › Advanced › Analysis history). */
+export const JOB_RETENTION_PRESETS = [7, 30, 90, 180, 270, 365];
+export const JOB_RETENTION_MAX_DAYS = 3650;
 
 /** Built-in chat fonts; stacks are mirrored in components.css rules. */
 export interface ChatFontOption {
@@ -113,6 +124,7 @@ const DEFAULTS: SettingsState = {
   readingSpacing: 'cozy',
   botAvatar: 'droid',
   botAvatarColor: '',
+  jobRetentionDays: 0,
 };
 
 const media = window.matchMedia('(prefers-color-scheme: dark)');
@@ -152,6 +164,14 @@ function sanitize(raw: unknown): Partial<SettingsState> {
     (p.botAvatarColor === '' || BOT_AVATAR_COLORS.some((c) => c.hex === p.botAvatarColor))
   ) {
     out.botAvatarColor = p.botAvatarColor;
+  }
+  if (
+    typeof p.jobRetentionDays === 'number' &&
+    Number.isInteger(p.jobRetentionDays) &&
+    (p.jobRetentionDays === 0 ||
+      (p.jobRetentionDays >= 1 && p.jobRetentionDays <= JOB_RETENTION_MAX_DAYS))
+  ) {
+    out.jobRetentionDays = p.jobRetentionDays;
   }
   return out;
 }

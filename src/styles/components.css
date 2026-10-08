@@ -3809,6 +3809,22 @@ h1, h2, h3, h4, h5, h6 {
   gap: 12px;
 }
 
+/* Custom-days number input beside the retention select (Advanced ›
+   Analysis history, 2026-10-08). font-family: inherit follows the
+   app-wide interface-font override (chatFont), unlike the hardcoded
+   stack in .settings-select above. Focus ring comes from the global
+   :focus-visible floor in index.css. */
+.settings-days-input {
+  background: var(--bg-element);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  width: 96px;
+}
+
 .settings-link-btn {
   background: transparent;
   border: none;

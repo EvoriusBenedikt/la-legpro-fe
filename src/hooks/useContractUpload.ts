@@ -9,6 +9,11 @@ import { createContext, useContext } from 'react';
 export interface UploadJob {
   id: string;
   filename: string;
+  /** Epoch ms at queue time; used by retention pruning (Settings ›
+      Advanced › Analysis history). Optional: records persisted before
+      it existed are stamped at load time, so they are never pruned
+      earlier than promised. */
+  createdAt?: number;
   /** 'interrupted': the job was in flight when the page reloaded. Records
       persist in localStorage, the File itself cannot — so an interrupted
       job is honest history, not a resumable transfer (critique P1 #1). */

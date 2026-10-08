@@ -3,13 +3,14 @@ import { createPortal } from 'react-dom';
 import {
   Settings, X, ChevronRight, Palette, SunMoon, SlidersHorizontal,
   MessagesSquare, Sun, Moon, Monitor, Type, Languages,
-  CalendarDays, Settings2, Database, Download, Upload, RotateCcw,
+  CalendarDays, Settings2, Database, Download, Upload, RotateCcw, History,
 } from 'lucide-react';
 import { botAvatarTypes } from 'bot-avatars';
 import {
   getSettingsSnapshot, getSettings, setSetting, subscribeSettings,
   importSettings, resetSettings,
   CHAT_FONTS, UI_SCALE_PRESETS, BOT_AVATAR_COLORS,
+  JOB_RETENTION_PRESETS, JOB_RETENTION_MAX_DAYS,
   type SettingsState, type ThemePref, type Locale,
   type DateFormat, type ReadingSpacing,
 } from '../settings';
@@ -546,6 +547,98 @@ function SettingsDataSection() {
   );
 }
 
+/** Retention preset ages (days) → i18n label keys. Kept beside the
+    section so preset copy and preset values stay in one view. */
+const RETENTION_LABEL_KEYS: Record<number, StringKey> = {
+  7: 'jobsRetWeek',
+  30: 'jobsRetMonth1',
+  90: 'jobsRetMonth3',
+  180: 'jobsRetMonth6',
+  270: 'jobsRetMonth9',
+  365: 'jobsRetMonth12',
+};
+
+/** Contracts "Riwayat Analisis" retention (2026-10-08, user decision):
+    finished job records are pruned from localStorage after N days;
+    0 = off (keep until "Bersihkan"). Analyzed documents are server-side
+    data and are never touched here. The select carries presets + custom;
+    choosing custom reveals a days input (committed on blur/Enter, snaps
+    back when out of range so the stored value is always valid). */
+function JobsDataSection() {
+  const s = useSettingsState();
+  const t = useStrings();
+  const days = s.jobRetentionDays;
+  const isPreset = days === 0 || JOB_RETENTION_PRESETS.includes(days);
+  const [customMode, setCustomMode] = useState(!isPreset);
+  const [draft, setDraft] = useState(!isPreset ? String(days) : '');
+
+  const current =
+    days === 0
+      ? t.jobsRetOff
+      : isPreset
+        ? t[RETENTION_LABEL_KEYS[days]]
+        : `${days} ${t.jobsRetDaysUnit}`;
+
+  const commitDraft = () => {
+    const n = Math.floor(Number(draft));
+    if (draft.trim() !== '' && Number.isFinite(n) && n >= 1 && n <= JOB_RETENTION_MAX_DAYS) {
+      setSetting('jobRetentionDays', n);
+    } else {
+      setDraft(isPreset ? '' : String(days)); // invalid: snap back to stored
+    }
+  };
+
+  return (
+    <div className="settings-section">
+      <Row id="set-job-retention" title={t.jobsRetTitle} desc={fill(t.jobsRetDesc, { v: current })}>
+        {(ids) => (
+          <div className="settings-control-group">
+            <select
+              className="settings-select"
+              value={customMode ? 'custom' : String(days)}
+              aria-labelledby={ids.labelledBy}
+              aria-describedby={ids.describedBy}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === 'custom') {
+                  setCustomMode(true);
+                  setDraft(days > 0 ? String(days) : '30');
+                } else {
+                  setCustomMode(false);
+                  setDraft('');
+                  setSetting('jobRetentionDays', Number(v));
+                }
+              }}
+            >
+              <option value="0">{t.jobsRetOff}</option>
+              {JOB_RETENTION_PRESETS.map((p) => (
+                <option key={p} value={String(p)}>{t[RETENTION_LABEL_KEYS[p]]}</option>
+              ))}
+              <option value="custom">{t.jobsRetCustom}</option>
+            </select>
+            {customMode && (
+              <input
+                type="number"
+                className="settings-days-input"
+                min={1}
+                max={JOB_RETENTION_MAX_DAYS}
+                value={draft}
+                placeholder="30"
+                aria-label={t.jobsRetDaysAria}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commitDraft}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitDraft();
+                }}
+              />
+            )}
+          </div>
+        )}
+      </Row>
+    </div>
+  );
+}
+
 /* ---------- registry ---------- */
 
 interface SectionDef {
@@ -600,6 +693,7 @@ function buildCategories(t: Record<StringKey, string>): CategoryDef[] {
       icon: Settings2,
       sections: [
         { id: 'settings-data', label: t.secSettingsData, icon: Database, Component: SettingsDataSection },
+        { id: 'jobs-data', label: t.secJobsData, icon: History, Component: JobsDataSection },
       ],
     },
   ];
