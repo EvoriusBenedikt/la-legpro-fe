@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { LogIn, UserPlus, Eye, EyeOff, Check, Circle, AlertTriangle } from 'lucide-react';
+import { LogIn, UserPlus, Eye, EyeOff, Check, Circle, AlertTriangle, KeyRound } from 'lucide-react';
 import api, { isHttpError, isNetworkError } from '../services/api';
 import { Link } from 'react-router-dom';
 import { useStrings, useLocale, type StringKey } from '../i18n';
@@ -487,6 +487,25 @@ export default function Auth() {
             {loading ? t.authProcessing : ''}
           </span>
         </form>
+
+        {/* Passkey rollout stub (2026-10-09 plan decision 2): the real
+            disabled attribute is deliberate here (unlike the submit's
+            aria-disabled pattern) — a placeholder with no pending action
+            must not be focusable or announce as actionable; the visible
+            hint carries the coming-soon state. Isolated block for DevOps
+            to replace when the real passkey flow lands. */}
+        {isLogin && (
+          <div className="auths-passkey">
+            <div className="auths-divider" role="separator">
+              <span>{t.authOrLoginWith}</span>
+            </div>
+            <button type="button" className="auths-passkey-btn" disabled>
+              <KeyRound size={18} aria-hidden="true" />
+              {t.authPasskey}
+            </button>
+            <p className="auths-passkey-hint">{t.authPasskeySoon}</p>
+          </div>
+        )}
 
         {/* Minimal footer (Wise): demoted secondary actions. The forgot and
             contact lines stay static text, NOT links (2026-10-06 user

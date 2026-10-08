@@ -314,6 +314,11 @@ const id = {
   authForgotNote:
     'Lupa kata sandi? Administrator instansi Anda dapat membantu mengatur ulang.',
   authLangToggleAria: 'Ganti bahasa ke Inggris',
+  /* Passkey placeholder (2026-10-09 Wise-style login redesign): copy for
+     the disabled rollout stub rendered under the login form. */
+  authOrLoginWith: 'Atau masuk dengan',
+  authPasskey: 'Passkey',
+  authPasskeySoon: 'Segera tersedia',
   /* Empty-field gates: the form is noValidate (native bubbles are
      English-only and unstyleable), so required checks raise localized
      errors through the same banner/highlight/shake path. */
@@ -615,6 +620,9 @@ const en: Record<StringKey, string> = {
   authForgotNote:
     'Forgot your password? Your organization\'s administrator can help reset it.',
   authLangToggleAria: 'Switch language to Indonesian',
+  authOrLoginWith: 'Or log in with',
+  authPasskey: 'Passkey',
+  authPasskeySoon: 'Coming soon',
   authErrUsernameRequired: 'Username is required.',
   authErrEmailRequired: 'Email is required.',
   authErrPasswordRequired: 'Password is required.',

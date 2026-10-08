@@ -183,6 +183,58 @@
   }
 }
 
+/* Passkey rollout stub (plan decision 2): an outlined secondary,
+   deliberately quieter than the filled accent CTA — one job first,
+   alternatives below. */
+.auths-passkey {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auths-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.auths-divider::before,
+.auths-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border-color);
+}
+
+.auths-passkey-btn {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.auths-passkey-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auths-passkey-hint {
+  margin: 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
 /* Minimal footer: static trouble/contact notes -> credit line -> back
    link. The inherited top margins of the reused footer classes are
    zeroed so the pinned 6px gap is the only rhythm. */
