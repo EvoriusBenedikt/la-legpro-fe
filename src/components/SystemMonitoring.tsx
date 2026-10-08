@@ -773,7 +773,7 @@ export default function SystemMonitoring() {
                     {activeTasks.map((t, idx) => {
                       const vocab = statusVocab(t.status || 'RUNNING');
                       return (
-                        <tr key={`aktif-${t.name || t.action || idx}-${t.start_time}`}>
+                        <tr key={`aktif-${idx}-${t.name || t.action}-${t.start_time}`}>
                           <td><span className={`status-pill ${vocab.tone}`}><Clock size={12} aria-hidden="true" /> {vocab.label}</span></td>
                           <td className="cell-task">{t.name || t.action || '—'}</td>
                           <td><span className="time-cell"><Clock size={12} aria-hidden="true" /> {formatTime(t.start_time)}</span></td>
@@ -783,7 +783,7 @@ export default function SystemMonitoring() {
                     {tasks.map((t, idx) => {
                       const vocab = statusVocab(t.status);
                       return (
-                        <tr key={`riwayat-${t.name || t.action || idx}-${t.timestamp}`}>
+                        <tr key={`riwayat-${idx}-${t.name || t.action}-${t.timestamp}`}>
                           <td>
                             <span className={`status-pill ${vocab.tone}`}>
                               {vocab.tone === 'danger' ? <AlertTriangle size={12} aria-hidden="true" /> : vocab.tone === 'success' ? <CheckCircle size={12} aria-hidden="true" /> : <Clock size={12} aria-hidden="true" />} {vocab.label}
@@ -1091,8 +1091,8 @@ export default function SystemMonitoring() {
                   <table className="monitoring-table">
                     <thead><tr><th scope="col">Waktu</th><th scope="col">Endpoint</th><th scope="col">Latensi</th><th scope="col">Token</th></tr></thead>
                     <tbody>
-                      {(llmMetrics.recent || []).slice(0, 5).map(m => (
-                        <tr key={`${m.timestamp}-${m.endpoint}`}>
+                      {(llmMetrics.recent || []).slice(0, 5).map((m, idx) => (
+                        <tr key={`${m.timestamp}-${m.endpoint}-${idx}`}>
                           <td><span className="time-cell"><Clock size={12} aria-hidden="true" /> {formatTime(m.timestamp)}</span></td>
                           <td><span className="action-badge neutral">{m.endpoint}</span></td>
                           <td className="cell-num">{m.latency_ms} ms</td>
