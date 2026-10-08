@@ -1,0 +1,209 @@
+/* Wise-style single-column auth page (2026-10-09 redesign,
+   plans/2026-10-09-login-wise-mobile-ui.md). Fifth cascade layer:
+   imported AFTER components.css (these rules win ties against the
+   legacy .auth- and .input- defaults reused on this page) and BEFORE
+   theme-dark.css (dark-theme patches must still beat both). The frozen
+   two-panel page (/login/legacy, AuthLegacy.tsx) uses none of these
+   classes, and no rule in components.css is edited for this redesign. */
+
+/* Page shell: same safety pattern as the legacy .auth-form-side — the
+   card's margin:auto centers it when there is room, and the page scrolls
+   when there isn't (a short register form must never clip). */
+.auth-single {
+  min-height: 100dvh;
+  display: flex;
+  padding: 24px 16px calc(24px + env(safe-area-inset-bottom));
+  background: var(--bg-base);
+}
+
+/* Brand lockup — the only brand surface left on this page. The logo
+   glyph is dark and stays on a light plate in BOTH themes (never
+   invert, bug_reports 2026-10-05). */
+.auths-lockup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 24px;
+}
+
+.auths-logo {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff, #e2e8f0);
+  border: 1px solid var(--border-color);
+}
+
+.auths-logo img {
+  width: 24px;
+  height: 24px;
+}
+
+.auths-wordmark {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
+/* Heading-area mode link (Wise placement): the login/register flip sits
+   top-right above the heading instead of the old bottom .auth-toggle
+   row. 44px minimum touch target. */
+.auths-mode-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 12px;
+}
+
+.auths-mode-link {
+  background: transparent;
+  border: none;
+  color: var(--accent-color);
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 8px 4px;
+  cursor: pointer;
+}
+
+.auths-mode-link:hover {
+  text-decoration: underline;
+}
+
+.auths-head {
+  margin-bottom: 24px;
+}
+
+.auths-head h2 {
+  font-size: 1.6rem;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Floating-label field. The input carries placeholder=" " (one space,
+   nothing visible) so :not(:placeholder-shown) can float the label for
+   filled fields; the label follows the input in the DOM so the sibling
+   float triggers below work — including :-webkit-autofill, which floats
+   password-manager fills on a cold load with no focus event. */
+.float-field {
+  position: relative;
+}
+
+.float-field input {
+  width: 100%;
+  height: 52px;
+  box-sizing: border-box;
+  padding: 20px 14px 6px;
+  background: var(--bg-element);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+/* Seat the reused 44px .auth-eye toggle (components.css: absolute,
+   right:8px) inside the 52px field: (52 - 44) / 2 = 4px. */
+.float-field--eye input {
+  padding-right: 56px;
+}
+
+.float-field--eye .auth-eye {
+  top: 4px;
+}
+
+.float-field label {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  pointer-events: none;
+  transition: top 0.15s ease, font-size 0.15s ease, color 0.15s ease;
+}
+
+/* All three float triggers (the third is the autofill case). Floated but
+   unfocused labels stay secondary — only a live focus tints accent. */
+.float-field input:focus + label,
+.float-field input:not(:placeholder-shown) + label,
+.float-field input:-webkit-autofill + label {
+  top: 6px;
+  transform: none;
+  font-size: 0.72rem;
+}
+
+.float-field input:focus + label {
+  color: var(--accent-color);
+}
+
+/* Focus + error recipes mirror the legacy .auth-input rules
+   (components.css); the global :focus-visible floor (index.css) still
+   paints the keyboard ring above them. An error field's ring is danger,
+   never accent. */
+.float-field input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.float-field.field-error input {
+  border-color: var(--danger);
+}
+
+.float-field.field-error input:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-border);
+}
+
+.float-field.field-error label {
+  color: var(--danger-text);
+}
+
+/* A focused error field keeps the danger label tint: the accent
+   focus-tint rule above is (0,2,2) and would otherwise beat the
+   base error-label rule (0,2,1). */
+.float-field.field-error input:focus + label {
+  color: var(--danger-text);
+}
+
+/* Reduced motion — both gates, codebase convention (app setting + OS
+   media query): the label float becomes instant. */
+[data-reduce-motion="true"] .float-field label {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .float-field label {
+    transition: none;
+  }
+}
+
+/* Minimal footer: static trouble/contact notes -> credit line -> back
+   link. The inherited top margins of the reused footer classes are
+   zeroed so the pinned 6px gap is the only rhythm. */
+.auths-foot {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.auths-foot .auth-contact-note {
+  margin: 0;
+}
+
+.auths-foot .auth-toggle--tight {
+  margin-top: 0;
+}
+
+.auths-credit {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}

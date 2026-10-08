@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { Lock, User, LogIn, UserPlus, Mail, Scale, Eye, EyeOff, ShieldCheck, Brain, Check, Circle, AlertTriangle } from 'lucide-react';
+import { LogIn, UserPlus, Eye, EyeOff, Check, Circle, AlertTriangle } from 'lucide-react';
 import api, { isHttpError, isNetworkError } from '../services/api';
 import { Link } from 'react-router-dom';
 import { useStrings, useLocale, type StringKey } from '../i18n';
@@ -256,194 +256,198 @@ export default function Auth() {
   };
 
   return (
-    <div className="auth-container">
-      {/* Left Branding Side */}
-      <div className="auth-brand-side">
-        <div className="brand-content">
-          <div className="brand-logo-container">
-            <img src="/LegalAnalyzerLogo.png" alt="" className="brand-logo-img" />
-          </div>
-          {/* Display brand per the owner decision of 2026-10-06: "Legal
-              Analyzer" is THE product name — the former "LA LegPro" display
-              name is retired by owner ruling (repo folders keep the legacy
-              identifier); Lintasarta is the parent company, credited in the
-              auth-credit line below. The "LA Legal-Analyzer" <title> and
-              LandingPage variants were normalized to this. */}
-          <h1>Legal Analyzer</h1>
-          <p className="brand-tagline">
-            {t.authTagline}
-          </p>
-
-          {/* Feature icons are uniformly white on the dark panel (2026-10-06
-              polish): the former #38BDF8/#10B981 were hardcoded non-token
-              hues and a decorative Verdict-Triad use. */}
-          <div className="auth-features">
-            <div className="auth-feature">
-              <div className="auth-feature-icon">
-                <ShieldCheck size={24} color="#fff" />
-              </div>
-              <div>
-                <h3>{t.authFeat1Title}</h3>
-                <p>{t.authFeat1Desc}</p>
-              </div>
-            </div>
-
-            <div className="auth-feature">
-              <div className="auth-feature-icon">
-                <Brain size={24} color="#fff" />
-              </div>
-              <div>
-                <h3>{t.authFeat2Title}</h3>
-                <p>{t.authFeat2Desc}</p>
-              </div>
-            </div>
-
-            <div className="auth-feature">
-              <div className="auth-feature-icon">
-                <Scale size={24} color="#fff" />
-              </div>
-              <div>
-                <h3>{t.authFeat3Title}</h3>
-                <p>{t.authFeat3Desc}</p>
-              </div>
-            </div>
-          </div>
-          
-          {/* Parent-company credit — KEPT per the owner decision of
-              2026-10-06: Lintasarta is the mother company, Legal Analyzer
-              the product. Static English in both locales, like the brand
-              name itself (2026-09-30 convention). */}
-          <div className="auth-credit">
-            <div className="auth-credit-dot" />
-            Powered by LA Lintasarta Core
-          </div>
-        </div>
-      </div>
-
-      {/* Right Form Side */}
-      <div className="auth-form-side">
-        <div
-          className={`auth-card${shake === 'on' ? ' auth-shake' : shake === 'settled' ? ' auth-shake-settled' : ''}`}
-          onAnimationEnd={(e) => { if (e.animationName === 'authShake') setShake('settled'); }}
+    <div className="auth-single">
+      <div
+        className={`auth-card${shake === 'on' ? ' auth-shake' : shake === 'settled' ? ' auth-shake-settled' : ''}`}
+        onAnimationEnd={(e) => { if (e.animationName === 'authShake') setShake('settled'); }}
+      >
+        <button
+          type="button"
+          className="auth-language-toggle"
+          aria-label={t.authLangToggleAria}
+          onClick={() => setSetting('locale', locale === 'id' ? 'en' : 'id')}
         >
+          {locale === 'id' ? 'EN' : 'ID'}
+        </button>
+
+        {/* Compact brand lockup — the only brand surface on the new
+            single-column page (the two-panel brand side survives at
+            /login/legacy only). "Legal Analyzer" is THE product name
+            (owner decision 2026-10-06), static English in both locales
+            like the credit line below. Dark logo glyph on a light plate —
+            never invert (bug_reports 2026-10-05). */}
+        <div className="auths-lockup">
+          <span className="auths-logo">
+            <img src="/LegalAnalyzerLogo.png" alt="" />
+          </span>
+          <span className="auths-wordmark">Legal Analyzer</span>
+        </div>
+
+        {/* Heading-area mode link (Wise grammar): the login/register flip
+            moved up from the old bottom .auth-toggle row. Same handler as
+            before — flip the mode, clear banner + field highlights. */}
+        <div className="auths-mode-row">
           <button
             type="button"
-            className="auth-language-toggle"
-            aria-label={t.authLangToggleAria}
-            onClick={() => setSetting('locale', locale === 'id' ? 'en' : 'id')}
+            className="auths-mode-link"
+            onClick={() => { setIsLogin(!isLogin); setError(''); setFieldErrors({}); }}
           >
-            {locale === 'id' ? 'EN' : 'ID'}
+            {isLogin ? t.authRegisterHere : t.authLoginHere}
           </button>
-          <div className="auth-header">
-            <h2>{isLogin ? t.authWelcome : t.authRegisterTitle}</h2>
-            <p>{isLogin ? t.authWelcomeSub : t.authRegisterSub}</p>
-            {/* On-premises trust line (2026-10-06, owner copy). The icon
-                inherits the secondary text color — a green tint would be
-                decorative Verdict-Triad use. */}
-            <p className="auth-trust-note">
-              <ShieldCheck size={14} aria-hidden="true" />
-              {t.authTrustNote}
-            </p>
+        </div>
+
+        <div className="auths-head">
+          <h2>{isLogin ? t.authWelcome : t.authRegisterTitle}</h2>
+        </div>
+
+        {error && (
+          <div id="auth-error-msg" className="auth-error" role="alert">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="auth-form" noValidate>
+          <div className="input-group">
+            {/* Floating label: placeholder=" " (one space) enables the
+                :not(:placeholder-shown) float trigger and shows nothing
+                visible; the label follows the input in the DOM so the
+                sibling selectors in auth-single.css work — including the
+                :-webkit-autofill trigger for cold password-manager fills. */}
+            <div className={`float-field${fieldErrors.username ? ' field-error' : ''}`}>
+              {/* autoFocus saves the first tap; capitalize/correct/spell
+                  are off so mobile keyboards cannot mangle the
+                  case-sensitive username (critique P2 Jordan). */}
+              <input
+                id="auth-username"
+                type="text"
+                required
+                placeholder=" "
+                autoComplete="username"
+                autoFocus
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                aria-invalid={fieldErrors.username || undefined}
+                aria-describedby={fieldErrors.username ? 'auth-error-msg' : undefined}
+                value={username}
+                onChange={(e) => { setUsername(e.target.value); clearField('username'); }}
+                onKeyDown={handleCapsLockKey}
+                onKeyUp={handleCapsLockKey}
+                onBlur={clearCapsLock}
+              />
+              <label htmlFor="auth-username">{t.authUsername}</label>
+            </div>
+            {/* The hint covers the username too (critique P2 2026-10-06):
+                it is case-sensitive exactly like the password, and an
+                accidental Caps Lock here failed login just as silently. */}
+            {capsLockOn && (
+              <p className="auth-caps-hint" role="status">
+                <AlertTriangle size={12} aria-hidden="true" />
+                {t.authCapsLockOn}
+              </p>
+            )}
           </div>
 
-          {error && (
-            <div id="auth-error-msg" className="auth-error" role="alert">
-              {error}
+          {!isLogin && (
+            <div className="input-group">
+              <div className={`float-field${fieldErrors.email ? ' field-error' : ''}`}>
+                {/* The input below is deliberately "text" + inputMode, not
+                    "email": native email validation silently trims
+                    leading/trailing spaces and blocks inner ones with a
+                    generic browser bubble, which would bypass the custom
+                    whitespace/format errors raised in handleSubmit. */}
+                <input
+                  id="auth-email"
+                  type="text"
+                  inputMode="email"
+                  required
+                  placeholder=" "
+                  autoComplete="email"
+                  aria-invalid={fieldErrors.email || undefined}
+                  aria-describedby={fieldErrors.email ? 'auth-error-msg' : undefined}
+                  value={email}
+                  onChange={(e) => { setEmail(e.target.value.toLowerCase()); clearField('email'); }}
+                />
+                <label htmlFor="auth-email">{t.authEmail}</label>
+              </div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="auth-form" noValidate>
-            <div className="input-group">
-              <label htmlFor="auth-username">{t.authUsername}</label>
-              <div className={`input-wrapper${fieldErrors.username ? ' input-error' : ''}`}>
-                <User size={18} />
-                {/* autoFocus saves the first tap; capitalize/correct/spell
-                    are off so mobile keyboards cannot mangle the
-                    case-sensitive username (critique P2 Jordan). */}
-                <input 
-                  id="auth-username"
-                  type="text" 
-                  required
-                  className="auth-input"
-                  placeholder={t.authUsernamePh}
-                  autoComplete="username"
-                  autoFocus
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  aria-invalid={fieldErrors.username || undefined}
-                  aria-describedby={fieldErrors.username ? 'auth-error-msg' : undefined}
-                  value={username}
-                  onChange={(e) => { setUsername(e.target.value); clearField('username'); }}
-                  onKeyDown={handleCapsLockKey}
-                  onKeyUp={handleCapsLockKey}
-                  onBlur={clearCapsLock}
-                />
-              </div>
-              {/* The hint covers the username too (critique P2 2026-10-06):
-                  it is case-sensitive exactly like the password, and an
-                  accidental Caps Lock here failed login just as silently. */}
-              {capsLockOn && (
-                <p className="auth-caps-hint" role="status">
-                  <AlertTriangle size={12} aria-hidden="true" />
-                  {t.authCapsLockOn}
-                </p>
-              )}
-            </div>
-
-            {!isLogin && (
-              <div className="input-group">
-                <label htmlFor="auth-email">{t.authEmail}</label>
-                <div className={`input-wrapper${fieldErrors.email ? ' input-error' : ''}`}>
-                  <Mail size={18} />
-                  {/* The input below is deliberately "text" + inputMode, not
-                      "email": native email validation silently trims
-                      leading/trailing spaces and blocks inner ones with a
-                      generic browser bubble, which would bypass the custom
-                      whitespace/format errors raised in handleSubmit. */}
-                  <input 
-                    id="auth-email"
-                    type="text"
-                    inputMode="email" 
-                    required
-                    className="auth-input"
-                    placeholder={t.authEmailPh}
-                    autoComplete="email"
-                    aria-invalid={fieldErrors.email || undefined}
-                    aria-describedby={fieldErrors.email ? 'auth-error-msg' : undefined}
-                    value={email}
-                    onChange={(e) => { setEmail(e.target.value.toLowerCase()); clearField('email'); }}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="input-group">
+          <div className="input-group">
+            <div className={`float-field float-field--eye${fieldErrors.password ? ' field-error' : ''}`}>
+              <input
+                id="auth-password"
+                type={showPassword ? "text" : "password"}
+                required
+                placeholder=" "
+                autoComplete={isLogin ? "current-password" : "new-password"}
+                aria-invalid={fieldErrors.password || undefined}
+                aria-describedby={fieldErrors.password ? 'auth-error-msg' : undefined}
+                value={password}
+                onChange={(e) => { setPassword(e.target.value); clearField('password'); }}
+                onKeyDown={handleCapsLockKey}
+                onKeyUp={handleCapsLockKey}
+                onBlur={clearCapsLock}
+              />
               <label htmlFor="auth-password">{t.authPassword}</label>
-              <div className={`input-wrapper${fieldErrors.password ? ' input-error' : ''}`}>
-                <Lock size={18} />
-                <input 
-                  id="auth-password"
-                  type={showPassword ? "text" : "password"}
+              <button
+                type="button"
+                className="auth-eye"
+                aria-label={showPassword ? t.authHidePassword : t.authShowPassword}
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            {capsLockOn && (
+              <p className="auth-caps-hint" role="status">
+                <AlertTriangle size={12} aria-hidden="true" />
+                {t.authCapsLockOn}
+              </p>
+            )}
+            {!isLogin && (
+              <ul className="auth-rules" aria-live="polite">
+                <li className={ruleUpper ? 'auth-rule auth-rule--met' : 'auth-rule'}>
+                  {ruleUpper ? <Check size={12} aria-hidden="true" /> : <Circle size={12} aria-hidden="true" />}
+                  <span>{t.authRuleUpper}</span>
+                </li>
+                <li className={ruleNumber ? 'auth-rule auth-rule--met' : 'auth-rule'}>
+                  {ruleNumber ? <Check size={12} aria-hidden="true" /> : <Circle size={12} aria-hidden="true" />}
+                  <span>{t.authRuleNumber}</span>
+                </li>
+                <li className={ruleSymbol ? 'auth-rule auth-rule--met' : 'auth-rule'}>
+                  {ruleSymbol ? <Check size={12} aria-hidden="true" /> : <Circle size={12} aria-hidden="true" />}
+                  <span>{t.authRuleSymbol}</span>
+                </li>
+              </ul>
+            )}
+          </div>
+
+          {!isLogin && (
+            <div className="input-group">
+              <div className={`float-field float-field--eye${fieldErrors.confirmPassword ? ' field-error' : ''}`}>
+                <input
+                  id="auth-confirm"
+                  type={showConfirmPassword ? "text" : "password"}
                   required
-                  className="auth-input"
-                  placeholder={t.authPasswordPh}
-                  autoComplete={isLogin ? "current-password" : "new-password"}
-                  aria-invalid={fieldErrors.password || undefined}
-                  aria-describedby={fieldErrors.password ? 'auth-error-msg' : undefined}
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); clearField('password'); }}
+                  placeholder=" "
+                  autoComplete="new-password"
+                  aria-invalid={fieldErrors.confirmPassword || undefined}
+                  aria-describedby={fieldErrors.confirmPassword ? 'auth-error-msg' : undefined}
+                  value={confirmPassword}
+                  onChange={(e) => { setConfirmPassword(e.target.value); clearField('confirmPassword'); }}
                   onKeyDown={handleCapsLockKey}
                   onKeyUp={handleCapsLockKey}
                   onBlur={clearCapsLock}
                 />
-                <button 
-                  type="button" 
+                <label htmlFor="auth-confirm">{t.authConfirm}</label>
+                <button
+                  type="button"
                   className="auth-eye"
-                  aria-label={showPassword ? t.authHidePassword : t.authShowPassword}
-                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showConfirmPassword ? t.authHidePassword : t.authShowPassword}
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
               {capsLockOn && (
@@ -452,110 +456,49 @@ export default function Auth() {
                   {t.authCapsLockOn}
                 </p>
               )}
-              {!isLogin && (
-                <ul className="auth-rules" aria-live="polite">
-                  <li className={ruleUpper ? 'auth-rule auth-rule--met' : 'auth-rule'}>
-                    {ruleUpper ? <Check size={12} aria-hidden="true" /> : <Circle size={12} aria-hidden="true" />}
-                    <span>{t.authRuleUpper}</span>
-                  </li>
-                  <li className={ruleNumber ? 'auth-rule auth-rule--met' : 'auth-rule'}>
-                    {ruleNumber ? <Check size={12} aria-hidden="true" /> : <Circle size={12} aria-hidden="true" />}
-                    <span>{t.authRuleNumber}</span>
-                  </li>
-                  <li className={ruleSymbol ? 'auth-rule auth-rule--met' : 'auth-rule'}>
-                    {ruleSymbol ? <Check size={12} aria-hidden="true" /> : <Circle size={12} aria-hidden="true" />}
-                    <span>{t.authRuleSymbol}</span>
-                  </li>
-                </ul>
-              )}
             </div>
+          )}
 
-            {!isLogin && (
-              <div className="input-group">
-                <label htmlFor="auth-confirm">{t.authConfirm}</label>
-                <div className={`input-wrapper${fieldErrors.confirmPassword ? ' input-error' : ''}`}>
-                  <Lock size={18} />
-                  <input 
-                    id="auth-confirm"
-                    type={showConfirmPassword ? "text" : "password"}
-                    required
-                    className="auth-input"
-                    placeholder={t.authConfirmPh}
-                    autoComplete="new-password"
-                    aria-invalid={fieldErrors.confirmPassword || undefined}
-                    aria-describedby={fieldErrors.confirmPassword ? 'auth-error-msg' : undefined}
-                    value={confirmPassword}
-                    onChange={(e) => { setConfirmPassword(e.target.value); clearField('confirmPassword'); }}
-                    onKeyDown={handleCapsLockKey}
-                    onKeyUp={handleCapsLockKey}
-                    onBlur={clearCapsLock}
-                  />
-                  <button 
-                    type="button" 
-                    className="auth-eye"
-                    aria-label={showConfirmPassword ? t.authHidePassword : t.authShowPassword}
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  >
-                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-                {capsLockOn && (
-                  <p className="auth-caps-hint" role="status">
-                    <AlertTriangle size={12} aria-hidden="true" />
-                    {t.authCapsLockOn}
-                  </p>
-                )}
-              </div>
+          {/* aria-disabled instead of disabled (critique P2): a truly
+              disabled button drops focus to <body> mid-submit; the
+              handler guard keeps double-submit protection. The orb
+              replaces the icon while loading — size 20, theme pinned
+              dark because light-theme particles vanish on the blue face
+              (KG-wash precedent). The hidden status region announces the
+              transition; button-text swaps alone are not reliably read.
+              Single-class auth-button (critique P2 2026-10-06): the extra
+              btn-primary leaked its :hover lift+glow while this button is
+              aria-disabled (its guard checks :disabled only); .auth-button
+              carries the full primary treatment, resting glow included.
+              Do not re-add it. */}
+          <button
+            type="submit"
+            aria-disabled={loading}
+            className="auth-button"
+          >
+            {loading ? (
+              <LoadingOrb inline size={20} state="connecting" theme="dark" />
+            ) : (
+              isLogin ? <LogIn size={18} /> : <UserPlus size={18} />
             )}
+            {loading ? t.authProcessing : (isLogin ? t.authSignIn : t.authSignUp)}
+          </button>
+          <span className="visually-hidden" role="status">
+            {loading ? t.authProcessing : ''}
+          </span>
+        </form>
 
-            {/* aria-disabled instead of disabled (critique P2): a truly
-                disabled button drops focus to <body> mid-submit; the
-                handler guard keeps double-submit protection. The orb
-                replaces the icon while loading — size 20, theme pinned
-                dark because light-theme particles vanish on the blue face
-                (KG-wash precedent). The hidden status region announces the
-                transition; button-text swaps alone are not reliably read.
-                Single-class auth-button (critique P2 2026-10-06): the extra
-                btn-primary leaked its :hover lift+glow while this button is
-                aria-disabled (its guard checks :disabled only); .auth-button
-                carries the full primary treatment, resting glow included.
-                Do not re-add it. */}
-            <button 
-              type="submit" 
-              aria-disabled={loading}
-              className="auth-button"
-            >
-              {loading ? (
-                <LoadingOrb inline size={20} state="connecting" theme="dark" />
-              ) : (
-                isLogin ? <LogIn size={18} /> : <UserPlus size={18} />
-              )}
-              {loading ? t.authProcessing : (isLogin ? t.authSignIn : t.authSignUp)}
-            </button>
-            <span className="visually-hidden" role="status">
-              {loading ? t.authProcessing : ''}
-            </span>
-          </form>
-
-          <div className="auth-toggle">
-            {isLogin ? t.authNoAccount : t.authHaveAccount}
-            <button type="button" onClick={() => { setIsLogin(!isLogin); setError(''); setFieldErrors({}); }}>
-              {isLogin ? t.authRegisterHere : t.authLoginHere}
-            </button>
-          </div>
-
-          {/* Forgot password gets the same static treatment as the contact
-              note (2026-10-06 user decision): login-mode only, no flow
-              built — plans/2026-10-05-forgot-password.md stays parked. */}
+        {/* Minimal footer (Wise): demoted secondary actions. The forgot and
+            contact lines stay static text, NOT links (2026-10-06 user
+            decision — no SMTP or administrator contact configured; the
+            parked plans/2026-10-05-forgot-password.md owns the future link
+            target). Parent-company credit kept per the owner decision of
+            2026-10-06, static English in both locales (2026-09-30
+            convention). */}
+        <div className="auths-foot">
           {isLogin && <p className="auth-contact-note">{t.authForgotNote}</p>}
-
-          {/* Static guidance line, not a link (2026-10-06 decision): no
-              SMTP or real administrator contact is configured yet, so the
-              old personal-Gmail mailto is gone and a glowing dead-click
-              button was rejected. Wire to a configured address when
-              contacts land. */}
           <p className="auth-contact-note">{t.authContactNote}</p>
-
+          <span className="auths-credit">Powered by LA Lintasarta Core</span>
           <div className="auth-toggle auth-toggle--tight">
             <Link to="/" className="auth-back-link">
               {t.authBack}
