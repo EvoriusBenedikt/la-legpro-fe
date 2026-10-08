@@ -37,9 +37,14 @@ export function useDialogA11y(
       if (e.key !== 'Tab') return;
       const panel = panelRef.current;
       if (!panel) return;
-      const focusables = panel.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
+      // Visible-rect filter: display:none elements (e.g. the upload modal's
+      // hidden file input) are not focusable, and counting them would break
+      // the wrap — first.focus() on a hidden node silently does nothing.
+      const focusables = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter(el => !el.hasAttribute('disabled') && el.getClientRects().length > 0);
       if (focusables.length === 0) return;
       const first = focusables[0];
       const last = focusables[focusables.length - 1];

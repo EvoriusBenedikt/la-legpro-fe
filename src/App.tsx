@@ -162,9 +162,7 @@ function App() {
                       <Route path="/repository" element={<LegalRepository />} />
                       <Route path="/opinion" element={<LegalOpinion />} />
                       <Route path="/contracts" element={<ContractMonitor />} />
-                      <Route path="/graph" element={
-                        <KnowledgeGraph onOpenDocument={() => {}} />
-                      } />
+                      <Route path="/graph" element={<KnowledgeGraph />} />
                       <Route path="*" element={<Navigate to="/admin" replace />} />
                     </>
                   )}
@@ -175,9 +173,7 @@ function App() {
                       <Route path="/repository" element={<LegalRepository />} />
                       <Route path="/opinion" element={<LegalOpinion />} />
                       <Route path="/contracts" element={<ContractMonitor />} />
-                      <Route path="/graph" element={
-                        <KnowledgeGraph onOpenDocument={() => {}} />
-                      } />
+                      <Route path="/graph" element={<KnowledgeGraph />} />
                       <Route path="*" element={<Navigate to="/opinion" replace />} />
                     </>
                   )}

@@ -19,11 +19,6 @@
   box-sizing: border-box;
 }
 
-/* Mobile search toggle: hidden on desktop, shown on mobile (the hamburger
-   menu-btn is always visible now — it toggles the floating sidebar) */
-.search-toggle-btn,
-.topbar-search-expand { display: none; }
-
 /* Repository filter dropdown panel (desktop positioning; mobile bottom sheet) */
 .repo-filter-panel {
   position: absolute;
@@ -56,15 +51,14 @@
   .stats-row { flex-wrap: wrap; }
   .stat-card { flex: 1 1 calc(50% - 8px); min-width: 0; }
 
-  .search-bar-top { width: clamp(140px, 18vw, 200px); }
   .view-header { padding: 20px 24px; }
+  .cm-view { padding: 20px 24px; }
 
   /* TopBar stays one row on tablets, exactly like the laptop composition:
-     the right cluster (search · bell · gear · account pill) pins to the far
+     the right cluster (bell · gear · account pill) pins to the far
      edge while the left chrome yields — breadcrumb prefix hides and the
      page chip ellipsizes — instead of the whole cluster wrapping under the
-     logo (2026-10-03 tablet adapt). flex-wrap returns in the ≤767 query so
-     the mobile search-expand row can still drop below. */
+     logo (2026-10-03 tablet adapt). */
   .topbar { flex-wrap: nowrap; padding: 12px 16px; gap: 12px; }
   .topbar-left { flex: 1 1 auto; min-width: 0; }
   .topbar-right { flex: 0 0 auto; gap: 12px; }
@@ -194,18 +188,6 @@
     text-overflow: ellipsis;
     font-size: 0.85rem;
   }
-  .search-bar-top { display: none; }
-  .search-toggle-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 44px;
-    min-height: 44px;
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
-  }
   .topbar-right { gap: 8px; }
   .topbar-role-badge { display: none; }
   .topbar-user-pill { padding: 4px; gap: 0; }
@@ -216,31 +198,11 @@
     min-width: 44px;
     min-height: 44px;
   }
-  .topbar-search-expand {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    background: var(--bg-element);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 4px 12px;
-    margin-top: 8px;
-  }
-  .topbar-search-expand input {
-    flex: 1;
-    min-width: 0;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--text-primary);
-    font-size: 1rem;
-    min-height: 44px;
-  }
 
   /* Stat cards → 1 column */
   .stats-row { flex-direction: column; }
   .stat-card { flex: 1 1 auto; padding: 16px; }
+  .cm-view { padding: 16px; }
 
   /* Repository toolbar wraps; filter becomes a bottom sheet */
   .repo-header { flex-wrap: wrap; gap: 12px; }
@@ -363,4 +325,27 @@
   button.status-chip.tax-chip { min-height: 44px; padding: 3px 12px; }
   .tax-add-row { padding: 16px; }
   .tax-add-row .btn { width: 100%; min-height: 44px; }
+}
+
+/* ── Knowledge Graph (≤767px): 44px touch floors (2026-10-07 critique P1
+      remediation — live-measured offenders: close-X 18×18, expand toggle
+      16×148, node links 16px, toolbar buttons 28–36, search input 18,
+      select 34, scenario buttons 32). The KG is inline-styled TSX, so the
+      floors hang off the .kg-view root hook plus the few named element
+      classes the component adds. box-sizing: border-box is load-bearing on
+      every rule: this project has NO global reset (see components.css
+      .chat-input note), so a content-box min-height would add padding on
+      top and inflate the control past the floor. No blanket
+      `.kg-view button` rule on purpose — it would inflate the shared
+      .upload-toast-close grammar the KG toast strip reuses. ── */
+@media (max-width: 767px) {
+  .kg-view form button,
+  .kg-view form select { min-height: 44px; box-sizing: border-box; }
+  .kg-view form button { min-width: 44px; }
+  .kg-view #kg-search { min-height: 44px; box-sizing: border-box; }
+  .kg-view .kg-side button { min-height: 44px; min-width: 44px; box-sizing: border-box; }
+  .kg-view .kg-card-main { min-height: 44px; box-sizing: border-box; }
+  .kg-view .kg-expand-toggle { min-height: 44px; width: 100%; justify-content: flex-start; box-sizing: border-box; }
+  .kg-view .kg-node-link { min-height: 44px; display: flex; align-items: center; box-sizing: border-box; }
+  .kg-view .secondary-action-btn { min-height: 44px; box-sizing: border-box; }
 }

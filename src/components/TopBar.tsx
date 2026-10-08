@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Search, Bell, ShieldCheck, User, Menu, X, Code } from 'lucide-react';
+import { Bell, ShieldCheck, User, Menu, Code } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useStrings } from '../i18n';
@@ -15,7 +14,6 @@ export default function TopBar({ onMenu }: TopBarProps) {
   const t = useStrings();
   const location = useLocation();
   const navigate = useNavigate();
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   const getPageTitle = () => {
     const path = location.pathname;
@@ -59,20 +57,6 @@ export default function TopBar({ onMenu }: TopBarProps) {
       </div>
 
       <div className="topbar-right">
-        <div className="search-bar-top">
-          <Search size={16} />
-          <input type="text" placeholder={t.searchEverywhere} aria-label={t.searchEverywhere} />
-        </div>
-
-        <button
-          className="search-toggle-btn"
-          onClick={() => setMobileSearchOpen(o => !o)}
-          aria-label={mobileSearchOpen ? t.closeSearch : t.openSearch}
-          aria-expanded={mobileSearchOpen}
-        >
-          {mobileSearchOpen ? <X size={20} /> : <Search size={20} />}
-        </button>
-
         <button className="icon-btn-top" aria-label={t.notifications}>
           <Bell size={18} />
         </button>
@@ -94,12 +78,6 @@ export default function TopBar({ onMenu }: TopBarProps) {
           </div>
         </div>
       </div>
-      {mobileSearchOpen && (
-        <div className="topbar-search-expand">
-          <Search size={16} />
-          <input type="text" placeholder={t.searchEverywhere} aria-label={t.searchEverywhere} autoFocus />
-        </div>
-      )}
     </div>
   );
 }

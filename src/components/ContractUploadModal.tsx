@@ -1,67 +1,64 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { FileText, Upload, UploadCloud, X } from 'lucide-react';
 import { useContractUpload } from '../hooks/useContractUpload';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 
 interface ContractUploadModalProps {
   /** Close the modal (close button, overlay click, Escape) */
   onClose: () => void;
 }
 
+/* Mirrors the BE limit (PRODUCT.md: PDF/DOCX/XLSX/PPTX/images ≤ 50 MB).
+   Checked on pick AND drop — the accept attribute only filters the picker,
+   so a dragged 400 MB zip used to fail minutes later as a transient toast
+   (critique P1, error prevention). */
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
+const ALLOWED_EXT = /\.(pdf|docx|xlsx|pptx|jpe?g|png|txt)$/i;
+
 /* Upload flow of the former Compliance Checker page, rendered as an
    accessible modal on top of the Contracts page. Submitting hands the file
    to the ContractUploadContext, which runs analyze → save-to-history as a
-   background job (survives route changes, toasts on completion) — the modal
-   closes immediately. One consistent term: "Upload Dokumen". */
+   background job (survives route changes, toasts on completion, listed in
+   the page's Riwayat Analisis panel) — the modal closes immediately.
+   One consistent term: "Upload Dokumen". */
 export default function ContractUploadModal({ onClose }: ContractUploadModalProps) {
   const { startUpload } = useContractUpload();
   const [file, setFile] = useState<File | null>(null);
   const [useOCR, setUseOCR] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Focus trap + Escape to close + restore focus on unmount
-  useEffect(() => {
-    const restoreTo = document.activeElement as HTMLElement | null;
-    dialogRef.current?.focus();
+  // Shared dialog behavior: Escape closes, focus moves into the panel on
+  // open, Tab is trapped, focus restores on unmount — the same hook the
+  // system dialogs use (the panel's hidden file input is skipped by the
+  // hook's visible-rect filter).
+  useDialogA11y(true, onClose, dialogRef);
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const dialog = dialogRef.current;
-      if (!dialog) return;
-      const focusables = Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'button, input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-      ).filter(el => !el.hasAttribute('disabled') && el.getClientRects().length > 0);
-      if (focusables.length === 0) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
+  const acceptFile = (candidate: File) => {
+    if (!ALLOWED_EXT.test(candidate.name)) {
+      setFileError('Format tidak didukung — gunakan PDF, Word, Excel, PPT, JPG, PNG, atau TXT.');
+      return;
+    }
+    if (candidate.size > MAX_FILE_BYTES) {
+      setFileError(`Ukuran maksimum 50 MB — file ini ${Math.max(1, Math.round(candidate.size / (1024 * 1024)))} MB.`);
+      return;
+    }
+    setFileError(null);
+    setFile(candidate);
+  };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      restoreTo?.focus?.();
-    };
-  }, [onClose]);
+  const clearFile = () => {
+    setFile(null);
+    setFileError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setFile(e.target.files[0]);
+      acceptFile(e.target.files[0]);
     }
   };
 
@@ -69,7 +66,7 @@ export default function ContractUploadModal({ onClose }: ContractUploadModalProp
     e.preventDefault();
     setDragOver(false);
     const dropped = e.dataTransfer.files?.[0];
-    if (dropped) setFile(dropped);
+    if (dropped) acceptFile(dropped);
   };
 
   const handleSubmit = () => {
@@ -119,7 +116,7 @@ export default function ContractUploadModal({ onClose }: ContractUploadModalProp
         >
           <UploadCloud size={40} className="upload-icon-main" />
           <span className="upload-box-title">Upload Dokumen PKS</span>
-          <span className="upload-box-hint">Format PDF, Word, Excel, PPT, JPG, PNG & TXT didukung.</span>
+          <span className="upload-box-hint">Format PDF, Word, Excel, PPT, JPG, PNG & TXT didukung · maksimal 50 MB.</span>
           {file && (
             <span className="selected-file">
               <FileText size={16} />
@@ -127,6 +124,16 @@ export default function ContractUploadModal({ onClose }: ContractUploadModalProp
             </span>
           )}
         </button>
+        {/* Clear control lives outside the dropzone button — a <button> cannot
+            nest another <button>, and "pick another file" was the only exit. */}
+        {file && (
+          <div className="upload-file-clear-row">
+            <button type="button" className="btn-modal-secondary upload-file-clear" onClick={clearFile}>
+              <X size={14} aria-hidden="true" /> Hapus file terpilih
+            </button>
+          </div>
+        )}
+        {fileError && <p className="upload-file-error" role="alert">{fileError}</p>}
 
         <label className="ocr-row">
           <input
@@ -134,24 +141,25 @@ export default function ContractUploadModal({ onClose }: ContractUploadModalProp
             checked={useOCR}
             onChange={(e) => setUseOCR(e.target.checked)}
           />
-          <span>Gunakan OCR Tradisional (Sesuai FR-2)</span>
+          <span>Gunakan OCR Tradisional (untuk dokumen hasil pindaian)</span>
         </label>
 
         <div className="upload-modal-note">
           <p>
             Pipeline 4-tahap (ekstraksi teks → identifikasi klausul → validasi relevansi →
             audit kepatuhan) berjalan di latar belakang ±2–4 menit. Anda bebas berpindah
-            halaman — notifikasi muncul saat selesai dan dokumen baru otomatis masuk ke daftar Contracts.
+            halaman — notifikasi muncul saat selesai dan dokumen baru otomatis masuk ke daftar Kontrak.
           </p>
         </div>
 
         <div className="upload-modal-actions">
           <button className="btn-modal-secondary" onClick={onClose}>Batal</button>
+          {/* No inline colors: .upload-btn's ink-on-accent pairing is the
+              documented AA-safe face in both themes (theme-dark.css). */}
           <button
             className="upload-btn"
             onClick={handleSubmit}
             disabled={!file}
-            style={{ background: 'var(--accent-color)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', minHeight: '44px', fontWeight: 600 }}
           >
             <Upload size={18} />
             Upload Dokumen

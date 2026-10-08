@@ -30,10 +30,7 @@ const id = {
   signedInNote: 'Berhasil masuk.',
 
   /* TopBar + Sidebar chrome */
-  searchEverywhere: 'Cari di mana saja…',
   openNav: 'Buka menu navigasi',
-  openSearch: 'Buka pencarian',
-  closeSearch: 'Tutup pencarian',
   notifications: 'Notifikasi',
   goToAccount: 'Buka Pengaturan Akun',
   fallbackRole: 'Pengguna',
@@ -287,10 +284,7 @@ export type StringKey = keyof typeof id;
 const en: Record<StringKey, string> = {
   docTitle: 'Legal Analyzer — Compliance, verified before you sign',
   signedInNote: 'Signed in.',
-  searchEverywhere: 'Search everywhere...',
   openNav: 'Open navigation menu',
-  openSearch: 'Open search',
-  closeSearch: 'Close search',
   notifications: 'Notifications',
   goToAccount: 'Go to Account Settings',
   fallbackRole: 'User',

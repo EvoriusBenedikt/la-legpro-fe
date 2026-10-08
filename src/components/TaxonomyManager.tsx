@@ -240,6 +240,10 @@ export default function TaxonomyManager() {
   const [retry, setRetry] = useState<(() => void) | null>(null);
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState('');
+  // Monotonic sequence so two identical notices back-to-back still restart the
+  // dismiss timer — a deps list on the string alone skips the re-fire (the
+  // "toggle two types within 4s" trap from the critique's reviewer notes).
+  const [noticeSeq, setNoticeSeq] = useState(0);
 
   // States for Adding
   const [adding, setAdding] = useState(false);
@@ -266,10 +270,18 @@ export default function TaxonomyManager() {
   // no-op on the detached node, so the landing survives the unmount — while
   // the role=status notice announces the outcome.
   const tableRef = useRef<HTMLTableElement>(null);
+  // Escape from the add form returns focus to its opener, the header toggle
+  // (critique §8.4): dismissible surfaces never drop focus to <body>.
+  const headAddRef = useRef<HTMLButtonElement>(null);
 
   const fail = (message: string, again: () => void) => {
     setError(message);
     setRetry(() => again);
+  };
+
+  const notify = (text: string) => {
+    setNotice(text);
+    setNoticeSeq(s => s + 1);
   };
 
   // Success confirmations are short positive sentences that dismiss themselves
@@ -277,7 +289,7 @@ export default function TaxonomyManager() {
     if (!notice) return;
     const t = setTimeout(() => setNotice(''), 4000);
     return () => clearTimeout(t);
-  }, [notice]);
+  }, [notice, noticeSeq]);
 
   const fetchTaxonomy = async () => {
     setLoading(true);
@@ -307,7 +319,7 @@ export default function TaxonomyManager() {
       await api.post('/api/taxonomy', { name });
       setNewName('');
       setAdding(false);
-      setNotice('Jenis dokumen berhasil ditambahkan.');
+      notify('Jenis dokumen berhasil ditambahkan.');
       await fetchTaxonomy();
     } catch (e) {
       if (isHttpError(e)) {
@@ -337,7 +349,7 @@ export default function TaxonomyManager() {
   const renameTax = async (id: number, name: string) => {
     await api.put(`/api/taxonomy/${id}`, { name });
     cancelEdit();
-    setNotice('Nama jenis dokumen berhasil diperbarui.');
+    notify('Nama jenis dokumen berhasil diperbarui.');
     await fetchTaxonomy();
     // The inline input is gone by now — land focus on the table so keyboard
     // users don't drop to <body> (critique F5 pattern, applied to rename).
@@ -387,13 +399,13 @@ export default function TaxonomyManager() {
   // page-banner + retry behavior for toggles started outside the dialog.
   const toggleActive = async (tax: Taxonomy) => {
     await api.put(`/api/taxonomy/${tax.id}`, { is_active: !tax.is_active });
-    setNotice(tax.is_active ? 'Jenis dokumen dinonaktifkan.' : 'Jenis dokumen diaktifkan kembali.');
+    notify(tax.is_active ? 'Jenis dokumen dinonaktifkan.' : 'Jenis dokumen diaktifkan kembali.');
     await fetchTaxonomy();
   };
 
   const deleteTax = async (tax: Taxonomy) => {
     await api.delete(`/api/taxonomy/${tax.id}`);
-    setNotice('Jenis dokumen berhasil dihapus.');
+    notify('Jenis dokumen berhasil dihapus.');
     await fetchTaxonomy();
     // The opener row just vanished — land focus on the table; the dialog's
     // opener-restore is a no-op on the detached button (critique F5).
@@ -428,8 +440,9 @@ export default function TaxonomyManager() {
           <p className="tax-subtitle">Kelola jenis dokumen yang tersedia di sistem.</p>
         </div>
         <button
+          ref={headAddRef}
           type="button"
-          className="btn btn-primary"
+          className={`btn ${adding ? 'btn-secondary' : 'btn-primary'}`}
           onClick={toggleAdd}
           disabled={busy}
         >
@@ -451,10 +464,26 @@ export default function TaxonomyManager() {
               type="text"
               value={newName}
               onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => {
+                // Escape closes the form like every other dismissible surface
+                // (critique §8.4); focus returns to the header toggle that
+                // opened it instead of dropping to <body>.
+                if (e.key === 'Escape') {
+                  e.preventDefault();
+                  setAdding(false);
+                  setNewName('');
+                  headAddRef.current?.focus();
+                }
+              }}
               placeholder="Contoh: Peraturan Direksi"
               maxLength={100}
               autoFocus
             />
+            {/* maxLength truncates pasted text invisibly (critique §8.3):
+                the counter states the budget and turns danger at the cap. */}
+            <span className={`tax-charcount${newName.length >= 100 ? ' tax-charcount--max' : ''}`}>
+              {newName.length}/100
+            </span>
           </div>
           <button type="submit" className="btn btn-primary" disabled={busy || !newName.trim()}>
             Simpan
@@ -531,20 +560,28 @@ export default function TaxonomyManager() {
               <tr key={tax.id} className={tax.is_active ? undefined : 'tax-row-inactive'}>
                 <td>
                   {editingId === tax.id ? (
-                    <input
-                      className="tax-input tax-input--inline"
-                      type="text"
-                      value={editName}
-                      onChange={e => setEditName(e.target.value)}
-                      maxLength={100}
-                      onBlur={() => { if (!renameConfirm) cancelEdit(); }}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') { e.preventDefault(); commitEdit(tax.id); }
-                        else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
-                      }}
-                      autoFocus
-                      aria-label={`Nama baru untuk ${tax.name}`}
-                    />
+                    <div>
+                      <input
+                        className="tax-input tax-input--inline"
+                        type="text"
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                        maxLength={100}
+                        onBlur={() => { if (!renameConfirm) cancelEdit(); }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { e.preventDefault(); commitEdit(tax.id); }
+                          // Escape cancels and lands on the table — the same
+                          // deliberate landing as the post-mutation paths
+                          // (critique F5 pattern, §8.4 consistency).
+                          else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); tableRef.current?.focus(); }
+                        }}
+                        autoFocus
+                        aria-label={`Nama baru untuk ${tax.name}`}
+                      />
+                      <span className={`tax-charcount${editName.length >= 100 ? ' tax-charcount--max' : ''}`}>
+                        {editName.length}/100
+                      </span>
+                    </div>
                   ) : (
                     <span className="tax-name">{tax.name}</span>
                   )}

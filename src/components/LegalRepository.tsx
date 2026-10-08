@@ -99,6 +99,28 @@ interface DocumentTemplate {
 
 type ActiveTab = 'regulations' | 'internal' | 'analyzed' | 'templates' | 'pending' | 'history';
 
+/** Card title: the regulation's "tentang" subject instead of the full
+    ceremonial preamble ("Peraturan Otoritas Jasa Keuangan Republik
+    Indonesia Nomor 9/POJK.03/2016 tentang X" -> "X"). The jenis badge,
+    citation line and Nomor row already carry issuer + number + year, so
+    the subject is the only informative part left (user request
+    2026-10-08). Titles without "tentang" (custom uploads, hex-slug
+    legacy rows) fall back to word-safe truncation; the full judul stays
+    in the title tooltip. Deterministic on purpose: the subject is
+    verbatim in the title for the regular JDIH pattern, so an LLM pass
+    would only add cost and nondeterminism -- a VLM backfill for the
+    irregular remainder is offered as a follow-up, not shipped. */
+const shortJudul = (judul: string): string => {
+  const m = (judul || '').match(/\btentang\s+(.+)$/i);
+  let subject = m ? m[1].trim() : '';
+  subject = subject.split(/\s+sebagaimana\s+/i)[0].trim();
+  const t = subject || (judul || '').trim();
+  if (t.length <= 90) return t;
+  const cut = t.slice(0, 90);
+  const sp = cut.lastIndexOf(' ');
+  return (sp >= 45 ? cut.slice(0, sp) : cut.trimEnd()) + '…';
+};
+
 export default function LegalRepository() {
   const { user, token } = useAuth();
   const { formatDate, formatDateTime } = useDateFormatters();
@@ -705,6 +727,7 @@ export default function LegalRepository() {
     return d.judul.toLowerCase().includes(q) ||
            d.nomor.toLowerCase().includes(q) ||
            d.sektor.toLowerCase().includes(q) ||
+           String(d.id).toLowerCase().includes(q) ||
            (d.filename || '').toLowerCase().includes(q);
   };
 
@@ -1600,10 +1623,16 @@ export default function LegalRepository() {
                     })()}
                   </div>
                 </div>
-                <h3 className="doc-title" title={doc.judul}>{doc.judul}</h3>
-                {citationInfo.get(doc.id)?.citation && (
-                  <div className="doc-citation">{doc.jenis} No. {citationInfo.get(doc.id)!.citation}</div>
-                )}
+                <h3 className="doc-title" title={doc.judul}>{shortJudul(doc.judul)}</h3>
+                {/* Identity line, lengthened per user request 2026-10-08:
+                    citation when parseable + the row id, which the search
+                    box now matches on. */}
+                <div className="doc-citation">
+                  {citationInfo.get(doc.id)?.citation
+                    ? `${doc.jenis} No. ${citationInfo.get(doc.id)!.citation}`
+                    : doc.jenis}
+                  {' · ID '}{doc.id}
+                </div>
                 <div className="doc-meta">
                   <span>Nomor: {doc.nomor}</span>
                   <span className="doc-sektor">{fmtSektor(doc.sektor)}</span>

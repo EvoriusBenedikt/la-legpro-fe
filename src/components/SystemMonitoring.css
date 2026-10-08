@@ -1,3 +1,10 @@
+/* SystemMonitoring — Glass Chancery skin (critique remediation 2026-10-08).
+   Token-first: every surface is --bg-card/--bg-element, every border the
+   hairline, every semantic color the Verdict Deep trio; the discarded dark
+   theme (dark bands, neon glows, banned-hue zoo, pure-black shadows) is gone.
+   Chips follow the Uppercase Stamp grammar; headings follow Two-Voice.
+   backdrop-filter is written plain only (esbuild minifier pair pitfall). */
+
 .monitoring-container {
   display: flex;
   flex-direction: column;
@@ -5,16 +12,22 @@
   flex: 1;
 }
 
+/* ── Page header + live controls ──────────────────────────── */
 .monitoring-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
   margin-bottom: 24px;
 }
 
 .monitoring-header h1 {
   margin: 0 0 4px 0;
+  font-family: 'Outfit', sans-serif;
   font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
   color: var(--text-primary);
 }
 
@@ -24,207 +37,337 @@
   font-size: 0.9rem;
 }
 
-.status-badge {
+.live-controls {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.2);
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 600;
+  flex-wrap: wrap;
 }
+
+.live-stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The auto-refresh dot is transient machine activity — info blue, never the
+   verdict triad (DESIGN.md scanning-badge doctrine). */
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--info);
+  flex-shrink: 0;
+}
+.live-dot.is-paused { background: var(--text-secondary); }
 
 .error-banner {
-  background: rgba(239, 68, 68, 0.1);
-  color: #fca5a5;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border: 1px solid var(--danger-border);
   padding: 12px 16px;
-  border-radius: 8px;
-  margin-bottom: 20px;
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 0.88rem;
 }
 
-/* KPI GRID */
+/* ── Health verdict — the one authored answer ─────────────── */
+.health-verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px 24px;
+  border-radius: var(--radius-lg);
+  border: 1px solid;
+  margin-bottom: 8px;
+}
+.health-verdict.level-ok { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
+.health-verdict.level-warn { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning-text); }
+.health-verdict.level-critical { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+
+/* The icon carries the bright triad hue (hues stay for icons/tints/borders;
+   the Deep trio carries the text — DESIGN.md Colors). */
+.verdict-icon { flex-shrink: 0; margin-top: 2px; }
+.level-ok .verdict-icon { color: var(--success); }
+.level-warn .verdict-icon { color: var(--warning); }
+.level-critical .verdict-icon { color: var(--danger); }
+
+/* Motion stays reserved for genuine urgency (kept from the old alert
+   banners), double-gated for reduced motion. */
+.level-critical .verdict-icon { animation: pulse-alert 2s infinite; }
+@keyframes pulse-alert {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .level-critical .verdict-icon { animation: none; }
+}
+
+.verdict-body { flex: 1; min-width: 0; }
+
+.verdict-title {
+  margin: 0 0 4px 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: inherit;
+}
+
+.verdict-sub {
+  margin: 0;
+  font-size: 0.9rem;
+  color: inherit;
+}
+
+.verdict-issues {
+  list-style: none;
+  margin: 4px 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.verdict-issues li {
+  font-size: 0.88rem;
+  color: inherit;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.verdict-issues li::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* Secondary meta on a tinted surface stays tinted from the same hue —
+   never gray (craft floor). */
+.verdict-meta {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: inherit;
+  white-space: nowrap;
+}
+
+/* ── Sections ─────────────────────────────────────────────── */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 32px 0 16px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
+}
+.monitoring-section:first-of-type .section-title { margin-top: 24px; }
+
+.section-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.section-toggle:hover { color: var(--accent-color); }
+.section-toggle svg { transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+.section-toggle .chevron-open { transform: rotate(180deg); }
+
+/* ── KPI cards ────────────────────────────────────────────── */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
   gap: 16px;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .kpi-card {
-  background: var(--bg-element);
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.1);
   padding: 20px;
-  position: relative;
-  overflow: hidden;
-  transition: all 0.2s ease;
 }
-
-.kpi-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent-color);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-}
-
-.kpi-card-indicator {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4px;
-  background: var(--accent-color);
-  transition: width 0.2s ease;
-}
-
-.kpi-card:hover .kpi-card-indicator {
-  width: 6px;
-}
-
-.kpi-card-indicator.blue { background: #3b82f6; }
-.kpi-card-indicator.purple { background: #a855f7; }
-.kpi-card-indicator.green { background: #10b981; }
-.kpi-card-indicator.orange { background: #f97316; }
+.kpi-card.level-warn { border-color: var(--warning-border); }
+.kpi-card.level-critical { border-color: var(--danger-border); }
 
 .kpi-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 12px;
 }
 
 .kpi-title {
   color: var(--text-secondary);
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 500;
   margin: 0 0 4px 0;
 }
 
 .kpi-value {
+  font-family: 'Outfit', sans-serif;
   font-size: 2rem;
   font-weight: 700;
+  line-height: 1.2;
   color: var(--text-primary);
   margin: 0;
+  font-variant-numeric: tabular-nums;
 }
+.kpi-card.level-warn .kpi-value { color: var(--warning-text); }
+.kpi-card.level-critical .kpi-value { color: var(--danger-text); }
 
 .kpi-subtext {
   font-size: 0.75rem;
   color: var(--text-secondary);
   margin: 4px 0 0 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .kpi-icon {
-  padding: 8px;
-  border-radius: 8px;
+  display: inline-flex;
+  padding: 9px;
+  border-radius: 10px;
+  flex-shrink: 0;
 }
-.kpi-icon.blue { background: rgba(59, 130, 246, 0.1); color: #60a5fa; }
-.kpi-icon.purple { background: rgba(168, 85, 247, 0.1); color: #c084fc; }
-.kpi-icon.green { background: rgba(16, 185, 129, 0.1); color: #34d399; }
+.kpi-icon.tone-info { background: var(--info-bg); color: var(--accent-color); }
+.kpi-icon.tone-warn { background: var(--warning-bg); color: var(--warning-text); }
+.kpi-icon.tone-danger { background: var(--danger-bg); color: var(--danger-text); }
 
 .progress-track {
   width: 100%;
   height: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-element);
   border-radius: 4px;
   margin-top: 16px;
   overflow: hidden;
 }
 
 .progress-fill {
+  width: 100%;
   height: 100%;
   border-radius: 4px;
-  transition: width 0.3s ease;
+  /* scaleX, not width: transforms composite on the GPU and never trigger
+     per-frame layout reflow when a poll nudges the value (layout-transition). */
+  transform-origin: left;
+  transition: transform 0.3s ease;
 }
-.progress-fill.blue { background: #3b82f6; box-shadow: 0 0 10px rgba(59,130,246,0.8); }
-.progress-fill.purple { background: #a855f7; box-shadow: 0 0 10px rgba(168,85,247,0.8); }
-.progress-fill.green { background: #10b981; box-shadow: 0 0 10px rgba(16,185,129,0.8); }
-.progress-fill.danger { background: #ef4444; box-shadow: 0 0 10px rgba(239,68,68,0.8); }
+/* No neon glow: zero-offset colored halos are decoration, and the shadow
+   vocabulary retired them. Normal utilization is informational sky; the
+   triad appears only when the value is actually a status. */
+.progress-fill.level-ok { background: var(--info); }
+.progress-fill.level-warn { background: var(--warning); }
+.progress-fill.level-critical { background: var(--danger); }
 
+.kpi-threshold {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin: 8px 0 0 0;
+}
+
+.db-rows { margin-top: 12px; }
 .db-row {
   display: flex;
   justify-content: space-between;
-  font-size: 0.85rem;
-  margin-bottom: 8px;
+  gap: 8px;
+  font-size: 0.84rem;
+  padding: 4px 0;
 }
 .db-row span:first-child { color: var(--text-secondary); }
-.db-row span:last-child { color: var(--text-primary); font-weight: 600; }
+.db-row span:last-child { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
 
-/* MODULES GRID */
+/* ── Module grid & cards ──────────────────────────────────── */
 .modules-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
   gap: 24px;
+  margin-bottom: 24px;
 }
 
 .module-card {
-  background: var(--bg-element);
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.1);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
 .module-header {
-  padding: 16px 20px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--border-color);
-  background: rgba(15, 23, 42, 0.2);
+  background: var(--bg-element);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
+/* One title grammar for every module (was colored three different ways):
+   Outfit ink title, secondary-tone icon, hue only where data earns it. */
 .module-title {
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--text-primary);
+  font-family: 'Outfit', sans-serif;
   font-weight: 600;
   margin: 0;
   font-size: 1rem;
 }
-
-.module-title.indigo { color: #818cf8; }
-.module-title.emerald { color: #34d399; }
+.module-title svg { color: var(--text-secondary); flex-shrink: 0; }
 
 .module-badge {
-  background: rgba(99, 102, 241, 0.1);
-  color: #818cf8;
-  border: 1px solid rgba(99, 102, 241, 0.2);
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.module-btn {
-  background: #059669;
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
-}
-
-.module-btn:hover:not(:disabled) {
-  background: #047857;
-  transform: scale(1.05);
-}
-
-.module-btn:disabled {
-  background: var(--border-color);
+  background: var(--bg-card);
   color: var(--text-secondary);
-  cursor: not-allowed;
-  box-shadow: none;
+  border: 1px solid var(--border-color);
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.module-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .module-content {
@@ -232,52 +375,436 @@
   overflow-y: auto;
 }
 
+/* ── Buttons (compact module grammar, mirroring .btn-*) ───── */
+.module-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: var(--radius-sm);
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 0.78rem;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+/* Quiet = the canonical secondary rest→hover wash. */
+.module-btn.quiet {
+  background: var(--bg-element);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+.module-btn.quiet:hover:not(:disabled) {
+  background: var(--bg-card);
+  border-color: var(--border-highlight);
+  transform: translateY(-1px);
+}
+
+/* Primary = Chancery Blue action face (One Blue Rule — the backup action
+   the old green button wore is the page's primary commitment). */
+.module-btn.primary {
+  background: var(--accent-color);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.2);
+}
+.module-btn.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+/* Dark-theme accent role split: white-text faces cannot use the brightened
+   text-role accent (3.7:1) — re-pinned to #2563eb exactly like .btn-primary
+   in theme-dark.css (scoped locally to avoid touching the shared file). */
+:root[data-theme="dark"] .module-btn.primary { background: #2563eb; }
+:root[data-theme="dark"] .module-btn.primary:hover:not(:disabled) { background: #1d4ed8; }
+
+/* Danger = the house .btn-danger grammar: tinted at rest, threat (solid
+   red) only on the commitment hover. */
+.module-btn.danger {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border-color: var(--danger-border);
+}
+.module-btn.danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
+
+.module-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Tables ───────────────────────────────────────────────── */
 .monitoring-table {
   width: 100%;
   border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
 }
 
 .monitoring-table th {
-  background: rgba(15, 23, 42, 0.3);
+  background: var(--bg-element);
   color: var(--text-secondary);
-  font-weight: 500;
-  font-size: 0.85rem;
+  font-weight: 600;
+  font-size: 0.75rem;
   text-align: left;
-  padding: 12px 20px;
+  padding: 10px 20px;
   border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
 }
 
 .monitoring-table td {
-  padding: 12px 20px;
+  padding: 10px 20px;
   border-bottom: 1px solid var(--border-color);
-  font-size: 0.85rem;
+  font-size: 0.84rem;
   color: var(--text-primary);
+  vertical-align: middle;
 }
 
 .monitoring-table tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-element);
+}
+.monitoring-table th { position: sticky; top: 0; z-index: 1; }
+
+.cell-task { font-weight: 500; }
+.cell-num { font-variant-numeric: tabular-nums; }
+.cell-num.has-errors { color: var(--danger-text); font-weight: 600; }
+.cell-time { font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap; }
+.cell-nowrap { white-space: nowrap; }
+.cell-user { font-size: 0.8rem; }
+.cell-breakdown { font-size: 0.75rem; color: var(--text-secondary); }
+.cell-file,
+.cell-route {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cell-trunc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(16, 185, 129, 0.1);
-  color: #34d399;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border: 1px solid rgba(16, 185, 129, 0.2);
-}
-
-.time-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.table-footnote {
+  margin: 0;
+  padding: 10px 20px;
+  font-size: 0.72rem;
   color: var(--text-secondary);
 }
 
+.time-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+/* ── Chips: the Uppercase Stamp grammar ───────────────────── */
+.status-pill,
+.rate-pill,
+.action-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+/* Shared tone family: tinted bg + matching border + AA-hardened Deep text.
+   These are the .status-pill.warn/.danger variants whose absence rendered
+   FAILED tasks as green pills (P0). */
+.status-pill.success, .rate-pill.ok, .action-badge.success {
+  background: var(--success-bg); border-color: var(--success-border); color: var(--success-text);
+}
+.status-pill.warn, .rate-pill.warn, .action-badge.warn {
+  background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning-text);
+}
+.status-pill.danger, .rate-pill.danger, .action-badge.danger {
+  background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text);
+}
+.status-pill.info, .action-badge.info {
+  background: var(--info-bg); border-color: var(--border-highlight); color: var(--accent-color);
+}
+.status-pill.neutral, .action-badge.neutral {
+  background: var(--bg-element); border-color: var(--border-color); color: var(--text-secondary);
+}
+
+/* The role chip is identity, not status: one neutral grammar for every role
+   (the six-hue cipher is gone — colors without a legend were recall bait). */
+.role-chip {
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: var(--bg-element);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ── Sessions ─────────────────────────────────────────────── */
+.session-list {
+  list-style: none;
+  margin: 0;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  transition: background 0.15s ease;
+}
+.session-row:hover { background: var(--bg-element); }
+
+/* The avatar disc wears the brand gradient like every other avatar in the
+   product (white initials on the deep-blue family clear AA on both themes). */
+.session-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #fff;
+  background: var(--gradient-brand);
+  flex-shrink: 0;
+}
+
+.session-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.session-name {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-ip { font-size: 0.74rem; color: var(--text-secondary); }
+.session-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.session-seen { font-size: 0.72rem; color: var(--text-secondary); white-space: nowrap; }
+
+/* ── Charts ───────────────────────────────────────────────── */
+.chart-content {
+  max-height: none;
+  height: 292px;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px 16px;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 16px;
+  padding: 0 4px 10px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+.chart-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.chart-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* Series hues are the theme-aware data-viz tokens. Recharts sets stroke/fill
+   as SVG attributes, which cannot resolve var() — so the series ride
+   currentColor from these classes instead (dark-theme inversion for free). */
+.series-cpu { color: var(--dv-sky); }
+.series-ram { color: var(--dv-purple); }
+.series-db { color: var(--dv-cyan); }
+
+.chart-body { flex: 1; min-height: 0; }
+
+/* Hairline grid + secondary tick labels (CSS rules beat the attributes
+   Recharts paints by default). */
+.chart-grid line { stroke: var(--border-color); }
+.chart-axis line, .chart-axis path { stroke: var(--border-color); }
+.chart-axis text { fill: var(--text-secondary); }
+
+/* ── Backup config + confirm ──────────────────────────────── */
+.backup-config {
+  padding: 16px 20px;
+  background: var(--bg-element);
+  border-bottom: 1px solid var(--border-color);
+}
+.backup-config h4 {
+  margin: 0 0 12px 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.backup-config-fields { display: flex; gap: 16px; flex-wrap: wrap; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field-label { font-size: 0.75rem; font-weight: 500; color: var(--text-secondary); }
+.backup-config-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+.backup-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.backup-confirm-note {
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--warning-text);
+}
+
+/* ── Inputs: the house grammar (recessed Glass Element,
+      hairline, accent border on focus — the global
+      :focus-visible floor paints the ring itself) ─────────── */
+.monitoring-input,
+.monitoring-select {
+  background: var(--bg-element);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.84rem;
+  padding: 8px 12px;
+  box-sizing: border-box;
+  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.monitoring-input { width: 100%; }
+.monitoring-input:focus,
+.monitoring-select:focus { border-color: var(--accent-color); }
+.monitoring-input::placeholder { color: #5c6b82; }
+:root[data-theme="dark"] .monitoring-input::placeholder { color: #94a3b8; }
+.monitoring-input-narrow { width: 84px; }
+.monitoring-select { cursor: pointer; }
+
+/* ── Audit log viewer ─────────────────────────────────────── */
+.audit-toolbar {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.audit-search { position: relative; flex: 1; min-width: 200px; }
+.audit-search > svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+.audit-search .monitoring-input { padding-left: 34px; }
+
+.audit-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.8rem;
+}
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent-color);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.link-btn:hover { color: var(--accent-hover); }
+
+.audit-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border-color);
+  gap: 8px;
+}
+.pager-range {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.pager-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-element);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.pager-btn:hover:not(:disabled) {
+  background: var(--bg-card);
+  border-color: var(--border-highlight);
+}
+.pager-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Analytics tiles ──────────────────────────────────────── */
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr));
+  gap: 12px;
+  padding: 16px 20px;
+}
+.stat-tile {
+  background: var(--bg-element);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stat-tile-label { font-size: 0.72rem; font-weight: 500; color: var(--text-secondary); }
+.stat-tile-value {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Empty & dead-end states ──────────────────────────────── */
 .empty-state {
   padding: 32px;
   text-align: center;
@@ -288,115 +815,42 @@
   align-items: center;
   gap: 8px;
 }
+.empty-state svg { opacity: 0.5; }
 
-/* ── Alert Banners ────────────────────────────────────────── */
-.alert-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-.alert-banner.warn {
-  background: rgba(245, 158, 11, 0.12);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.3);
-}
-
-.alert-banner.critical {
-  background: rgba(239, 68, 68, 0.12);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  animation: pulse-alert 2s infinite;
-}
-
-@keyframes pulse-alert {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.75; }
-}
-
-/* ── KPI Alert States ────────────────────────────────────── */
-.kpi-card-indicator.warning { background: #f59e0b; }
-.kpi-card-indicator.danger { background: #ef4444; }
-.kpi-icon.danger { background: rgba(239, 68, 68, 0.1); color: #f87171; }
-
-.kpi-card.kpi-alert-warn { border-color: rgba(245, 158, 11, 0.4); }
-.kpi-card.kpi-alert-critical { border-color: rgba(239, 68, 68, 0.4); }
-
-.kpi-threshold {
-  font-size: 0.7rem;
-  color: #475569;
-  margin: 6px 0 0 0;
-}
-
-.progress-fill.warning { background: #f59e0b; box-shadow: 0 0 10px rgba(245,158,11,0.8); }
-
-/* ── Active Sessions ─────────────────────────────────────── */
-.session-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
+.monitoring-deadend {
+  max-width: 480px;
+  margin: 48px auto;
+  text-align: center;
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
-  transition: background 0.15s ease;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.1);
+  padding: 40px 32px;
+  color: var(--danger);
 }
-
-.session-row:hover {
-  background: rgba(255, 255, 255, 0.05);
+.monitoring-deadend h2 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 16px 0 8px;
 }
-
-.session-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
+.monitoring-deadend p {
   font-size: 0.9rem;
-  color: white;
-  flex-shrink: 0;
+  color: var(--text-secondary);
+  margin: 0 0 20px;
 }
+.monitoring-deadend .btn { display: inline-flex; }
 
-.role-badge {
-  font-size: 0.68rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 10px;
-  text-transform: capitalize;
-  white-space: nowrap;
+/* ── Mobile (≤767px): single column, wrapped header, 44px
+      touch targets ────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .monitoring-container { padding: 16px; }
+  .monitoring-header { flex-direction: column; align-items: flex-start; }
+  .live-controls { width: 100%; }
+  .module-btn, .pager-btn { min-height: 44px; }
+  .verdict-meta { white-space: normal; }
+  .health-verdict { flex-wrap: wrap; padding: 16px; }
+  .monitoring-table th, .monitoring-table td { padding: 10px 12px; }
 }
-
-/* ── API Stats ───────────────────────────────────────────── */
-.rate-pill {
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 6px;
-}
-.rate-pill.ok { background: rgba(16, 185, 129, 0.12); color: #34d399; }
-.rate-pill.warning { background: rgba(245, 158, 11, 0.12); color: #fbbf24; }
-.rate-pill.danger { background: rgba(239, 68, 68, 0.12); color: #f87171; }
-
-/* ── Audit Log ───────────────────────────────────────────── */
-.action-badge {
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: rgba(99, 102, 241, 0.12);
-  color: #818cf8;
-  border: 1px solid rgba(99, 102, 241, 0.2);
-  white-space: nowrap;
-}
-
-/* ── Modules Grid spacing ────────────────────────────────── */
-.modules-grid {
-  margin-bottom: 24px;
-}
-

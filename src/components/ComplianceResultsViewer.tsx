@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle, AlertTriangle, XCircle, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import { useDateFormatters } from '../format';
+import { getExpiryInfo } from '../expiry';
 
 // Shared interfaces
 export interface SupportingRegulation {
@@ -43,8 +44,13 @@ interface ComplianceResultsViewerProps {
 
 export default function ComplianceResultsViewer({ filename, summary, results, headerActions }: ComplianceResultsViewerProps) {
   // Hook must run before the early return below (rules of hooks).
-  const { formatDate } = useDateFormatters();
+  const { formatDate, dateFormat } = useDateFormatters();
   if (!results) return null;
+
+  // Expiry tag follows the real countdown status (shared logic with the
+  // Contracts page) instead of a pinned red tint regardless of state —
+  // a green document is not an alarm (critique P2 #5, Verdict Triad).
+  const expiryTag = summary ? getExpiryInfo(summary.tanggal_berakhir ?? null, dateFormat) : null;
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -92,8 +98,12 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
             <div className="compliance-summary-meta">
               <span className="summary-tag">{summary.jenis_dokumen}</span>
               <span className="summary-tag">{summary.sektor_bisnis}</span>
-              <span className="summary-tag" style={{ background: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger-text)', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                Kadaluarsa: {summary.tanggal_berakhir ? formatDate(summary.tanggal_berakhir, 'short') : 'Tidak terdeteksi'}
+              <span className="summary-tag" style={expiryTag ? {
+                background: expiryTag.badgeBg,
+                color: expiryTag.badgeColor,
+                border: `1px solid ${expiryTag.badgeBorder}`,
+              } : undefined}>
+                Kedaluwarsa: {summary.tanggal_berakhir ? formatDate(summary.tanggal_berakhir, 'short') : 'Tidak terdeteksi'}
               </span>
             </div>
             <p className="compliance-summary-parties" style={{ fontSize: '1.1rem', marginTop: '8px' }}>

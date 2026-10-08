@@ -1206,6 +1206,7 @@ h1, h2, h3, h4, h5, h6 {
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+.animate-spin { animation: spin 1s linear infinite; }
 .animate-spin-slow { animation: spin 3s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 /* OS-level reduced motion: the :root[data-reduce-motion] kill-switch near the
@@ -1213,6 +1214,7 @@ h1, h2, h3, h4, h5, h6 {
    preference too (same double-gate convention as .auth-shake / .admin-spin). */
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse,
+  .animate-spin,
   .animate-spin-slow { animation: none; }
 }
 
@@ -1238,10 +1240,15 @@ h1, h2, h3, h4, h5, h6 {
   transition: all 0.2s ease;
 }
 
-.upload-btn:hover {
+.upload-btn:hover:not(:disabled) {
   background: var(--accent-hover);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.upload-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .upload-overlay {
@@ -2242,22 +2249,206 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-primary);
 }
 
-/* In-progress background jobs indicator on the Contracts page */
+/* In-progress background jobs indicator — rendered inside the Contracts
+   page's .cm-jobs panel header. Text moved from the hardcoded #1d4ed8
+   (~2:1 on the dark base) to the accent text token, which flips to #3b82f6
+   (5.1:1) in dark theme per the documented accent role split
+   (critique P1 #2, 2026-10-06). */
 .bg-jobs-pill {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  margin: -8px 0 20px;
-  padding: 8px 14px;
+  padding: 6px 12px;
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.08);
   border: 1px solid rgba(37, 99, 235, 0.25);
-  color: #1d4ed8;
-  font-size: 0.85rem;
+  color: var(--accent-color);
+  font-size: 0.82rem;
   font-weight: 500;
 }
 
-.bg-jobs-pill svg { color: #1d4ed8; }
+.bg-jobs-pill svg { color: var(--accent-color); }
+
+/* ── Contracts page (critique 2026-10-06) ─────────────────────────────
+   Page padding lives on a class so the responsive shell can compact it
+   (utilities.css ≤1024/≤767) — the old inline padding had no media-query
+   hook and opted the page out of the responsive system. */
+.cm-view {
+  padding: 24px 32px;
+  box-sizing: border-box;
+}
+
+/* Analysis job history panel: every upload job — in-flight, done, failed,
+   or interrupted by a reload — keeps a visible record with retry, instead
+   of ending as a self-destructing toast (critique P1 #1). */
+.cm-jobs {
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+}
+
+.cm-jobs-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cm-jobs-header h3 {
+  margin: 0;
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cm-jobs-clear {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 8px;
+  min-height: 32px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.cm-jobs-clear:hover:not(:disabled) { background: var(--bg-element); color: var(--text-primary); }
+.cm-jobs-clear:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.cm-jobs-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.cm-jobs-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-color);
+  font-size: 0.85rem;
+}
+
+.cm-jobs-icon { display: flex; flex-shrink: 0; }
+.cm-jobs-icon--processing { color: var(--accent-color); }
+.cm-jobs-icon--done { color: var(--success-text); }
+.cm-jobs-icon--error { color: var(--danger-text); }
+.cm-jobs-icon--interrupted { color: var(--warning-text); }
+
+.cm-jobs-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cm-jobs-name {
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cm-jobs-error { color: var(--danger-text); font-size: 0.78rem; }
+.cm-jobs-note { color: var(--text-secondary); font-size: 0.78rem; }
+
+/* Status chips follow the badge grammar: semantic bg/text token pairs that
+   flip with the theme (Verdict Triad hues, no fourth color). */
+.cm-jobs-status {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.cm-jobs-status--processing { background: var(--accent-glow); color: var(--accent-hover); }
+.cm-jobs-status--done { background: var(--success-bg); color: var(--success-text); }
+.cm-jobs-status--error { background: var(--danger-bg); color: var(--danger-text); }
+.cm-jobs-status--interrupted { background: var(--warning-bg); color: var(--warning-text); }
+
+.cm-jobs-retry {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 7px 12px;
+  min-height: 36px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.cm-jobs-retry:hover { border-color: var(--border-highlight); background: var(--bg-element); }
+
+/* Shared panel for the page's honest end states: load-failed (retry),
+   first-run empty (upload CTA), and zero matches (clear filters) — each
+   distinguishable, none pretending to be another (critique P1 #1). */
+.cm-state-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 60px 24px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.cm-state-panel > svg { opacity: 0.4; margin-bottom: 4px; }
+.cm-state-panel h3 { margin: 0; font-size: 1.05rem; color: var(--text-primary); }
+.cm-state-panel p { margin: 0 0 8px; max-width: 420px; font-size: 0.9rem; line-height: 1.6; }
+
+/* Search clear button (mirrors .upload-toast-close grammar) */
+.cm-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.cm-search-clear:hover { background: var(--bg-card); color: var(--text-primary); }
+
+/* Upload modal: selected-file clear control + inline validation message
+   (the 50 MB limit was stated nowhere and a picked file could not be
+   cleared without choosing another — critique minors, 2026-10-06). */
+.upload-file-clear-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.upload-file-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  min-height: 32px;
+  font-size: 0.8rem;
+}
+.upload-file-error {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--danger-text);
+}
 
 .results-section {
   display: flex;
@@ -3157,26 +3348,6 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--accent-color);
 }
 
-.search-bar-top {
-  display: flex;
-  align-items: center;
-  background: var(--bg-element);
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
-  padding: 8px 16px;
-  width: 240px;
-}
-
-.search-bar-top input {
-  background: transparent;
-  border: none;
-  color: var(--text-primary);
-  margin-left: 8px;
-  width: 100%;
-  outline: none;
-  font-size: 0.9rem;
-}
-
 .breadcrumb {
   display: flex;
   align-items: center;
@@ -3990,6 +4161,11 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--warning);
 }
 
+.stat-icon.red {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
 /* Priority card: the one stat that needs action (Pending) */
 .stat-card.priority {
   border-color: rgba(245, 158, 11, 0.45);
@@ -3997,6 +4173,27 @@ h1, h2, h3, h4, h5, h6 {
 }
 .stat-card.priority .stat-info h4 {
   color: var(--warning-text);
+}
+
+/* Filter-capable stat cards (Contracts page KPIs, critique P1 #3): same
+   card grammar as the read-only stats, but real <button>s with an
+   accent selection ring — interactive chrome is accent (One Blue Rule),
+   never the status triad the card icons already speak. */
+.stat-card--filter {
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.stat-card--filter:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+.stat-card--filter.stat-card--active {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.stat-card--filter.stat-card--active:hover {
+  box-shadow: 0 0 0 3px var(--accent-glow), 0 8px 24px -8px rgba(37, 99, 235, 0.2);
 }
 
 /* Distinctly destructive outline button (e.g. bulk cleanup) */
@@ -5112,6 +5309,18 @@ select::placeholder {
   font-size: 0.9rem;
   border-radius: var(--radius-sm);
 }
+/* Character counter for the 100-char cap (critique §8.3): maxLength alone
+   truncates pasted text invisibly; the counter states the budget and turns
+   danger at the cap. Tabular numerals keep the width stable while typing. */
+.tax-charcount {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.tax-charcount--max { color: var(--danger-text); }
 
 .tax-error {
   display: flex;
@@ -5140,9 +5349,10 @@ select::placeholder {
   font-size: 0.9rem;
 }
 
-/* Three columns need less runway than the 920px compliance table, but
-   keep the wrap's horizontal-scroll + sticky-first-column behavior. */
-.tax-table { min-width: 560px; }
+/* Four columns need less runway than the 920px compliance table, but keep
+   the wrap's horizontal-scroll + sticky-first-column behavior. Bumped from
+   560px when the Digunakan column arrived (2026-10-06 shape pass). */
+.tax-table { min-width: 620px; }
 .tax-col-actions,
 .tax-cell-actions { text-align: right; }
 .tax-table td.tax-cell-center {
@@ -5153,7 +5363,9 @@ select::placeholder {
 /* Load-failure row (2026-10-06 clarify pass, critique F4): the shared error
    banner grammar reused inside the table body, minus its page-flow margin. */
 .tax-cell-center .tax-error { margin-bottom: 0; }
-.tax-name { font-weight: 500; }
+/* A 100-char single-token name must not stretch the Nama column and squeeze
+   Status/Digunakan/Aksi (critique §8.9) — long tokens break inside the cell. */
+.tax-name { font-weight: 500; overflow-wrap: anywhere; }
 .tax-row-inactive .tax-name { color: var(--text-secondary); }
 
 /* The status chip doubles as the activate/deactivate switch: same stamp
@@ -5168,7 +5380,11 @@ button.status-chip.tax-chip {
     border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 button.status-chip.tax-chip:hover:not(:disabled) { border-color: var(--border-highlight); }
-button.status-chip.tax-chip:disabled { opacity: 0.6; cursor: wait; }
+/* House disabled grammar is cursor: not-allowed everywhere (.btn, .tax-icon-btn,
+   .btn-modal-secondary, ...); the chip was the lone `wait` heretic — and every
+   control disables during ANY mutation, so "wait" on controls that aren't the
+   one in flight was misleading anyway (critique §8.10). */
+button.status-chip.tax-chip:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .tax-icon-btn {
   display: inline-flex;

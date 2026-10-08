@@ -38,11 +38,15 @@
   --info: #3B82F6;
   --info-bg: rgba(59, 130, 246, 0.1);
 
-  /* Categorical data-viz hues (admin dashboard klasifikasi bars/legends):
-     deep -700 variants on light glass per the hue-inventory rule; the dark
-     theme flips these to 300-level tints (all verified >=4.5:1 on card). */
+  /* Categorical data-viz hues (admin dashboard klasifikasi bars/legends;
+     knowledge-graph sidebar/legend text since 2026-10-07 — critique P2: the
+     hardcoded -700 hexes measured ~2.1–2.8:1 on dark glass): deep -700
+     variants on light glass per the hue-inventory rule; the dark theme flips
+     these to 300-level tints (all verified >=4.5:1 on card). */
   --dv-cyan: #0e7490;
   --dv-rose: #be123c;
+  --dv-sky: #0369a1;
+  --dv-purple: #7e22ce;
   
   /* Single bubble surface for both sides (2026-10-01 "same textbox"
      review): the user bubble joins the bot's white-on-card grammar —
@@ -111,9 +115,11 @@
   --danger-text: #f87171;
   --info: #3b82f6;
   --info-bg: rgba(59, 130, 246, 0.14);
-  /* Data-viz hues flip to bright 300-level tints (11.3:1 / 8.6:1 on card) */
+  /* Data-viz hues flip to bright 300-level tints (>=8.6:1 on card) */
   --dv-cyan: #67e8f9;
   --dv-rose: #fda4af;
+  --dv-sky: #7dd3fc;
+  --dv-purple: #d8b4fe;
 
   --ai-bubble: rgba(30, 41, 59, 0.8);
   --overlay-veil: rgba(2, 6, 23, 0.7);
