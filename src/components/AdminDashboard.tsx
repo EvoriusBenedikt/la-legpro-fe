@@ -117,7 +117,10 @@ const ROLE_LABELS: Record<string, string> = {
     SEARCH, GRANT_ACCESS, REVOKE_ACCESS, DELETE_DOCUMENT literals
     (db_service.log_audit call sites); UPLOAD survives in migrated legacy
     rows; CHANGE_ROLE / ACTIVATE_USER / DEACTIVATE_USER are logged by the
-    admin user-management endpoints (2026-10-06). Replaces the hardcoded
+    admin user-management endpoints (2026-10-06); CREATE_TAXONOMY /
+    RENAME_TAXONOMY / ACTIVATE_TAXONOMY / DEACTIVATE_TAXONOMY /
+    DELETE_TAXONOMY by the taxonomy endpoints (2026-10-08 — cascade
+    rename + audit trail, critique Issues 1–2). Replaces the hardcoded
     #7e22ce/#be123c map — forbidden purple, rose double duty with
     "Terbatas", and 1.98:1 in dark theme. */
 const ACTION_CHIP: Record<string, string> = {
@@ -129,6 +132,11 @@ const ACTION_CHIP: Record<string, string> = {
   CHANGE_ROLE: 'status-chip--neutral',
   ACTIVATE_USER: 'status-chip--success',
   DEACTIVATE_USER: 'status-chip--revoked',
+  CREATE_TAXONOMY: 'status-chip--new',
+  RENAME_TAXONOMY: 'status-chip--neutral',
+  ACTIVATE_TAXONOMY: 'status-chip--success',
+  DEACTIVATE_TAXONOMY: 'status-chip--revoked',
+  DELETE_TAXONOMY: 'status-chip--revoked',
 };
 
 /** Klasifikasi legend/bar hues via theme-aware tokens: deep -700 variants

@@ -5515,6 +5515,20 @@ select::placeholder {
   text-align: center;
   color: var(--text-secondary);
 }
+/* The Name cell is a row header (2026-10-08 polish, minor 8: <th scope="row">)
+   restyled to look exactly like the old td — the shared .compliance-table th
+   rule would otherwise paint it as a column header (0.8rem secondary-color on
+   bg-element). Visual no-op; semantics for screen readers only. */
+.tax-table th.tax-name-cell {
+  font-weight: 400;
+  font-size: inherit;
+  color: inherit;
+  text-align: left;
+  vertical-align: top;
+  padding: 14px;
+  background: transparent;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
 /* Load-failure row (2026-10-06 clarify pass, critique F4): the shared error
    banner grammar reused inside the table body, minus its page-flow margin. */
 .tax-cell-center .tax-error { margin-bottom: 0; }
@@ -5522,6 +5536,19 @@ select::placeholder {
    Status/Digunakan/Aksi (critique §8.9) — long tokens break inside the cell. */
 .tax-name { font-weight: 500; overflow-wrap: anywhere; }
 .tax-row-inactive .tax-name { color: var(--text-secondary); }
+/* Usage count is evidence (2026-10-08 shape pass, critique Issue 5): the
+   count links into the Legal Repository filtered by this jenis, for the
+   roles that hold that route. The underline carries the affordance — no
+   icon, the table stays austere; tokens only, so light/dark parity and the
+   house :focus-visible ring come for free. */
+.tax-usage-link {
+  color: var(--accent-color);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.tax-usage-link:hover {
+  color: var(--accent-hover);
+}
 
 /* The status chip doubles as the activate/deactivate switch: same stamp
    vocabulary, plus pointer affordance and the canonical hover wash. */
