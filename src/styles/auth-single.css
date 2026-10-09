@@ -259,3 +259,141 @@
   font-size: 0.75rem;
   color: var(--text-secondary);
 }
+
+/* Desktop grammar (2026-10-09, owner-approved Option A — Wise desktop
+   skeleton at >=768px): full-width top bar (lockup left, language
+   toggle right, full-bleed hairline at bar height), centered open
+   column with the card chrome switched off, centered h1 with the mode
+   link centered beneath it (Wise head grammar), and static top labels
+   replacing the mobile float recipe. EVERY rule lives in this one
+   media query, so <768px keeps the shipped mobile card byte-identical.
+   The re-parenting is visual, not structural: no JSX changes — the
+   card goes position:static, which re-anchors the absolute toggle to
+   the shell (position:relative below), and column-reverse puts each
+   label (the input's next DOM sibling) above its input. */
+@media (min-width: 768px) {
+  .auth-single {
+    display: block;
+    position: relative;
+    padding: 0;
+  }
+
+  /* Full-bleed hairline under the top bar. */
+  .auth-single::before {
+    content: '';
+    position: absolute;
+    top: 72px;
+    left: 0;
+    right: 0;
+    border-top: 1px solid var(--border-color);
+  }
+
+  /* Card chrome off (the canonical glass recipe in components.css is
+     overridden property-by-property); the card becomes the centered
+     open column. position:static also frees the language toggle from
+     the card corner so it re-anchors to the shell's right edge. */
+  .auth-card {
+    position: static;
+    max-width: 560px;
+    margin: 0 auto;
+    background: transparent;
+    backdrop-filter: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 104px 32px 56px;
+    display: flex;
+    flex-direction: column;
+    /* The fadeIn entry AND the authShake rejection (components.css)
+       both run on transform keyframes with forwards/both fill, and a
+       transformed ancestor IS the containing block for absolute
+       descendants — either would pin the bar occupants to the card
+       instead of the shell (probe-caught; true in visible browsers
+       too, and the shake would re-pin them mid-rejection). Desktop
+       therefore drops card animations entirely: Wise's desktop
+       rejects statically, and the banner + danger fields + role=alert
+       carry the error state here (mobile keeps the shake). Layer
+       precedence makes this single declaration beat both components
+       recipes, so there is no mirror to keep in sync. */
+    animation: none;
+  }
+
+  /* Top-bar occupants, vertically centered on the 72px bar. */
+  .auths-lockup {
+    position: absolute;
+    top: 16px;
+    left: 32px;
+    margin: 0;
+  }
+
+  .auth-language-toggle {
+    top: 14px;
+    right: 24px;
+  }
+
+  /* Wise head grammar: h1 first and centered, mode link centered
+     beneath it, then a generous gap before the first label. Explicit
+     orders because the mode row precedes the heading in the DOM. */
+  .auths-head {
+    order: 1;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+
+  .auths-head h1 {
+    font-size: 2rem;
+  }
+
+  .auths-mode-row {
+    order: 2;
+    justify-content: center;
+    margin: 0 0 40px;
+  }
+
+  .auth-error { order: 3; }
+  .auth-form { order: 4; }
+  .auths-passkey { order: 5; }
+  .auths-foot { order: 6; }
+
+  /* Static top labels: column-reverse renders the label above its
+     input; a static label ignores the float triggers' top/transform,
+     and their font-size/color effects are neutralized below. Error
+     danger tints still win (higher specificity), focus accent tint
+     deliberately drops — static labels neither float nor tint. */
+  .float-field {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+
+  .float-field label {
+    position: static;
+    transform: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 8px;
+  }
+
+  .float-field input:focus + label,
+  .float-field input:not(:placeholder-shown) + label,
+  .float-field input:-webkit-autofill + label {
+    top: auto;
+    transform: none;
+    font-size: 0.9rem;
+  }
+
+  .float-field input:focus + label {
+    color: var(--text-primary);
+  }
+
+  /* 56px desktop fields with plain side padding (no float seat); the
+     eye toggle re-seats to (56 - 44) / 2 = 6px. */
+  .float-field input {
+    height: 56px;
+    padding: 0 16px;
+  }
+
+  .float-field--eye .auth-eye {
+    top: 6px;
+  }
+}
