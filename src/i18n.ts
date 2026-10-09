@@ -318,7 +318,7 @@ const id = {
      the disabled rollout stub rendered under the login form. */
   authOrLoginWith: 'Atau masuk dengan',
   authPasskey: 'Passkey',
-  authPasskeySoon: 'Segera tersedia',
+  authPasskeySoon: 'Passkey segera tersedia',
   /* Empty-field gates: the form is noValidate (native bubbles are
      English-only and unstyleable), so required checks raise localized
      errors through the same banner/highlight/shake path. */
@@ -622,7 +622,7 @@ const en: Record<StringKey, string> = {
   authLangToggleAria: 'Switch language to Indonesian',
   authOrLoginWith: 'Or log in with',
   authPasskey: 'Passkey',
-  authPasskeySoon: 'Coming soon',
+  authPasskeySoon: 'Passkey coming soon',
   authErrUsernameRequired: 'Username is required.',
   authErrEmailRequired: 'Email is required.',
   authErrPasswordRequired: 'Password is required.',

@@ -297,7 +297,11 @@ export default function Auth() {
         </div>
 
         <div className="auths-head">
-          <h2>{isLogin ? t.authWelcome : t.authRegisterTitle}</h2>
+          {/* The page heading is the h1 (2026-10-09 review follow-up): the
+              new /login's outline must start at h1, not h2. Computed style
+              is unchanged — the only global heading rule (components.css)
+              treats h1-h6 alike. */}
+          <h1>{isLogin ? t.authWelcome : t.authRegisterTitle}</h1>
         </div>
 
         {error && (
