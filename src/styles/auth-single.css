@@ -50,6 +50,61 @@
   color: var(--text-primary);
 }
 
+/* Flag language toggle (owner 2026-10-11): segmented pill replacing the
+   EN/ID text button on this page only — legacy keeps
+   .auth-language-toggle and its text. Emoji flags are unusable (Windows
+   renders regional indicators as letter pairs), so the flags are inline
+   SVGs. The active side rides a raised chip; the inactive flag dims.
+   Pill height 44px (38px segments + 2px padding + 2px border) keeps the
+   mandated hit-area rule; the universal reduce-motion gate in
+   components.css already covers the transitions below. */
+.auths-lang {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-card);
+}
+
+.auths-lang-btn {
+  width: 40px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.auths-lang-btn.is-active {
+  background: var(--bg-base);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+}
+
+.auths-flag {
+  width: 24px;
+  height: 16px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px var(--border-color);
+  transition: opacity 0.15s ease;
+}
+
+.auths-lang-btn:not(.is-active) .auths-flag {
+  opacity: 0.45;
+}
+
+.auths-lang-btn:not(.is-active):hover .auths-flag {
+  opacity: 0.8;
+}
+
 /* Heading-area mode link (Wise placement): the login/register flip sits
    top-right above the heading instead of the old bottom .auth-toggle
    row. 44px minimum touch target. */
@@ -321,12 +376,45 @@
   /* Top-bar occupants, vertically centered on the 72px bar. */
   .auths-lockup {
     position: absolute;
-    top: 16px;
+    top: 12px;
     left: 32px;
     margin: 0;
   }
 
-  .auth-language-toggle {
+  /* Logo out of the plate on desktop light (owner 2026-10-11): the glyph
+     sits bare on the page background at double size and the wordmark
+     steps up with it. The plate RETURNS in dark theme — the glyph PNG is
+     dark-on-light by brand rule (never invert, bug_reports 2026-10-05)
+     and would vanish bare on a dark page. */
+  .auths-logo {
+    width: 48px;
+    height: 48px;
+    background: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .auths-logo img {
+    width: 48px;
+    height: 48px;
+  }
+
+  .auths-wordmark {
+    font-size: 1.25rem;
+  }
+
+  :root[data-theme="dark"] .auths-logo {
+    background: linear-gradient(180deg, #fff, #e2e8f0);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+  }
+
+  :root[data-theme="dark"] .auths-logo img {
+    width: 32px;
+    height: 32px;
+  }
+
+  .auths-lang {
     top: 14px;
     right: 24px;
   }

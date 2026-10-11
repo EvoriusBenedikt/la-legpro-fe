@@ -313,6 +313,9 @@ const id = {
      non-interactive treatment (2026-10-06 user decision). */
   authForgotNote:
     'Lupa kata sandi? Administrator instansi Anda dapat membantu mengatur ulang.',
+  /* Parent-company credit (owner 2026-10-11): the sentence frame is
+     localized; the product name stays verbatim in both locales. */
+  authCredit: 'Ditenagai oleh LA Lintasarta Core',
   authLangToggleAria: 'Ganti bahasa ke Inggris',
   /* Passkey placeholder (2026-10-09 Wise-style login redesign): copy for
      the disabled rollout stub rendered under the login form. */
@@ -619,6 +622,7 @@ const en: Record<StringKey, string> = {
   authContactNote: 'Trouble signing in? Contact your organization\'s administrator.',
   authForgotNote:
     'Forgot your password? Your organization\'s administrator can help reset it.',
+  authCredit: 'Powered by LA Lintasarta Core',
   authLangToggleAria: 'Switch language to Indonesian',
   authOrLoginWith: 'Or log in with',
   authPasskey: 'Passkey',

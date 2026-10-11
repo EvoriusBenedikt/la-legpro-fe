@@ -7,6 +7,38 @@ import { useStrings, useLocale, type StringKey } from '../i18n';
 import LoadingOrb from './LoadingOrb';
 import { setSetting } from '../settings';
 
+/* Inline-SVG flags for the language pill (owner 2026-10-11). Emoji
+   regional indicators are deliberately avoided: Windows browsers render
+   them as letter pairs ("ID", "US"), which would defeat the toggle. The
+   US flag is simplified — 13 stripes plus a canton of star dots; real
+   five-point stars are indistinguishable at 24px. */
+function FlagId() {
+  return (
+    <svg className="auths-flag" viewBox="0 0 24 16" aria-hidden="true" focusable="false">
+      <rect width="24" height="8" fill="#FF0000" />
+      <rect y="8" width="24" height="8" fill="#FFFFFF" />
+    </svg>
+  );
+}
+
+function FlagUs() {
+  const stripe = 16 / 13;
+  return (
+    <svg className="auths-flag" viewBox="0 0 24 16" aria-hidden="true" focusable="false">
+      <rect width="24" height="16" fill="#FFFFFF" />
+      {[0, 2, 4, 6, 8, 10, 12].map((i) => (
+        <rect key={i} y={i * stripe} width="24" height={stripe} fill="#B22234" />
+      ))}
+      <rect width="10" height={stripe * 7} fill="#3C3B6E" />
+      {[1.5, 4.5, 7.5].map((y) =>
+        [1.6, 4.0, 6.4, 8.8].map((x) => (
+          <circle key={`${x}-${y}`} cx={x} cy={y} r="0.62" fill="#FFFFFF" />
+        ))
+      )}
+    </svg>
+  );
+}
+
 type AuthField =
   | 'username'
   | 'email'
@@ -261,14 +293,33 @@ export default function Auth() {
         className={`auth-card${shake === 'on' ? ' auth-shake' : shake === 'settled' ? ' auth-shake-settled' : ''}`}
         onAnimationEnd={(e) => { if (e.animationName === 'authShake') setShake('settled'); }}
       >
-        <button
-          type="button"
-          className="auth-language-toggle"
-          aria-label={t.authLangToggleAria}
-          onClick={() => setSetting('locale', locale === 'id' ? 'en' : 'id')}
-        >
-          {locale === 'id' ? 'EN' : 'ID'}
-        </button>
+        {/* Flag language toggle (owner 2026-10-11): segmented pill with
+            inline-SVG flags replaces the old EN/ID text button on this
+            page only (legacy keeps its frozen text button). Emoji flags
+            are deliberately avoided — Windows browsers render regional
+            indicators as letter pairs. Endonym aria-labels never
+            translate; the group label reuses t.secLanguage. Clicking the
+            already-active side is a harmless same-value write. */}
+        <div className="auths-lang" role="group" aria-label={t.secLanguage}>
+          <button
+            type="button"
+            className={`auths-lang-btn${locale === 'id' ? ' is-active' : ''}`}
+            aria-pressed={locale === 'id'}
+            aria-label="Bahasa Indonesia"
+            onClick={() => setSetting('locale', 'id')}
+          >
+            <FlagId />
+          </button>
+          <button
+            type="button"
+            className={`auths-lang-btn${locale === 'en' ? ' is-active' : ''}`}
+            aria-pressed={locale === 'en'}
+            aria-label="English"
+            onClick={() => setSetting('locale', 'en')}
+          >
+            <FlagUs />
+          </button>
+        </div>
 
         {/* Compact brand lockup — the only brand surface on the new
             single-column page (the two-panel brand side survives at
@@ -521,7 +572,7 @@ export default function Auth() {
         <div className="auths-foot">
           {isLogin && <p className="auth-contact-note">{t.authForgotNote}</p>}
           <p className="auth-contact-note">{t.authContactNote}</p>
-          <span className="auths-credit">Powered by LA Lintasarta Core</span>
+          <span className="auths-credit">{t.authCredit}</span>
           <div className="auth-toggle auth-toggle--tight">
             <Link to="/" className="auth-back-link">
               {t.authBack}
