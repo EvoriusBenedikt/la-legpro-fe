@@ -56,8 +56,25 @@
   --ai-bubble: rgba(255, 255, 255, 0.9);
   --overlay-veil: rgba(15, 23, 42, 0.55);  /* shared ink-navy veil for modal/drawer backdrops */
 
-  --sidebar-width: 240px;
-  --sidebar-rail: 60px;
+  --sidebar-width: 264px;   /* expanded column (2026-10-11 sidebar redesign) */
+  --sidebar-rail: 64px;     /* collapsed icon rail */
+
+  /* Sidebar neutral system (2026-10-11): strictly achromatic — emphasis
+     comes from neutral fills only, never a chromatic accent. Dark
+     overrides live in the data-theme block below; normative record:
+     la-legpro-doc/ui_ux_design.md (Sidebar section). */
+  --sb-surface: #ffffff;
+  --sb-text: #101828;
+  --sb-text-2: #667085;
+  --sb-fill-active: #f2f4f7;
+  --sb-fill-hover: #f9fafb;
+  --sb-border: rgba(16, 24, 40, 0.08);
+  --sb-badge-bg: #101828;
+  --sb-badge-text: #ffffff;
+  --sb-mark-bg: #101828;
+  --sb-mark-fg: #ffffff;
+  --sb-tip-bg: #101828;
+  --sb-tip-text: #ffffff;
   --topbar-height: 64px;
   --radius-sm: 8px;
   --radius-md: 12px;
@@ -123,4 +140,20 @@
 
   --ai-bubble: rgba(30, 41, 59, 0.8);
   --overlay-veil: rgba(2, 6, 23, 0.7);
+
+  /* Sidebar neutrals flip to the grey-black family — deliberately NOT
+     Ink Navy: the sidebar stays strictly monochrome in dark mode too
+     (2026-10-11 redesign brief). */
+  --sb-surface: #101012;
+  --sb-text: #e4e7ec;
+  --sb-text-2: #98a2b3;
+  --sb-fill-active: #26282e;
+  --sb-fill-hover: #1d1f24;
+  --sb-border: rgba(255, 255, 255, 0.08);
+  --sb-badge-bg: #26282e;
+  --sb-badge-text: #e4e7ec;
+  --sb-mark-bg: #ffffff;
+  --sb-mark-fg: #101828;
+  --sb-tip-bg: #26282e;
+  --sb-tip-text: #e4e7ec;
 }

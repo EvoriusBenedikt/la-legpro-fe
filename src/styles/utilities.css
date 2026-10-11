@@ -90,26 +90,8 @@
 
 /* ── Mobile (≤767px): drawer nav, stacked everything ── */
 @media (max-width: 767px) {
-  /* Sidebar → floating off-canvas drawer (keeps the pill shape); the open
-     state shows the labeled layout directly — touch has no hover */
-  .sidebar {
-    position: fixed;
-    top: 16px; bottom: auto; left: 16px;
-    width: min(280px, 84vw);
-    transform: translateX(calc(-100% - 24px));
-    transition: transform 0.25s ease;
-    z-index: 100;
-  }
-  .sidebar.open { transform: translateX(0); }
-  .sidebar.open .sidebar-menu { align-items: stretch; }
-  .sidebar.open .sidebar-item {
-    width: auto;
-    height: 48px;
-    margin: 0 12px;
-    padding: 0 14px;
-    justify-content: flex-start;
-  }
-  .sidebar.open .sidebar-item .item-label { display: inline; animation: none; }
+  /* Sidebar drawer mechanics live in styles/sidebar.css (2026-10-11
+     redesign); only the backdrop toggle stays here. */
   .sidebar-backdrop.open { display: block; }
 
   .route-inset { margin-left: 0; min-width: 0; }

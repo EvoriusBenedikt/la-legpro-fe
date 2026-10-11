@@ -48,6 +48,22 @@ const id = {
   navTaxonomy: 'Manajer Taksonomi',
   navDashboard: 'Dasbor',
 
+  /* Sidebar (2026-10-11 monochrome redesign) */
+  sbSearchPlaceholder: 'Cari menu',
+  sbMore: 'Lainnya',
+  sbCollapse: 'Ciutkan sidebar',
+  sbExpand: 'Bentangkan sidebar',
+  sbNoMatch: 'Tidak ada menu yang cocok',
+  sbChildPending: 'Menunggu Konfirmasi',
+  sbChildHistory: 'Riwayat Unggahan',
+  sbHelp: 'Bantuan',
+  sbHelpTitle: 'Bantuan & pintasan keyboard',
+  sbHelpClose: 'Tutup bantuan',
+  sbHelpKeysNav: 'Pindah antar menu sidebar',
+  sbHelpKeysOpen: 'Buka menu yang sedang difokus',
+  sbHelpKeysClose: 'Tutup dialog yang terbuka',
+  sbHelpVersion: 'Versi',
+
   /* Settings dialog shell */
   settings: 'Pengaturan',
   closeSettings: 'Tutup pengaturan',
@@ -378,6 +394,22 @@ const en: Record<StringKey, string> = {
   navMonitoring: 'System Monitoring',
   navTaxonomy: 'Taxonomy Manager',
   navDashboard: 'Dashboard',
+
+  /* Sidebar (2026-10-11 monochrome redesign) */
+  sbSearchPlaceholder: 'Search menus',
+  sbMore: 'More',
+  sbCollapse: 'Collapse sidebar',
+  sbExpand: 'Expand sidebar',
+  sbNoMatch: 'No matching menus',
+  sbChildPending: 'Pending Confirmation',
+  sbChildHistory: 'Upload History',
+  sbHelp: 'Help',
+  sbHelpTitle: 'Help & keyboard shortcuts',
+  sbHelpClose: 'Close help',
+  sbHelpKeysNav: 'Move through sidebar menus',
+  sbHelpKeysOpen: 'Open the focused menu',
+  sbHelpKeysClose: 'Close any open dialog',
+  sbHelpVersion: 'Version',
 
   settings: 'Settings',
   closeSettings: 'Close settings',

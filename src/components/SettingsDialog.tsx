@@ -701,7 +701,17 @@ function buildCategories(t: Record<StringKey, string>): CategoryDef[] {
 
 /* ---------- dialog shell ---------- */
 
-export default function SettingsDialog() {
+export default function SettingsDialog({
+  variant = 'topbar',
+  triggerLabel,
+}: {
+  /** 'topbar' = the classic gear icon button; 'sidebar' = a footer row
+      inside the sidebar (the 2026-10-11 redesign moved the settings
+      entry point there). */
+  variant?: 'topbar' | 'sidebar';
+  /** Row label for the sidebar variant (falls back to t.settings). */
+  triggerLabel?: string;
+} = {}) {
   const [open, setOpen] = useState(false);
   const [catId, setCatId] = useState('appearance');
   const [sectionId, setSectionId] = useState('theme');
@@ -717,15 +727,27 @@ export default function SettingsDialog() {
 
   return (
     <>
-      <button
-        className="icon-btn-top"
-        onClick={() => setOpen(true)}
-        aria-label={t.settings}
-        title={t.settings}
-        aria-haspopup="dialog"
-      >
-        <Settings size={18} />
-      </button>
+      {variant === 'topbar' ? (
+        <button
+          className="icon-btn-top"
+          onClick={() => setOpen(true)}
+          aria-label={t.settings}
+          title={t.settings}
+          aria-haspopup="dialog"
+        >
+          <Settings size={18} />
+        </button>
+      ) : (
+        <button
+          className="sb-row sb-row--footer"
+          onClick={() => setOpen(true)}
+          data-tip={triggerLabel ?? t.settings}
+          aria-haspopup="dialog"
+        >
+          <Settings size={20} className="sb-icon" />
+          <span className="sb-label">{triggerLabel ?? t.settings}</span>
+        </button>
+      )}
 
       {open &&
         createPortal(

@@ -167,268 +167,6 @@ h1, h2, h3, h4, h5, h6 {
   overflow: hidden;
 }
 
-/* Floating sidebar — pill-shaped icon rail hovering inside
-   .dashboard-content-row (16px inset from the navbar and the left edge).
-   Its height wraps the menu instead of spanning the viewport. Hover or
-   keyboard focus expands it into the labeled panel; it OVERLAYS content
-   (the content column only reserves the rail strip), so expanding never
-   reflows the page. */
-.sidebar {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  width: var(--sidebar-rail);
-  background: var(--bg-card);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color);
-  border-radius: 24px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.1);
-  display: flex;
-  flex-direction: column;
-  padding: 12px 0;
-  overflow: visible; /* labels may paint outside mid-transition */
-  z-index: 100;
-  transition: width 0.25s ease;
-}
-
-/* Hover / keyboard focus → expand into the labeled panel.
-   :has(:focus-visible) instead of :focus-within: a mouse-clicked link keeps
-   DOM focus, and :focus-within would pin the panel open after the mouse
-   leaves. :focus-visible only matches keyboard-originated focus. */
-.sidebar:hover,
-.sidebar:has(:focus-visible) { width: var(--sidebar-width); }
-.sidebar:hover .sidebar-menu,
-.sidebar:has(:focus-visible) .sidebar-menu { align-items: stretch; }
-.sidebar:hover .sidebar-item,
-.sidebar:has(:focus-visible) .sidebar-item {
-  width: auto;
-  height: 48px;
-  margin: 0 12px;
-  padding: 0 14px;
-  justify-content: flex-start;
-}
-.sidebar:hover .sidebar-item .item-label,
-.sidebar:has(:focus-visible) .sidebar-item .item-label {
-  display: inline;
-  /* fade in after the width animation is mostly done so nowrap text
-     never spills outside the pill mid-transition */
-  animation: labelFadeIn 0.12s ease 0.18s both;
-}
-@keyframes labelFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-/* Desktop auto-submerge (2026-10-01 review, third pass): the rail lives
-   SUBMERGED off the left wall at rest (same -24px clearance grammar as
-   the mobile drawer) while the content column keeps the full width; an
-   invisible 16px `.nav-edge` strip over the wall gap is the hover
-   trigger, because the off-canvas rail cannot catch :hover itself.
-   Hovering the strip, the rail, or keyboard-focusing a nav link
-   surfaces the rail already expanded into the labeled panel — it
-   overlays content and never reflows it (the hover-expand grammar).
-   The visible wall tab is `.nav-cue`, a child of the rail (see its
-   block below): parked on the wall at rest, riding the expanding
-   seam while surfaced. Mobile (≤767px) keeps the
-   off-canvas drawer; edge and cue stay display: none. */
-.nav-edge {
-  display: none;
-}
-
-.nav-cue {
-  display: none;
-}
-
-@media (min-width: 768px) {
-  .nav-edge {
-    display: block;
-    position: absolute;
-    left: 0;
-    /* Rest zone comes from Sidebar via CSS custom properties (the wall
-       tab's neighborhood, railMidY ±64px — the ±40px band left only 8px
-       of grace around the 64px tab and a cursor parked just above it
-       never surfaced the rail, bugfix 2026-10-01 video pass; a
-       full-height strip AT REST surfaced the rail on ANY left-edge
-       hover, far from the tab, first bugfix 2026-10-01). */
-    top: var(--ne-top, 0px);
-    height: var(--ne-h, 128px);
-    bottom: auto;
-    /* matches the cue's width so the whole visible tab is hover-active
-       (the cue itself is pointer-events: none) */
-    width: 28px;
-    z-index: 101;
-  }
-  /* While the rail is SURFACED (strip hover, panel hover, or keyboard
-     focus) the strip grows to the row's full height, turning the 16px
-     wall gap beside the panel into a keep-open zone: a cursor sliding
-     off the panel into the gap lands on the strip and holds
-     nav-edge:hover instead of dropping every hover source — one half of
-     the 2026-10-03 twitch fix (the other half is the pointer-events
-     rule on .sidebar below). At rest the strip is back to the small
-     band, so the 2026-10-01 fixes are untouched. */
-  .dashboard-content-row:has(.nav-edge:hover) .nav-edge,
-  .dashboard-content-row:has(.sidebar:hover) .nav-edge,
-  .dashboard-content-row:has(.sidebar :focus-visible) .nav-edge {
-    top: 16px;
-    height: auto;
-    bottom: 16px;
-  }
-  /* Wall cue (2026-10-01 review, sixth pass): a CHILD of the rail at
-     left: 100% / top: 50%, riding the rail's right seam every frame of
-     the hover expansion. At rest a +25px counter-transform parks it on
-     the wall as a right-rounded 0..28px tab (the rail's padding-box
-     right rests at -25px). Surfaced, the counter becomes -1px: the cue
-     sits FLUSH outside the panel, tucked 1px under its right border so
-     it reads as a handle welded to the sidebar (the fifth pass
-     straddled the seam half-in/half-out and looked detached - user:
-     "make seems like attached to the sidebar"). The ::before chevron
-     shows › at rest and spins 540deg (full turn + 180 flip) to ‹ in
-     accent color while surfaced, reversing on close. */
-  .nav-cue {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: absolute;
-    top: 50%;
-    left: 100%;
-    width: 28px;
-    height: 64px;
-    transform: translateY(-50%) translateX(25px);
-    border: 1px solid var(--border-color);
-    border-left: none;
-    border-radius: 0 999px 999px 0;
-    background: var(--bg-card);
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
-    pointer-events: none;
-    z-index: 101;
-    transition: transform 0.25s ease;
-  }
-  .nav-cue::before {
-    content: '\203A';
-    font-size: 18px;
-    font-weight: 700;
-    line-height: 1;
-    color: var(--text-secondary);
-    transition: transform 0.45s ease, color 0.2s ease;
-  }
-  .dashboard-content-row:has(.nav-edge:hover) .nav-cue,
-  .sidebar:hover .nav-cue,
-  .sidebar:has(:focus-visible) .nav-cue {
-    transform: translateY(-50%) translateX(-1px);
-  }
-  .dashboard-content-row:has(.nav-edge:hover) .nav-cue::before,
-  .sidebar:hover .nav-cue::before,
-  .sidebar:has(:focus-visible) .nav-cue::before {
-    transform: rotate(540deg);
-    color: var(--accent-color);
-  }
-  /* Rest state: submerged. Transform joins the width transition so both
-     directions animate (the min-width clamp lesson, bug_reports
-     2026-10-01). */
-  .sidebar {
-    transform: translateX(calc(-100% - 40px));
-    transition: width 0.25s ease, transform 0.25s ease;
-  }
-  .dashboard-content-row:has(.nav-edge:hover) .sidebar,
-  .sidebar:hover,
-  .sidebar:has(:focus-visible) {
-    transform: none;
-  }
-  /* Twitch-loop breaker (2026-10-03): the submerged rail must never catch
-     hover. Previously a cursor parked in the wall gap OUTSIDE the strip's
-     rest band lost :hover the moment the panel docked at left:16, and the
-     submerging sweep then slid the panel back UNDER the cursor, re-firing
-     .sidebar:hover — a ~45Hz expand/collapse feedback loop (user video
-     2026-10-02). pointer-events now follows the surfaced state, so any
-     submerging sweep is inert; the grown nav-edge strip above keeps the
-     gap itself hoverable while the panel is open. Entry paths are the
-     strip and keyboard focus (the submerged rail sits fully off-viewport,
-     so nothing legitimate depends on hovering it at rest). */
-  .sidebar {
-    pointer-events: none;
-  }
-  .dashboard-content-row:has(.nav-edge:hover) .sidebar,
-  .dashboard-content-row:has(.sidebar:hover) .sidebar,
-  .dashboard-content-row:has(.sidebar :focus-visible) .sidebar {
-    pointer-events: auto;
-  }
-  .dashboard-content-row:has(.nav-edge:hover) .sidebar { width: var(--sidebar-width); }
-  .dashboard-content-row:has(.nav-edge:hover) .sidebar .sidebar-menu { align-items: stretch; }
-  .dashboard-content-row:has(.nav-edge:hover) .sidebar .sidebar-item {
-    width: auto;
-    height: 48px;
-    margin: 0 12px;
-    padding: 0 14px;
-    justify-content: flex-start;
-  }
-  .dashboard-content-row:has(.nav-edge:hover) .sidebar .sidebar-item .item-label {
-    display: inline;
-    animation: labelFadeIn 0.12s ease 0.18s both;
-  }
-}
-
-.sidebar-menu {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
-.sidebar-item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  background: transparent;
-  border: none;
-  border-radius: 12px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  margin: 0;
-  padding: 0;
-  position: relative;
-  text-decoration: none;
-}
-
-.sidebar-item:hover {
-  color: var(--text-primary);
-  background: var(--bg-element);
-}
-
-.sidebar-item.active {
-  color: var(--accent-color);
-  background: var(--accent-glow);
-}
-
-/* Active glow — underline at the BOTTOM of the item (not the left edge),
-   spanning the item width with an 8px inset per side */
-.sidebar-item.active::before {
-  content: '';
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 3px;
-  height: 4px;
-  background: var(--accent-color);
-  border-radius: 4px;
-  box-shadow: 0 0 10px var(--accent-color);
-}
-
-.sidebar-item .item-icon {
-  flex-shrink: 0;
-}
-
-.sidebar-item .item-label {
-  display: none;
-  margin-left: 16px;
-  font-weight: 500;
-  font-size: 0.95rem;
-  white-space: nowrap;
-}
-
 /* Avatar (topbar user pill) */
 .avatar-small {
   width: 32px;
@@ -3251,22 +2989,34 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-/* Dashboard layout — full-width navbar on top; below it the floating
-   sidebar overlays the content column (see .sidebar). */
+/* Dashboard layout (2026-10-11 sidebar redesign): the persistent
+   sidebar is the root container's first flex child, spanning the full
+   viewport height; the shell (topbar + content row) sits beside it.
+   The sidebar's own column rules live in styles/sidebar.css. */
 .dashboard-main {
   display: flex;
   flex: 1;
-  flex-direction: column;
+  flex-direction: row;
   background: var(--bg-base);
   height: 100vh;
   position: relative;
+}
+
+/* The column beside the sidebar: topbar on top, scrolling content row
+   below. min-width: 0 so long views cannot push the shell wider than
+   the remaining space. */
+.dashboard-shell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .dashboard-content-row {
   display: flex;
   flex: 1;
   min-height: 0;
-  position: relative; /* anchor for the absolutely-positioned floating sidebar */
+  position: relative;
 }
 
 .dashboard-center {
@@ -3276,24 +3026,20 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0;
   overflow: hidden;
   min-height: 0;
-  /* Full width: the rail-strip inset lives on .route-inset instead, so the
-     footer (a sibling of .route-inset inside the scroller) can span the
-     whole viewport edge to edge. */
   margin-left: 0;
 }
 
-/* Route views keep clear of the floating rail strip (16px inset + rail +
-   16px gap); the footer below deliberately does not. Flex column so view
-   roots keep the same flex-item behavior they had directly under
+/* Route views span the shell's full width. Flex column so view roots
+   keep the same flex-item behavior they had directly under
    .tab-panel--active. */
 .route-inset {
   display: flex;
   flex-direction: column;
   flex: 1 0 auto;
   min-height: 0;
-  /* No rail gutter at any width since the 2026-10-01 auto-submerge: the
-     rail lives off-canvas at rest and OVERLAYS content on hover (the
-     hover-expand grammar), so reserving 92px would leave a dead column. */
+  /* No gutter: the persistent sidebar is an in-flow flex sibling of
+     .dashboard-shell (2026-10-11 redesign) and reserves its own
+     width. */
   margin-left: 0;
 }
 

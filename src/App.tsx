@@ -85,15 +85,21 @@ function App() {
     );
   }
 
+  /* App shell (2026-10-11 sidebar redesign): the persistent sidebar is
+     the root container's first flex child, spanning the full viewport
+     height; the shell (topbar + content row) sits beside it. On mobile
+     the sidebar is a fixed-position drawer, so the shell naturally
+     takes the full width. */
   return (
     <div className="layout-container dashboard-main">
-      <TopBar onMenu={() => setNavOpen(true)} />
-      <div className="dashboard-content-row">
-        <Sidebar
-          mobileOpen={navOpen}
-          onClose={() => setNavOpen(false)}
-        />
+      <Sidebar
+        mobileOpen={navOpen}
+        onClose={() => setNavOpen(false)}
+      />
 
+      <div className="dashboard-shell">
+        <TopBar onMenu={() => setNavOpen(true)} />
+        <div className="dashboard-content-row">
         <div className="dashboard-center">
           <div
             className="main-content"
@@ -186,6 +192,7 @@ function App() {
             </div>
             </Suspense>
           </div>
+        </div>
         </div>
       </div>
     </div>

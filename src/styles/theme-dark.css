@@ -50,8 +50,9 @@
 /* Deliberately untouched:
    - .upload-btn keeps its ink-on-blue pairing: #0f172a text measures
      4.8:1 on the dark accent (#3b82f6) and 6.9:1 on its #60a5fa hover.
-   - .sidebar-item.active::before, .deep-loading-bar-inner: non-text
-     accent fills (>=3:1 as graphical objects).
+   - .deep-loading-bar-inner: non-text accent fill (>=3:1 as a
+     graphical object). (The sidebar's accent underline left this list
+      with the 2026-10-11 monochrome sidebar — the element is gone.)
    - .pdf-object stays #fff — it is PDF paper, not chrome.
    - .skeleton-line / scrollbar thumbs use slate rgba tints that read
      correctly on both themes. */

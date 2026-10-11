@@ -2,7 +2,6 @@ import { Bell, ShieldCheck, User, Menu, Code } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useStrings } from '../i18n';
-import SettingsDialog from './SettingsDialog';
 
 interface TopBarProps {
   /** Mobile (≤767px): opens the off-canvas drawer */
@@ -60,8 +59,6 @@ export default function TopBar({ onMenu }: TopBarProps) {
         <button className="icon-btn-top" aria-label={t.notifications}>
           <Bell size={18} />
         </button>
-
-        <SettingsDialog />
 
         <div 
           className="topbar-user-pill"

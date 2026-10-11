@@ -1,12 +1,14 @@
-/* Global stylesheet entry - the cascade lives in five ordered layers.
+/* Global stylesheet entry - the cascade lives in six ordered layers.
    Import order is load-bearing: tokens -> components -> auth-single ->
-   theme-dark -> utilities (the single-column auth rules must beat base
-   components on ties; dark-theme patches must beat both; the responsive
+   sidebar -> theme-dark -> utilities (the single-column auth rules must
+   beat base components on ties; the sidebar owns its column wholesale;
+   dark-theme patches must beat all base layers; the responsive
    system must win ties). Visual system of record: /DESIGN.md
    (workspace root). Split from this file in Phase 5, 2026-09-24. */
 @import './styles/tokens.css';
 @import './styles/components.css';
 @import './styles/auth-single.css';
+@import './styles/sidebar.css';
 @import './styles/theme-dark.css';
 @import './styles/utilities.css';
 
