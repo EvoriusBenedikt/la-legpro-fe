@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, useId } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, ChevronDown, ChevronLeft, ChevronRight, User, Search, Plus, Trash2, MoreHorizontal, Pencil, FileText, Link2, MessagesSquare, Copy, Check, RotateCw, Square, AlertCircle } from 'lucide-react';
+import { Send, ChevronDown, ChevronLeft, ChevronRight, User, Search, Plus, Trash2, MoreHorizontal, Pencil, FileText, Link2, MessagesSquare, Copy, Check, RotateCw, Square, AlertCircle, ListChecks, CheckSquare, ArrowUpDown, Pin, Eraser, Paperclip } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import api, { isAbortError, isTimeoutError, isNetworkError } from '../services/api';
+import api, { isAbortError, isTimeoutError, isNetworkError, uploadAttachment, listAttachments, deleteAttachment } from '../services/api';
+import { PendingChipRow } from './ChatAttachments';
+import type { PendingAttachment } from './ChatAttachments';
 import { getSettings } from '../settings';
-import { useStrings, getLocale, fill, STRINGS } from '../i18n';
+import { useStrings, getLocale, fill, STRINGS, GREETING_POOLS } from '../i18n';
 import { useAuth } from '../hooks/useAuth';
 import DocumentDrawer from './DocumentDrawer';
 import LoadingOrb from './LoadingOrb';
@@ -39,6 +41,10 @@ interface Message {
       never as an AI-shaped apology bubble — and excluded from the LLM
       context of later requests. */
   kind?: 'greeting' | 'error';
+  /* Chat attachments (2026-10-12): server attachment ids that rode with
+     this USER message. Replayed in the /api/chat window so later turns can
+     still recall the files. Absent on pre-feature stored history. */
+  attachment_ids?: string[];
 }
 
 interface Conversation {
@@ -47,6 +53,10 @@ interface Conversation {
   createdAt: number;
   updatedAt: number;
   messages: Message[];
+  /* Round 4 (2026-10-12): pinned chats sort into the sidebar's Pinned
+     section. Optional so histories stored before round 4 load as-is
+     (undefined == unpinned, no migration needed). */
+  pinned?: boolean;
 }
 
 /* Glass-dialog state — replaces native window.confirm/prompt/alert with a
@@ -75,11 +85,13 @@ const STORAGE_KEY_BASE = 'legal_analyzer_conversations';
 const ACTIVE_STORAGE_KEY_BASE = 'legal_analyzer_active_conversation';
 const LEGACY_STORAGE_KEY = 'legal_analyzer_conversations';
 const LEGACY_ACTIVE_STORAGE_KEY = 'legal_analyzer_active_conversation';
-function storageKeysFor(username?: string): { list: string; active: string } {
+const SORT_STORAGE_KEY_BASE = 'legal_analyzer_conversation_sort';
+function storageKeysFor(username?: string): { list: string; active: string; sort: string } {
   const suffix = username || 'anon';
   return {
     list: `${STORAGE_KEY_BASE}:${suffix}`,
     active: `${ACTIVE_STORAGE_KEY_BASE}:${suffix}`,
+    sort: `${SORT_STORAGE_KEY_BASE}:${suffix}`,
   };
 }
 /* Desktop-only history-panel collapse (handle on the panel seam,
@@ -118,12 +130,35 @@ const REL_MED = 1.5;
    review the greeting is an empty-state only — rendered live while a
    conversation holds no messages, never seeded into history. Stored
    conversations created before that review keep their frozen greeting
-   message (kind 'greeting'); history is user data, never rewritten. */
-function greetingContent(locale: ReturnType<typeof getLocale>): string {
+   message (kind 'greeting'); history is user data, never rewritten.
+   Round-3 review (2026-10-12, user request: greetings that rotate like
+   Claude's) picks the copy from a per-locale pool (i18n GREETING_POOLS):
+   `variant` is a pure hash of the conversation id, so one conversation
+   keeps one greeting across renders and reloads while each new chat
+   rotates. Templates substitute {time} (the salutation above) and
+   {offer} (opGreetOffer). */
+function greetingContent(locale: ReturnType<typeof getLocale>, variant: number): string {
   const s = STRINGS[locale];
   const h = new Date().getHours();
-  const salutation = h < 5 || h >= 18 ? s.opGreetNight : h < 12 ? s.opGreetMorning : s.opGreetAfternoon;
-  return `## ${salutation}! ${s.opGreetOffer}`;
+  const time = h < 5 || h >= 18 ? s.opGreetNight : h < 12 ? s.opGreetMorning : s.opGreetAfternoon;
+  const pool = GREETING_POOLS[locale];
+  const template = pool[((variant % pool.length) + pool.length) % pool.length];
+  return `## ${template.replace('{time}', time).replace('{offer}', s.opGreetOffer)}`;
+}
+
+/* FNV-1a over the conversation id (2026-10-12): pure and deterministic
+   — no Math.random in render (the React Compiler's purity check would
+   flag it, and a re-render would re-roll the greeting mid-typing). The
+   same conversation always hashes to the same pool index, including
+   after a reload; UUID ids distribute evenly across new chats. */
+function greetingVariant(id: string | undefined): number {
+  let h = 0x811c9dc5;
+  const key = id ?? 'new';
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
 }
 
 /* A conversation shows the greeting hero (mascot + copy, no bubble)
@@ -167,6 +202,11 @@ function linkifyCitations(text: string, sourceCount: number): string {
     return `[${digits}](#cite-${n})`;
   });
 }
+
+/* Per-message attachment cap (spec §10). FE-side contract — each POST
+   carries exactly one file, so the server can only enforce the
+   per-conversation cap (20); the composer refuses picks beyond 4 chips. */
+const ATTACH_MAX_PER_MESSAGE = 4;
 
 function createConversation(title?: string): Conversation {
   const now = Date.now();
@@ -213,6 +253,19 @@ export default function LegalOpinion() {
     return raw || '';
   });
   const [conversationSearch, setConversationSearch] = useState('');
+  /* Round 4 (2026-10-12, Claude-style sidebar): selection mode for bulk
+     delete, the persisted sort order, and the sort dropdown's open
+     state. selectedIds holds conversation IDS, so a selection survives
+     search filtering and re-sorts; the sort choice is per-account like
+     the history keys. */
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [sortMode, setSortMode] = useState<'activity' | 'created' | 'name'>(() => {
+    const raw = localStorage.getItem(storageKeys.sort);
+    return raw === 'created' || raw === 'name' ? raw : 'activity';
+  });
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
   /* Conversation row menu (Rename/Delete). Rendered through a portal at
      fixed coordinates (bugfix 2026-10-01: inside the overflow-y list the
      absolute dropdown was clipped by the panel frame on the last rows);
@@ -246,6 +299,12 @@ export default function LegalOpinion() {
   /* Whole seconds the current round trip has been running, shown next to
      the loading copy (2026-10-08 critique remediation P1-2). */
   const [elapsed, setElapsed] = useState(0);
+  /* Chat attachments (2026-10-12): composer-side chips from pick until the
+     server says ready/failed. Every chip carries the conversation id it
+     uploaded against, so switching conversations hides (never deletes) the
+     other conversation's chips and a send clears exactly its own. */
+  const [pending, setPending] = useState<PendingAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   /* Bot mascot nap rhythm (2026-10-01 review, refined same day): ONE
      identity shared by every BotIdentity in the view — 'working' while
@@ -277,7 +336,17 @@ export default function LegalOpinion() {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
+    // Chromium counts a wrapped placeholder toward scrollHeight, so an
+    // empty field measured several lines tall in narrow columns — the
+    // inflation pushed the centered fresh composer into the hero
+    // (2026-10-12). Measure with the placeholder neutralized; the
+    // restore is synchronous, so no frame ever paints without it. With
+    // text present the placeholder isn't rendered anyway, so content
+    // measurement is unaffected.
+    const ph = el.placeholder;
+    el.placeholder = '';
     const content = el.scrollHeight;
+    el.placeholder = ph;
     el.style.height = `${Math.min(content, 200)}px`;
     // The scrollbar channel (and its themed paint) exists only past the
     // height cap; below it the field grows with content and stays
@@ -319,6 +388,25 @@ export default function LegalOpinion() {
       localStorage.setItem(storageKeys.active, activeConversationId);
     }
   }, [activeConversationId, storageKeys]);
+
+  /* Round 4: persist the sort choice per account, same single-key
+     pattern as the active-conversation pointer. */
+  useEffect(() => {
+    localStorage.setItem(storageKeys.sort, sortMode);
+  }, [sortMode, storageKeys]);
+
+  /* Round 4: close the sort dropdown on any outside press — the row
+     kebab already has this grammar via its portal effect. */
+  useEffect(() => {
+    if (!sortMenuOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setSortMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [sortMenuOpen]);
 
   // Dismiss the conversation menu on Escape, any click outside its wrap
   // AND outside the portaled menu, and on any scroll/resize (the fixed
@@ -374,6 +462,50 @@ export default function LegalOpinion() {
   );
   const messages = activeConversation?.messages ?? [];
 
+  /* Attachment chips belonging to the ACTIVE conversation (the state array
+     may also hold chips from other conversations — they stay alive if the
+     user switches back, and their server rows are cleaned by the
+     conversation-wide bulk delete in Task 6's wiring). */
+  const visiblePending = useMemo(
+    () => pending.filter((p) => p.convId === activeConversation?.id),
+    [pending, activeConversation?.id]
+  );
+  /* Send gate (spec §7): anything still uploading/processing blocks the
+     send — a half-uploaded file cannot ride along. Failed chips do NOT
+     block; they are left behind on send or X'd away. */
+  const attachBlocked = visiblePending.some(
+    (p) => p.status === 'uploading' || p.status === 'processing'
+  );
+  /* PDF chips flip processing → ready/failed server-side (background
+     pipeline); poll the conversation's metadata every 2s while any visible
+     chip is processing. The setState bails on unchanged values (house
+     pattern, see the nap ticker below), and a transient poll failure just
+     lets the next tick retry. */
+  const anyProcessing = visiblePending.some((p) => p.status === 'processing');
+  useEffect(() => {
+    if (!anyProcessing || !activeConversationId) return;
+    const iv = window.setInterval(() => {
+      listAttachments(activeConversationId)
+        .then((metas) => {
+          setPending((prev) => {
+            let changed = false;
+            const next = prev.map((p) => {
+              if (p.status !== 'processing' || !p.id) return p;
+              const m = metas.find((x) => x.id === p.id);
+              if (!m || m.status === 'processing') return p;
+              changed = true;
+              return m.status === 'ready'
+                ? { ...p, status: 'ready' as const }
+                : { ...p, status: 'failed' as const, error: m.error ?? 'failed' };
+            });
+            return changed ? next : prev;
+          });
+        })
+        .catch(() => undefined);
+    }, 2000);
+    return () => window.clearInterval(iv);
+  }, [anyProcessing, activeConversationId]);
+
   /* Bot mascot nap rhythm, effects: the [botPhase] effect stamps the
      phase clock on every flip (and on mount); the activity effect
      restarts the idle phase when a message lands or a send starts
@@ -424,13 +556,31 @@ export default function LegalOpinion() {
 
   const filteredConversations = useMemo(() => {
     const query = conversationSearch.trim().toLowerCase();
-    if (!query) return conversations;
-    return conversations.filter((c) => {
-      const inTitle = c.title.toLowerCase().includes(query);
-      const inMessages = c.messages.some(m => m.content.toLowerCase().includes(query));
-      return inTitle || inMessages;
+    const base = query
+      ? conversations.filter((c) => {
+          const inTitle = c.title.toLowerCase().includes(query);
+          const inMessages = c.messages.some(m => m.content.toLowerCase().includes(query));
+          return inTitle || inMessages;
+        })
+      : conversations;
+    /* Round 4: the persisted sort applies to the filtered rows; the
+       Pinned/unpinned split happens after, so both sections share the
+       order (Claude's grammar). */
+    return [...base].sort((a, b) => {
+      if (sortMode === 'name') return a.title.localeCompare(b.title);
+      if (sortMode === 'created') return b.createdAt - a.createdAt;
+      return b.updatedAt - a.updatedAt;
     });
-  }, [conversationSearch, conversations]);
+  }, [conversationSearch, conversations, sortMode]);
+
+  const pinnedConversations = useMemo(
+    () => filteredConversations.filter((c) => c.pinned),
+    [filteredConversations]
+  );
+  const unpinnedConversations = useMemo(
+    () => filteredConversations.filter((c) => !c.pinned),
+    [filteredConversations]
+  );
 
   // Repairs the model's sloppy markdown before render (non-destructive —
   // the stored message is untouched). Handles: empty **** markers, bullets
@@ -454,6 +604,11 @@ export default function LegalOpinion() {
     // smooth scrolling under reduce-motion.
     const settings = getSettings();
     if (!settings.chatAutoScroll) return;
+    /* Fresh hero pane (2026-10-12): nothing to follow yet — and in a
+       short viewport the content-sized pane CAN scroll, so chasing the
+       sentinel clipped the mascot's head off the top (found in the
+       frontier-composer verification pass). */
+    if (isFreshGreeting(messages, isLoading)) return;
     const behavior: ScrollBehavior = settings.reduceMotion ? 'auto' : 'smooth';
     const box = chatBoxRef.current;
     if (box) {
@@ -505,7 +660,10 @@ export default function LegalOpinion() {
         .filter((msg) => msg.kind !== 'error')
         .map((msg) => ({
           role: msg.role === 'ai' ? 'assistant' : 'user',
-          content: msg.content
+          content: msg.content,
+          /* Chat attachments (2026-10-12): replay stored ids so later turns
+              can still recall the files; absent on pre-feature history. */
+          ...(msg.attachment_ids?.length ? { attachment_ids: msg.attachment_ids } : {})
         }));
       const response = await api.post('/api/chat', { messages: apiMessages }, {
         timeout: CHAT_TIMEOUT_MS,
@@ -570,8 +728,10 @@ export default function LegalOpinion() {
     setInput('');
   };
 
-  const handleClearChat = () => {
-    if (!activeConversation) return;
+  /* Round 4: the header's Clear conversation button moved into the row
+     kebab, so the handler takes the target id instead of assuming the
+     active conversation. */
+  const handleClearConversation = (conversationId: string) => {
     setDialog({
       kind: 'confirm',
       title: t.opClearTitle,
@@ -579,7 +739,7 @@ export default function LegalOpinion() {
       confirmLabel: t.opClearConfirm,
       danger: true,
       onConfirm: () => {
-        updateConversation(activeConversation.id, (c) => ({
+        updateConversation(conversationId, (c) => ({
           ...c,
           updatedAt: Date.now(),
           messages: [],
@@ -636,17 +796,135 @@ export default function LegalOpinion() {
     });
   };
 
+  /* Round 4 (2026-10-12): selection-mode helpers for bulk delete.
+     Leaving the mode always drops the selection; select-all covers the
+     filtered rows the user can actually see; deleting a selection that
+     spans every conversation hits the same last-conversation alert as
+     the single-row flow. */
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleToggleSelected = (conversationId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(conversationId)) next.delete(conversationId);
+      else next.add(conversationId);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    setSelectedIds(new Set(filteredConversations.map((c) => c.id)));
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedIds.size === 0) return;
+    if (selectedIds.size >= conversations.length) {
+      setDialog({
+        kind: 'alert',
+        title: t.opDeleteLastTitle,
+        body: t.opDeleteLastBody,
+      });
+      return;
+    }
+    setDialog({
+      kind: 'confirm',
+      title: t.opDeleteManyTitle,
+      body: fill(t.opDeleteManyBody, { n: selectedIds.size }),
+      confirmLabel: t.opDeleteConfirm,
+      danger: true,
+      onConfirm: () => {
+        const remaining = conversations.filter((c) => !selectedIds.has(c.id));
+        setConversations(remaining);
+        if (activeConversationId && selectedIds.has(activeConversationId)) {
+          setActiveConversationId(remaining[0]?.id ?? '');
+        }
+        exitSelectMode();
+      },
+    });
+  };
+
+  const handleTogglePin = (conversationId: string) => {
+    updateConversation(conversationId, (c) => ({ ...c, pinned: !c.pinned }));
+  };
+
+  /* Paperclip pick (2026-10-12): ensure a conversation id first — a fresh
+     chat mints one exactly like handleCreateConversation (minus clearing
+     the input: an attach must not eat a drafted question) so the upload
+     and the first message land in the SAME conversation — then POST each
+     file. Picks beyond the per-message cap (4) are ignored; the
+     per-conversation cap (20) is server-enforced (422 'limit' → failed
+     chip). */
+  const handleFilesPicked = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    let convId = activeConversation?.id;
+    if (!convId) {
+      const convo = createConversation(fill(t.opNewTitle, { n: conversations.length + 1 }));
+      setConversations((prev) => [convo, ...prev]);
+      setActiveConversationId(convo.id);
+      convId = convo.id;
+    }
+    /* TS resets let-narrowing inside closures; freeze the id for the
+       setPending callbacks below. */
+    const cid = convId;
+    const capacity = ATTACH_MAX_PER_MESSAGE - visiblePending.length;
+    if (capacity <= 0) return;
+    for (const file of Array.from(files).slice(0, capacity)) {
+      const key = `att_${nowMs()}_${Math.random().toString(36).slice(2, 7)}`;
+      setPending((prev) => [...prev, { key, convId: cid, file, status: 'uploading' }]);
+      uploadAttachment(cid, file)
+        .then((meta) => {
+          setPending((prev) =>
+            prev.map((p) =>
+              p.key === key
+                ? { ...p, id: meta.id, status: meta.status === 'ready' ? 'ready' : 'processing' }
+                : p
+            )
+          );
+        })
+        .catch((e) => {
+          /* Task-4 client rethrows BE codes as Error('oversize'|'type'|
+             'limit'); anything else shows its raw message in the chip. */
+          const code = e instanceof Error ? e.message : 'error';
+          setPending((prev) =>
+            prev.map((p) => (p.key === key ? { ...p, status: 'failed', error: code } : p))
+          );
+        });
+    }
+  };
+
+  /* X on a pending chip: drop it locally and best-effort delete the server
+     row when the POST already resolved (id present); the conversation-wide
+     bulk delete is the backstop, so a failed DELETE is swallowed. */
+  const handleRemovePending = (key: string) => {
+    const chip = pending.find((p) => p.key === key);
+    setPending((prev) => prev.filter((p) => p.key !== key));
+    if (chip?.id) deleteAttachment(chip.id).catch(() => undefined);
+  };
+
   const handleSend = async () => {
     /* isLoading guard (2026-10-08 critique remediation P1-2): Enter during
        a live round trip must not queue a second request. */
     if (isLoading || !input.trim() || !activeConversation) return;
+    /* Attach gate (spec §7): chips still uploading/processing block the
+       send — the button mirrors this via aria-disabled + the hint line,
+       and the Enter keydown path lands here too. */
+    if (attachBlocked) return;
 
     const now = nowMs();
     const userContent = input.trim();
+    /* Ready chips ride along as attachment_ids; failed chips are left
+       behind (the user can X them) and cleared with the row below. */
+    const readyIds = visiblePending
+      .filter((p) => p.status === 'ready' && p.id)
+      .map((p) => p.id as string);
     const userMessage: Message = {
       id: now,
       role: 'user',
-      content: userContent
+      content: userContent,
+      ...(readyIds.length > 0 ? { attachment_ids: readyIds } : {})
     };
 
     const existingMessages = activeConversation.messages;
@@ -661,6 +939,9 @@ export default function LegalOpinion() {
     }));
     setInput('');
     if (textareaRef.current) textareaRef.current.style.height = '40px';
+    /* Clear exactly this conversation's chips (others stay in state, hidden
+       until the user switches back). */
+    setPending((prev) => prev.filter((p) => p.convId !== activeConversation.id));
 
     await runGeneration(activeConversation.id, [...existingMessages, userMessage]);
   };
@@ -729,32 +1010,11 @@ export default function LegalOpinion() {
 
   return (
     <div className="view-container no-scroll legal-opinion-view">
-      <div className="view-header">
-        <div>
-          <h2>{t.opTitle}</h2>
-          <p>{t.opSubtitle}</p>
-        </div>
-        <div className="legal-opinion-actions">
-          <button
-            className="panel-toggle-btn secondary-action-btn"
-            onClick={() => setPanelOpen(true)}
-            aria-label={t.opPanelLabel}
-            aria-expanded={panelOpen}
-            aria-controls="conversation-panel"
-          >
-            <MessagesSquare size={16} />
-          </button>
-          <button className="secondary-action-btn" onClick={handleCreateConversation} aria-label={t.opNew}>
-            <Plus size={16} />
-            <span className="btn-label">{t.opNew}</span>
-          </button>
-          <button className="secondary-action-btn danger" onClick={handleClearChat} disabled={isLoading} aria-label={t.opClear}>
-            <Trash2 size={16} />
-            <span className="btn-label">{t.opClear}</span>
-          </button>
-        </div>
-      </div>
-
+      {/* Round 4 (2026-10-12, Claude-style sidebar): the view header is
+          gone entirely — the panel and the chat column now start at the
+          card's top edge. New chat moved to the panel top, Clear
+          conversation into the row kebab, and the mobile drawer opener
+          floats over the chat column. */}
       <div className={`legal-opinion-body ${historyHidden ? 'history-collapsed' : ''}`}>
         {panelOpen && (
           <div
@@ -764,11 +1024,33 @@ export default function LegalOpinion() {
           />
         )}
         <aside
-          className={`conversation-panel ${panelOpen ? 'open' : ''}`}
+          className={`conversation-panel ${panelOpen ? 'open' : ''} ${selectMode ? 'selecting' : ''}`}
           id="conversation-panel"
           aria-label={t.opPanelLabel}
           inert={historyHidden && !panelOpen}
         >
+          <button className="conversation-new-btn" onClick={handleCreateConversation}>
+            <Plus size={16} />
+            <span>{t.opNew}</span>
+          </button>
+          {selectMode ? (
+            <div className="select-toolbar">
+              <span className="select-count">{fill(t.opSelectedCount, { n: selectedIds.size })}</span>
+              <button className="conv-icon-btn" onClick={handleSelectAll}>
+                {t.opSelectAll}
+              </button>
+              <button
+                className="conv-icon-btn danger"
+                onClick={handleDeleteSelected}
+                disabled={selectedIds.size === 0}
+              >
+                <Trash2 size={14} /> {t.opDeleteSelected}
+              </button>
+              <button className="conv-icon-btn" onClick={exitSelectMode}>
+                {t.opCancel}
+              </button>
+            </div>
+          ) : (
           <div className="conversation-search">
             <Search size={16} />
             <input
@@ -777,25 +1059,83 @@ export default function LegalOpinion() {
               value={conversationSearch}
               onChange={(e) => setConversationSearch(e.target.value)}
             />
+            <div className="conv-search-actions">
+              <div className="conv-sort-wrap" ref={sortMenuRef}>
+                <button
+                  className="conv-icon-btn"
+                  onClick={() => setSortMenuOpen((o) => !o)}
+                  aria-label={t.opSortLabel}
+                  aria-haspopup="true"
+                  aria-expanded={sortMenuOpen}
+                >
+                  <ArrowUpDown size={15} />
+                </button>
+                {sortMenuOpen && (
+                  <div className="sort-menu" role="menu">
+                    {([['activity', t.opSortActivity], ['created', t.opSortCreated], ['name', t.opSortName]] as const).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        role="menuitemradio"
+                        aria-checked={sortMode === mode}
+                        onClick={() => {
+                          setSortMode(mode);
+                          setSortMenuOpen(false);
+                        }}
+                      >
+                        {sortMode === mode ? <Check size={14} /> : <span className="sort-menu-spacer" />}
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                className="conv-icon-btn"
+                onClick={() => setSelectMode(true)}
+                aria-label={t.opSelectMode}
+                aria-pressed={selectMode}
+              >
+                <ListChecks size={15} />
+              </button>
+            </div>
           </div>
+          )}
           <div className="conversation-list">
-            {filteredConversations.map((conv) => (
+            {pinnedConversations.length > 0 && (
+              <div className="conversation-section-label">{t.opPinned}</div>
+            )}
+            {[...pinnedConversations, ...unpinnedConversations].map((conv, i) => (
               <div
                 key={conv.id}
-                className={`conversation-item ${conv.id === activeConversation?.id ? 'active' : ''}`}
+                className={`conversation-item ${conv.id === activeConversation?.id ? 'active' : ''} ${selectedIds.has(conv.id) ? 'selected' : ''} ${i === pinnedConversations.length && pinnedConversations.length > 0 ? 'section-start' : ''}`}
               >
                 <button
                   className="conversation-main-btn"
                   onClick={() => {
+                    /* In selection mode the row toggles instead of
+                       opening — the checkbox is the row's own state. */
+                    if (selectMode) {
+                      handleToggleSelected(conv.id);
+                      return;
+                    }
                     setActiveConversationId(conv.id);
                     setMenuState(null);
                     setPanelOpen(false);
                   }}
+                  aria-pressed={selectMode ? selectedIds.has(conv.id) : undefined}
                 >
-                  <div className="conversation-title">{conv.title}</div>
-                  <div className="conversation-preview">
-                    {conv.messages[conv.messages.length - 1]?.content || t.opNoPreview}
-                  </div>
+                  {selectMode &&
+                    (selectedIds.has(conv.id) ? (
+                      <CheckSquare size={16} className="conv-check on" />
+                    ) : (
+                      <Square size={16} className="conv-check" />
+                    ))}
+                  <span className="conv-text">
+                    <div className="conversation-title">{conv.title}</div>
+                    <div className="conversation-preview">
+                      {conv.messages[conv.messages.length - 1]?.content || t.opNoPreview}
+                    </div>
+                  </span>
                 </button>
 
                 <div className="conversation-menu-wrap">
@@ -809,7 +1149,7 @@ export default function LegalOpinion() {
                       /* Anchor the portaled menu to the button's right
                          edge, clamped into the viewport horizontally. */
                       const r = e.currentTarget.getBoundingClientRect();
-                      const MENU_W = 140;
+                      const MENU_W = 180;
                       const left = Math.max(8, Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8));
                       setMenuState({ convId: conv.id, top: r.bottom + 4, left, anchorTop: r.top });
                     }}
@@ -839,16 +1179,39 @@ export default function LegalOpinion() {
           {historyHidden ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
         </button>
 
-        <div className="chat-main">
+        {/* Frontier composer layout (2026-10-12, refined the same day on
+            user review): --fresh pins the hero to the pane top and floats
+            the composer at the pane's vertical middle (absolute centering
+            in components.css); the first send drops the class and the
+            composer returns to flow, docked full-width at the bottom. One
+            composer instance across both layouts — focus and an in-flight
+            WorkBeam survive the move. */}
+        <div className={isFreshGreeting(messages, isLoading) ? 'chat-main chat-main--fresh' : 'chat-main'}>
+          {/* Round 4: with the view header gone, the mobile (≤767px)
+              drawer opener floats at the chat's top-left corner; the
+              class pair keeps it display:none on desktop. */}
+          <button
+            className="panel-toggle-btn panel-toggle-float"
+            onClick={() => setPanelOpen(true)}
+            aria-label={t.opPanelLabel}
+            aria-expanded={panelOpen}
+            aria-controls="conversation-panel"
+          >
+            <MessagesSquare size={16} />
+          </button>
           <div className="chat-box" ref={chatBoxRef} role="log" aria-live="polite" aria-label={t.opHistoryLabel}>
             {isFreshGreeting(messages, isLoading) && (
               <div className="greeting-hero">
-                <BotIdentity size={128} state={botState} />
+                {/* size 88 → a 132px canvas box (bot-avatars renders 1.5×
+                    the size prop, measured): compacted 2026-10-12 so the
+                    pane-centered composer clears the hero at laptop pane
+                    heights. */}
+                <BotIdentity size={88} state={botState} />
                 <div className="greeting-hero-text markdown-body">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {normalizeMarkdown(
                       messages.length === 0
-                        ? greetingContent(getLocale())
+                        ? greetingContent(getLocale(), greetingVariant(activeConversationId))
                         : messages[0].content
                     )}
                   </ReactMarkdown>
@@ -996,8 +1359,38 @@ export default function LegalOpinion() {
           </div>
 
           <div className="input-area">
+            {/* Pending-attachment chips (2026-10-12): above the card so the
+                WorkBeam border animation keeps tracking only the composer's
+                rounded rect. */}
+            <PendingChipRow chips={visiblePending} onRemove={handleRemovePending} />
             <WorkBeam active={isLoading}>
               <div className="input-container">
+                {/* Paperclip (2026-10-12): reuses the quiet-icon grammar;
+                    the hidden input carries the accept filter (server-side
+                    magic-byte sniffing is the backstop). */}
+                <button
+                  type="button"
+                  className="conv-icon-btn attach-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  aria-label={t.opAttach}
+                  title={t.opAttach}
+                >
+                  <Paperclip size={16} aria-hidden="true" />
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/png,image/jpeg,image/webp,application/pdf"
+                  className="attach-input-hidden"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  onChange={(e) => {
+                    handleFilesPicked(e.target.files);
+                    /* Reset so re-picking the same file fires change again. */
+                    e.target.value = '';
+                  }}
+                />
                 <textarea
                   ref={textareaRef}
                   className="chat-input"
@@ -1032,16 +1425,21 @@ export default function LegalOpinion() {
                     className="send-button btn-primary"
                     onClick={handleSend}
                     disabled={!input.trim()}
+                    aria-disabled={attachBlocked || undefined}
                     aria-label={t.opSend}
+                    title={attachBlocked ? t.opAttachSendHint : undefined}
                   >
                     <Send size={18} />
                   </button>
                 )}
               </div>
             </WorkBeam>
-            <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-              {t.opDisclaimer}
-            </div>
+            {attachBlocked && (
+              <div className="composer-attach-hint" role="status">
+                {t.opAttachSendHint}
+              </div>
+            )}
+            <div className="composer-disclaimer">{t.opDisclaimer}</div>
           </div>
         </div>
       </div>
@@ -1053,6 +1451,22 @@ export default function LegalOpinion() {
       {menuState &&
         createPortal(
           <div className="conversation-menu" ref={menuRef} style={{ top: menuState.top, left: menuState.left }}>
+            <button
+              onClick={() => {
+                handleTogglePin(menuState.convId);
+                setMenuState(null);
+              }}
+            >
+              <Pin size={14} /> {conversations.find((c) => c.id === menuState.convId)?.pinned ? t.opUnpin : t.opPin}
+            </button>
+            <button
+              onClick={() => {
+                handleClearConversation(menuState.convId);
+                setMenuState(null);
+              }}
+            >
+              <Eraser size={14} /> {t.opClearMessages}
+            </button>
             <button
               onClick={() => {
                 handleRenameConversation(menuState.convId);
