@@ -99,6 +99,17 @@ interface DocumentTemplate {
 
 type ActiveTab = 'regulations' | 'internal' | 'analyzed' | 'templates' | 'pending' | 'history';
 
+/* Normalize an incoming ?tab value with the same role gates the mount
+   initializer applies (2026-10-12): pending is sekretaris/dewa-only and
+   history is role-gated, so an unauthorized or unknown tab falls back
+   to 'regulations'. Module-level and pure so the initializer and the
+   render-phase URL adoption share one rule set. */
+function normalizeTab(t: string | null, roleLower: string, canSeeHistory: boolean): ActiveTab {
+  if (t === 'pending' && !['sekretaris perusahaan', 'dewa'].includes(roleLower)) return 'regulations';
+  if (t === 'history' && !canSeeHistory) return 'regulations';
+  return (['regulations', 'internal', 'analyzed', 'templates', 'pending', 'history'].includes(t || '') ? t : 'regulations') as ActiveTab;
+}
+
 /** Card title: the regulation's "tentang" subject instead of the full
     ceremonial preamble ("Peraturan Otoritas Jasa Keuangan Republik
     Indonesia Nomor 9/POJK.03/2016 tentang X" -> "X"). The jenis badge,
@@ -132,12 +143,8 @@ export default function LegalRepository() {
   // Riwayat Unggahan visibility (decision B, 2026-09-30): sekretaris sees all
   // uploads, manajer/direktur see only their own (enforced backend-side too).
   const canSeeHistory = ['sekretaris perusahaan', 'manajer', 'direktur', 'dewa'].includes(roleLower);
-  const initialTab = (): ActiveTab => {
-    const t = searchParams.get('tab');
-    if (t === 'pending' && !['sekretaris perusahaan', 'dewa'].includes(roleLower)) return 'regulations';
-    if (t === 'history' && !canSeeHistory) return 'regulations';
-    return (['regulations', 'internal', 'analyzed', 'templates', 'pending', 'history'].includes(t || '') ? t : 'regulations') as ActiveTab;
-  };
+  const initialTab = (): ActiveTab =>
+    normalizeTab(searchParams.get('tab'), roleLower, canSeeHistory);
   const initialList = (key: string) => searchParams.get(key)?.split(',').filter(Boolean) ?? [];
   const initialSort = (): 'default' | 'tahun-desc' | 'judul-asc' | 'instansi-asc' => {
     const s = searchParams.get('sort');
@@ -160,6 +167,19 @@ export default function LegalRepository() {
   const [selectedTaxonomy] = useState<string>('');
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
+  // Adopt an externally changed ?tab during render (React's "adjust
+  // state when a value changes" pattern; an effect here would trip the
+  // house set-state-in-effect rule and add a cascading render): sidebar
+  // deep links and back/forward are authoritative for the tab, so the
+  // highlight and content follow the URL instead of bouncing back to
+  // the stale state (bug 2026-10-12). The state→URL mirror below then
+  // re-runs with the adopted tab and cancels its own stale write.
+  const urlTab = searchParams.get('tab');
+  const [prevUrlTab, setPrevUrlTab] = useState(urlTab);
+  if (urlTab !== prevUrlTab) {
+    setPrevUrlTab(urlTab);
+    setActiveTab(normalizeTab(urlTab, roleLower, canSeeHistory));
+  }
   const [revealedAi, setRevealedAi] = useState<Record<string, boolean>>({});
   // Pending-tab approver selections (2026-09-30): per-doc klasifikasi/jenis
   // picks, pre-filled from the AI verdict via ?? fallbacks at render time.
