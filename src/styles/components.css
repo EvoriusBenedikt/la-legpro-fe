@@ -5759,3 +5759,72 @@ button.status-chip.tax-chip:focus-visible {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* History-side attachment display (2026-10-12, Task 6): chips inside a
+   stored user bubble, 64px image thumbs, ghost state for server-deleted
+   rows, and the fullscreen lightbox (spec z-1100: above the row-menu
+   portal at 1000, below the dialog layer at 1200). */
+.attach-chip-row--msg {
+  padding: 8px 0 0;
+}
+.attach-thumb {
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-element);
+  cursor: pointer;
+  line-height: 0;
+  overflow: hidden;
+}
+.attach-thumb img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: calc(var(--radius-sm) - 1px);
+}
+.attach-thumb:hover {
+  border-color: var(--accent-color);
+}
+.attach-chip--clickable {
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.attach-chip--clickable:hover {
+  border-color: var(--accent-color);
+}
+.attach-chip--ghost {
+  opacity: 0.65;
+  border-style: dashed;
+}
+.attach-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(2px);
+}
+.attach-lightbox img {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
+}
+.attach-lightbox-x {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+}
+.attach-lightbox-x:hover {
+  background: rgba(255, 255, 255, 0.24);
+}

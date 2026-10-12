@@ -3,8 +3,9 @@ import { createPortal } from 'react-dom';
 import { Send, ChevronDown, ChevronLeft, ChevronRight, User, Search, Plus, Trash2, MoreHorizontal, Pencil, FileText, Link2, MessagesSquare, Copy, Check, RotateCw, Square, AlertCircle, ListChecks, CheckSquare, ArrowUpDown, Pin, Eraser, Paperclip } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import api, { isAbortError, isTimeoutError, isNetworkError, uploadAttachment, listAttachments, deleteAttachment } from '../services/api';
-import { PendingChipRow } from './ChatAttachments';
+import api, { isAbortError, isTimeoutError, isNetworkError, uploadAttachment, listAttachments, deleteAttachment, deleteConversationAttachments } from '../services/api';
+import type { AttachmentMeta } from '../services/api';
+import { PendingChipRow, MessageAttachmentChips } from './ChatAttachments';
 import type { PendingAttachment } from './ChatAttachments';
 import { getSettings } from '../settings';
 import { useStrings, getLocale, fill, STRINGS, GREETING_POOLS } from '../i18n';
@@ -506,6 +507,24 @@ export default function LegalOpinion() {
     return () => window.clearInterval(iv);
   }, [anyProcessing, activeConversationId]);
 
+  /* History-chip metadata (2026-10-12, Task 6): the conversation's server
+     attachment list, tagged with the conversation id so a switch can never
+     render the previous conversation's metas (tag mismatch = still loading
+     = no chips yet, no ghost flash). A failed fetch degrades to an empty
+     list — referenced ids then render ghost chips, which is the honest
+     "file unavailable" state rather than a spinner that never ends. */
+  const [attachState, setAttachState] = useState<{ convId: string; metas: AttachmentMeta[] } | null>(null);
+  useEffect(() => {
+    if (!activeConversationId) return;
+    listAttachments(activeConversationId)
+      .then((metas) => setAttachState({ convId: activeConversationId, metas }))
+      .catch(() => setAttachState({ convId: activeConversationId, metas: [] }));
+  }, [activeConversationId]);
+  const attachMetas =
+    attachState && activeConversation && attachState.convId === activeConversation.id
+      ? attachState.metas
+      : null;
+
   /* Bot mascot nap rhythm, effects: the [botPhase] effect stamps the
      phase clock on every flip (and on mount); the activity effect
      restarts the idle phase when a message lands or a send starts
@@ -744,6 +763,10 @@ export default function LegalOpinion() {
           updatedAt: Date.now(),
           messages: [],
         }));
+        /* Chat attachments (2026-10-12): server storage dies with the local
+           messages; best-effort — failures only orphan files the next
+           clear/delete retries. */
+        deleteConversationAttachments(conversationId).catch(console.warn);
       },
     });
   };
@@ -792,6 +815,7 @@ export default function LegalOpinion() {
         if (activeConversationId === conversationId) {
           setActiveConversationId(remaining[0]?.id ?? '');
         }
+        deleteConversationAttachments(conversationId).catch(console.warn);
       },
     });
   };
@@ -841,6 +865,10 @@ export default function LegalOpinion() {
         if (activeConversationId && selectedIds.has(activeConversationId)) {
           setActiveConversationId(remaining[0]?.id ?? '');
         }
+        /* One bulk call per deleted conversation (the endpoint is
+           per-conversation); the closure's selectedIds snapshot is the
+           set confirmed in the dialog. */
+        selectedIds.forEach((id) => deleteConversationAttachments(id).catch(console.warn));
         exitSelectMode();
       },
     });
@@ -942,6 +970,12 @@ export default function LegalOpinion() {
     /* Clear exactly this conversation's chips (others stay in state, hidden
        until the user switches back). */
     setPending((prev) => prev.filter((p) => p.convId !== activeConversation.id));
+    /* Promote chips to history: refetch the server list so the message row
+       about to render finds its metas (it would otherwise ghost — its ids
+       postdate the list fetched on conversation activation). */
+    listAttachments(activeConversation.id)
+      .then((metas) => setAttachState({ convId: activeConversation.id, metas }))
+      .catch(() => undefined);
 
     await runGeneration(activeConversation.id, [...existingMessages, userMessage]);
   };
@@ -1256,7 +1290,15 @@ export default function LegalOpinion() {
                 </div>
                 <div className="bubble">
                   {msg.role === 'user' ? (
-                    <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{msg.content}</div>
+                    <>
+                      <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{msg.content}</div>
+                      {/* History attachment chips (2026-10-12): thumbs + pdf
+                          chips under the question text; metas come from the
+                          conversation's server list (attachState). */}
+                      {msg.attachment_ids && msg.attachment_ids.length > 0 && (
+                        <MessageAttachmentChips ids={msg.attachment_ids} metas={attachMetas} />
+                      )}
+                    </>
                   ) : (
                     <div className="markdown-body">
                       <ReactMarkdown
