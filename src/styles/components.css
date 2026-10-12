@@ -1933,6 +1933,57 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 500;
 }
 
+/* Route error boundary fallback (2026-10-12): rendered inside the shell
+   when a page crashes or a lazy chunk's import rejects. Deliberately calm —
+   sidebar/topbar keep working, so the panel only explains and offers a
+   reload. Neutral surfaces (no danger red): a chunk-load failure is an
+   app-state problem, not a user-input error. 8px grid. */
+.route-error {
+  max-width: 480px;
+  margin: 64px auto;
+  padding: 32px;
+  text-align: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+}
+
+.route-error-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.route-error-body {
+  margin: 0 0 24px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.route-error-details {
+  margin-top: 16px;
+  text-align: left;
+}
+
+.route-error-details summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.route-error-details code {
+  display: block;
+  margin-top: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  background: var(--bg-element);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
 .upload-modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -3093,28 +3144,8 @@ h1, h2, h3, h4, h5, h6 {
   min-width: 0;
 }
 
-/* Brand: logo + name, far left of the navbar */
-.topbar-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.topbar-brand-logo {
-  width: 48px;
-  height: 48px;
-  object-fit: contain;
-}
-
-.topbar-brand-name {
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--accent-color);
-  letter-spacing: 0.2px;
-  white-space: nowrap;
-}
+/* The brand (logo + name) moved to the sidebar header 2026-10-11 — the
+   topbar no longer renders a brand cluster. */
 
 /* Hamburger — mobile only (the desktop sidebar expands on hover);
    shown again in the ≤767px query */
@@ -3140,32 +3171,8 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--accent-color);
 }
 
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-family: 'Outfit', sans-serif;
-}
-
-.breadcrumb-brand {
-  font-weight: 700;
-  color: var(--text-primary);
-  font-size: 1.1rem;
-}
-
-.breadcrumb-separator {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-}
-
-.breadcrumb-current {
-  color: var(--accent-color);
-  font-weight: 500;
-  font-size: 1rem;
-  background: var(--accent-glow);
-  padding: 4px 12px;
-  border-radius: 20px;
-}
+/* Page-chip breadcrumb rules removed 2026-10-12 (chip dropped from
+   TopBar.tsx — the sidebar highlight is the sole orientation cue). */
 
 .create-btn-top:hover {
   background: var(--accent-hover);

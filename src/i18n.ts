@@ -46,7 +46,6 @@ const id = {
   navGraph: 'Graf Pengetahuan',
   navMonitoring: 'Pemantauan Sistem',
   navTaxonomy: 'Manajer Taksonomi',
-  navDashboard: 'Dasbor',
 
   /* Sidebar (2026-10-11 monochrome redesign) */
   sbSearchPlaceholder: 'Cari menu',
@@ -63,6 +62,14 @@ const id = {
   sbHelpKeysOpen: 'Buka menu yang sedang difokus',
   sbHelpKeysClose: 'Tutup dialog yang terbuka',
   sbHelpVersion: 'Versi',
+
+  /* Route error boundary (2026-10-12): fallback panel shown inside the
+     shell when a page crashes during render or a lazy chunk's import
+     rejects (e.g. a stale vite dep cache). */
+  routeErrorTitle: 'Halaman gagal dimuat',
+  routeErrorBody: 'Terjadi kesalahan saat memuat halaman ini. Coba muat ulang, atau buka halaman lain melalui menu.',
+  routeErrorReload: 'Muat ulang halaman',
+  routeErrorDetails: 'Detail teknis',
 
   /* Settings dialog shell */
   settings: 'Pengaturan',
@@ -393,7 +400,6 @@ const en: Record<StringKey, string> = {
   navGraph: 'Knowledge Graph',
   navMonitoring: 'System Monitoring',
   navTaxonomy: 'Taxonomy Manager',
-  navDashboard: 'Dashboard',
 
   /* Sidebar (2026-10-11 monochrome redesign) */
   sbSearchPlaceholder: 'Search menus',
@@ -410,6 +416,11 @@ const en: Record<StringKey, string> = {
   sbHelpKeysOpen: 'Open the focused menu',
   sbHelpKeysClose: 'Close any open dialog',
   sbHelpVersion: 'Version',
+
+  routeErrorTitle: 'This page failed to load',
+  routeErrorBody: 'Something went wrong while loading this page. Try reloading, or open another page from the menu.',
+  routeErrorReload: 'Reload page',
+  routeErrorDetails: 'Technical details',
 
   settings: 'Settings',
   closeSettings: 'Close settings',

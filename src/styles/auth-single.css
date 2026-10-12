@@ -162,13 +162,15 @@
 }
 
 /* Seat the reused 44px .auth-eye toggle (components.css: absolute,
-   right:8px) inside the 52px field: (52 - 44) / 2 = 4px. */
+   right:8px) inside the 52px field: (52 - 44) / 2 = 4px. Seated from the
+   BOTTOM: at ≥768px the wrapper also carries the static label above the
+   input, so a top-referenced seat drifts up into the label row. */
 .float-field--eye input {
   padding-right: 56px;
 }
 
 .float-field--eye .auth-eye {
-  top: 4px;
+  bottom: 4px;
 }
 
 .float-field label {
@@ -475,13 +477,20 @@
   }
 
   /* 56px desktop fields with plain side padding (no float seat); the
-     eye toggle re-seats to (56 - 44) / 2 = 6px. */
+     eye toggle re-seats to (56 - 44) / 2 = 6px, bottom-referenced. */
   .float-field input {
     height: 56px;
     padding: 0 16px;
   }
 
+  /* Re-assert the eye reserve: the plain padding above has equal
+     specificity and lands later in the file, so without this the typed
+     text runs under the toggle (bug fixed 2026-10-11). */
+  .float-field--eye input {
+    padding-right: 56px;
+  }
+
   .float-field--eye .auth-eye {
-    top: 6px;
+    bottom: 6px;
   }
 }

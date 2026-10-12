@@ -5,6 +5,7 @@ import Auth from './components/Auth';
 import TopBar from './components/TopBar';
 import Footer from './components/Footer';
 import LoadingOrb from './components/LoadingOrb';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
 import { useAuth } from './hooks/useAuth';
 import { useStrings } from './i18n';
 import { LEGACY_LOGIN } from './config';
@@ -75,12 +76,17 @@ function App() {
   if (!isAuthenticated) {
     return (
       <Suspense fallback={<div style={{ padding: '48px', textAlign: 'center' }}>Loading…</div>}>
-        <Routes>
-          <Route path="/login" element={<Auth />} />
-          {LEGACY_LOGIN && <Route path="/login/legacy" element={<AuthLegacy />} />}
-          <Route path="/" element={<LandingPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        {/* Keyed boundary (2026-10-12): a rejected lazy chunk (LandingPage /
+            AuthLegacy) degrades to a reload panel instead of blanking the
+            document; the pathname key remounts it fresh on navigation. */}
+        <RouteErrorBoundary key={location.pathname}>
+          <Routes>
+            <Route path="/login" element={<Auth />} />
+            {LEGACY_LOGIN && <Route path="/login/legacy" element={<AuthLegacy />} />}
+            <Route path="/" element={<LandingPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </RouteErrorBoundary>
       </Suspense>
     );
   }
@@ -116,6 +122,14 @@ function App() {
             }>
             <div className="tab-panel--active" ref={scrollerRef}>
               <div className="route-inset">
+                {/* Route-level boundary (2026-10-12): wraps only the routed
+                    content, so a page crash or rejected lazy chunk shows a
+                    reload panel while sidebar/topbar/footer stay usable.
+                    key={location.pathname} gives every navigation a fresh
+                    boundary — leaving a broken route recovers without a
+                    reload; the reload button covers React.lazy's cached
+                    import rejection. See RouteErrorBoundary.tsx. */}
+                <RouteErrorBoundary key={location.pathname}>
                 <Routes>
                   {/* Role-based default redirects */}
                   <Route path="/" element={
@@ -187,6 +201,7 @@ function App() {
                     </>
                   )}
                 </Routes>
+                </RouteErrorBoundary>
               </div>
               <Footer />
             </div>

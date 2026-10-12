@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  ChevronDown, ChevronsLeft, ChevronsRight, Layers, Scale, Search,
+  ChevronDown, ChevronsLeft, ChevronsRight, Layers, Search,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useStrings } from '../i18n';
@@ -149,7 +149,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
       >
         <div className="sb-header">
           <span className="sb-mark" aria-hidden="true">
-            <Scale size={20} />
+            <img src="/LegalAnalyzerLogo.png" alt="" className="sb-mark-logo" />
           </span>
           <span className="sb-brand">
             <span className="sb-brand-name">Legal Analyzer</span>

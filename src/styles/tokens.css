@@ -66,13 +66,12 @@
   --sb-surface: #ffffff;
   --sb-text: #101828;
   --sb-text-2: #667085;
-  --sb-fill-active: #f2f4f7;
-  --sb-fill-hover: #f9fafb;
+  --sb-fill-active: #e4e7ec; /* deepened 2026-10-11: #F2F4F7 on white measured ~1.10:1 — users could not spot the open tab */
+  --sb-fill-hover: #f2f4f7;
   --sb-border: rgba(16, 24, 40, 0.08);
   --sb-badge-bg: #101828;
   --sb-badge-text: #ffffff;
-  --sb-mark-bg: #101828;
-  --sb-mark-fg: #ffffff;
+  --sb-mark-bg: transparent; /* light shows the emblem bare (dark-line art on white) */
   --sb-tip-bg: #101828;
   --sb-tip-text: #ffffff;
   --topbar-height: 64px;
@@ -147,13 +146,12 @@
   --sb-surface: #101012;
   --sb-text: #e4e7ec;
   --sb-text-2: #98a2b3;
-  --sb-fill-active: #26282e;
-  --sb-fill-hover: #1d1f24;
+  --sb-fill-active: #32353c; /* deepened 2026-10-11, same reason as light */
+  --sb-fill-hover: #22252b; /* kept below the #26282E badge bg so badges never blend into a hovered row */
   --sb-border: rgba(255, 255, 255, 0.08);
   --sb-badge-bg: #26282e;
   --sb-badge-text: #e4e7ec;
-  --sb-mark-bg: #ffffff;
-  --sb-mark-fg: #101828;
+  --sb-mark-bg: #ffffff; /* the plate returns in dark: the emblem PNG is dark-line art, never invert */
   --sb-tip-bg: #26282e;
   --sb-tip-text: #e4e7ec;
 }
