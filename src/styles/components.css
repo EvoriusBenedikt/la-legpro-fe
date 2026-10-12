@@ -3852,6 +3852,24 @@ h1, h2, h3, h4, h5, h6 {
   outline-offset: 2px;
 }
 
+/* Language flags (2026-10-12): inline SVGs shared by the auth pill and
+   the settings language row (components/LangFlags.tsx). Base geometry
+   lives here; each surface scales it. Emoji flags are avoided — Windows
+   renders regional indicators as letter pairs. */
+.lang-flag {
+  width: 24px;
+  height: 16px;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px var(--border-color);
+  transition: opacity 0.15s ease;
+}
+
+.settings-segment .lang-flag {
+  width: 18px;
+  height: 12px;
+  border-radius: 2px;
+}
+
 /* Select control (chat font row) — the repository's inline select look
    promoted to a class; reset link beside it mirrors the reference's
    "Use theme font" affordance. */

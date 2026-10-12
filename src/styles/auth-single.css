@@ -89,19 +89,13 @@
   box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
 }
 
-.auths-flag {
-  width: 24px;
-  height: 16px;
-  border-radius: 3px;
-  box-shadow: 0 0 0 1px var(--border-color);
-  transition: opacity 0.15s ease;
-}
-
-.auths-lang-btn:not(.is-active) .auths-flag {
+/* .lang-flag base geometry moved to components.css (2026-10-12, shared
+   with the Settings language row); only the auth-pill dimming stays. */
+.auths-lang-btn:not(.is-active) .lang-flag {
   opacity: 0.45;
 }
 
-.auths-lang-btn:not(.is-active):hover .auths-flag {
+.auths-lang-btn:not(.is-active):hover .lang-flag {
   opacity: 0.8;
 }
 

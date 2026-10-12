@@ -1,4 +1,4 @@
-import { useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useRef, useState, useSyncExternalStore, type ReactNode, type ComponentType } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Settings, X, ChevronRight, Palette, SunMoon, SlidersHorizontal,
@@ -6,6 +6,7 @@ import {
   CalendarDays, Settings2, Database, Download, Upload, RotateCcw, History,
 } from 'lucide-react';
 import { botAvatarTypes } from 'bot-avatars';
+import { FlagId, FlagUs } from './LangFlags';
 import {
   getSettingsSnapshot, getSettings, setSetting, subscribeSettings,
   importSettings, resetSettings,
@@ -93,7 +94,10 @@ function Switch({
 interface SegOption {
   value: string;
   label: string;
-  icon?: Icon;
+  /* ComponentType (not the lucide Icon alias) so non-lucide glyphs — the
+     shared LangFlags SVGs on the language row, 2026-10-12 — can occupy
+     the slot; lucide icons remain assignable since size is optional. */
+  icon?: ComponentType<{ size?: number | string }>;
 }
 
 /** Segmented radiogroup: native radios visually hidden inside segment
@@ -405,8 +409,8 @@ function LanguageSection() {
         {(ids) => (
           <Segmented
             options={[
-              { value: 'id', label: 'Indonesia', icon: Languages },
-              { value: 'en', label: 'English', icon: Languages },
+              { value: 'id', label: 'Indonesia', icon: FlagId },
+              { value: 'en', label: 'English', icon: FlagUs },
             ]}
             value={s.locale}
             name="settings-language"
