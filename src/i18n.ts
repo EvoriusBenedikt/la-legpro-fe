@@ -229,6 +229,22 @@ const id = {
   opDeleteTitle: 'Hapus percakapan?',
   opDeleteBody: '"{t}" akan dihapus secara permanen.',
   opDeleteConfirm: 'Hapus',
+  /* Conversation panel round 4 (2026-10-12): multi-select bulk delete,
+     sort menu, and pinning (Claude-style sidebar). */
+  opSelectMode: 'Pilih percakapan',
+  opSelectedCount: '{n} dipilih',
+  opSelectAll: 'Pilih semua',
+  opDeleteSelected: 'Hapus terpilih',
+  opDeleteManyTitle: 'Hapus percakapan?',
+  opDeleteManyBody: '{n} percakapan akan dihapus permanen dari perangkat ini.',
+  opSortLabel: 'Urutkan percakapan',
+  opSortCreated: 'Tanggal dibuat',
+  opSortName: 'Nama (A–Z)',
+  opSortActivity: 'Aktivitas terakhir',
+  opPinned: 'Disematkan',
+  opPin: 'Sematkan',
+  opUnpin: 'Lepas sematan',
+  opClearMessages: 'Hapus isi percakapan',
   opCancel: 'Batal',
   opSave: 'Simpan',
   opServerError:
@@ -239,6 +255,15 @@ const id = {
   opGreetAfternoon: 'Selamat siang',
   opGreetNight: 'Selamat malam',
   opGreetOffer: 'Bagaimana Sage dapat membantu Anda?',
+  /* Chat attachments (2026-10-12): paperclip upload of images + PDFs in
+     the Legal Opinion composer; {e} interpolates the failure reason. */
+  opAttach: 'Lampirkan berkas',
+  opAttachProcessing: 'Memproses…',
+  opAttachFailed: 'Gagal: {e}',
+  opAttachSendHint: 'Tunggu lampiran selesai diproses',
+  opAttachGhost: 'Berkas tidak tersedia',
+  opAttachRemove: 'Hapus lampiran',
+  opAttachClose: 'Tutup',
 
   /* Document Drawer (migrated 2026-10-08, critique remediation P2-5): the
      drawer follows the app locale like the rest of the chrome; async error
@@ -572,6 +597,22 @@ const en: Record<StringKey, string> = {
   opDeleteTitle: 'Delete conversation?',
   opDeleteBody: '"{t}" will be permanently deleted.',
   opDeleteConfirm: 'Delete',
+  /* Conversation panel round 4 (2026-10-12): multi-select bulk delete,
+     sort menu, and pinning (Claude-style sidebar). */
+  opSelectMode: 'Select conversations',
+  opSelectedCount: '{n} selected',
+  opSelectAll: 'Select all',
+  opDeleteSelected: 'Delete selected',
+  opDeleteManyTitle: 'Delete conversations?',
+  opDeleteManyBody: '{n} conversations will be permanently deleted from this device.',
+  opSortLabel: 'Sort conversations',
+  opSortCreated: 'Date created',
+  opSortName: 'Name (A–Z)',
+  opSortActivity: 'Last activity',
+  opPinned: 'Pinned',
+  opPin: 'Pin',
+  opUnpin: 'Unpin',
+  opClearMessages: 'Clear messages',
   opCancel: 'Cancel',
   opSave: 'Save',
   opServerError:
@@ -584,6 +625,15 @@ const en: Record<StringKey, string> = {
   // greeting; "Good night" is a parting phrase.
   opGreetNight: 'Good evening',
   opGreetOffer: 'How can Sage help you?',
+  /* Chat attachments (2026-10-12): paperclip upload of images + PDFs in
+     the Legal Opinion composer; {e} interpolates the failure reason. */
+  opAttach: 'Attach a file',
+  opAttachProcessing: 'Processing…',
+  opAttachFailed: 'Failed: {e}',
+  opAttachSendHint: 'Wait for attachments to finish processing',
+  opAttachGhost: 'File unavailable',
+  opAttachRemove: 'Remove attachment',
+  opAttachClose: 'Close',
 
   /* Document Drawer (migrated 2026-10-08, critique remediation P2-5) */
   drawerTabsLabel: 'Document sections',
@@ -701,6 +751,36 @@ const en: Record<StringKey, string> = {
 };
 
 export const STRINGS: Record<Locale, Record<StringKey, string>> = { id, en };
+
+/* Greeting variant pools (2026-10-12 round-3 review: Claude-style
+   rotating greetings). Lives beside STRINGS, not inside it — STRINGS'
+   value type is string-only. Templates may use {time} (the time-of-day
+   salutation) and {offer} (opGreetOffer); LegalOpinion picks one entry
+   per conversation via a pure hash of the conversation id, so a
+   conversation keeps its greeting across renders and reloads while
+   each new chat rotates. */
+export const GREETING_POOLS: Record<Locale, string[]> = {
+  id: [
+    '{time}! {offer}',
+    '{time}! Siap membantu — apa yang kita analisis lebih dulu?',
+    '{time}! Regulasi mana yang kita bedah hari ini?',
+    'Halo! Sage di sini. {offer}',
+    '{time}! Tanyakan apa saja soal regulasi keuangan dan perbankan.',
+    'Selamat datang kembali! {offer}',
+    '{time}! Dokumen atau aturan mana yang kita tinjau bersama?',
+    'Halo — Sage siap membantu. Apa yang bisa saya carikan untuk Anda?',
+  ],
+  en: [
+    '{time}! {offer}',
+    '{time}! Ready when you are — what shall we analyze first?',
+    '{time}! Which regulation are we untangling today?',
+    'Hello! Sage here. {offer}',
+    '{time}! Ask me anything about financial and banking regulations.',
+    'Welcome back! {offer}',
+    '{time}! What document or rule should we review together?',
+    'Hi there — Sage at your service. What can I dig up for you?',
+  ],
+};
 
 /** Fill {placeholders} in a template string. Unknown keys stay as-is. */
 export function fill(template: string, vars: Record<string, string | number>): string {

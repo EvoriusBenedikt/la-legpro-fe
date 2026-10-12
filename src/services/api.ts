@@ -69,4 +69,82 @@ export function isTimeoutError(e: unknown): boolean {
   return axios.isAxiosError(e) && (e.code === 'ECONNABORTED' || e.code === 'ETIMEDOUT');
 }
 
+// ── Chat attachments (2026-10-12) ──────────────────────────────────────────
+// Clients for the /api/chat-attachments endpoints (BE Task 1). Exported as
+// named helpers — like isHttpError above — because three surfaces share them
+// (composer chips, history chips, delete handlers) and the error-code mapping
+// must live in exactly one place.
+
+export interface AttachmentMeta {
+  id: string;
+  kind: 'image' | 'pdf';
+  filename: string;
+  mime: string;
+  bytes: number;
+  status: 'processing' | 'ready' | 'failed';
+  error: string | null;
+  storage_mode: string | null;
+}
+
+/** BE 413/415/422 carry machine codes ('oversize' | 'type' | 'limit') in
+    `detail`. Rethrow those as Error(code) so chip callers can map to i18n
+    strings; every other failure passes through untouched for the generic
+    isHttpError/isNetworkError handling at call sites. */
+function rethrowUploadCode(e: unknown): never {
+  if (isHttpError(e)) {
+    const code = e.response.data?.detail;
+    if (code === 'oversize' || code === 'type' || code === 'limit') {
+      throw new Error(code);
+    }
+  }
+  throw e;
+}
+
+/** Upload one file (multipart, one file per POST — BE contract). Images come
+    back status 'ready'; PDFs 'processing' until the BE pipeline flips them. */
+export async function uploadAttachment(
+  conversationId: string,
+  file: File
+): Promise<AttachmentMeta> {
+  const form = new FormData();
+  form.append('conversation_id', conversationId);
+  form.append('file', file);
+  try {
+    const res = await api.post('/api/chat-attachments', form);
+    return res.data as AttachmentMeta;
+  } catch (e) {
+    rethrowUploadCode(e);
+  }
+}
+
+/** All attachment metadata for one conversation (single GET per conversation
+    switch — history chips hydrate from this). */
+export async function listAttachments(conversationId: string): Promise<AttachmentMeta[]> {
+  const res = await api.get('/api/chat-attachments', {
+    params: { conversation_id: conversationId },
+  });
+  return res.data as AttachmentMeta[];
+}
+
+/** Content fetch through axios so the JWT rides in the header (never in a
+    URL). Blob feeds <img> object URLs and the PDF new-tab window. */
+export async function fetchAttachmentBlob(id: string): Promise<Blob> {
+  const res = await api.get(`/api/chat-attachments/${id}/content`, {
+    responseType: 'blob',
+  });
+  return res.data as Blob;
+}
+
+export async function deleteAttachment(id: string): Promise<void> {
+  await api.delete(`/api/chat-attachments/${id}`);
+}
+
+/** Bulk delete — fired by conversation delete, bulk delete, and
+    clear-messages so server storage never outlives the FE conversation. */
+export async function deleteConversationAttachments(conversationId: string): Promise<void> {
+  await api.delete('/api/chat-attachments', {
+    params: { conversation_id: conversationId },
+  });
+}
+
 export default api;
