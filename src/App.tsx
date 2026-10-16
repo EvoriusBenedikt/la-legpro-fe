@@ -9,6 +9,8 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import { useAuth } from './hooks/useAuth';
 import { useStrings } from './i18n';
 import { LEGACY_LOGIN } from './config';
+import { JobStatusProvider } from './context/JobStatusContext';
+import { UploadProvider } from './context/ContractUploadContext';
 import './index.css';
 
 // Lazy load heavy components
@@ -97,6 +99,8 @@ function App() {
      the sidebar is a fixed-position drawer, so the shell naturally
      takes the full width. */
   return (
+    <JobStatusProvider userId={user!.id}>
+    <UploadProvider>
     <div className="layout-container dashboard-main">
       <Sidebar
         mobileOpen={navOpen}
@@ -211,6 +215,8 @@ function App() {
         </div>
       </div>
     </div>
+    </UploadProvider>
+    </JobStatusProvider>
   );
 }
 

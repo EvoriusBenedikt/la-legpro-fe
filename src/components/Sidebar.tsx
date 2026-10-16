@@ -9,6 +9,7 @@ import { buildNav, type NavItem } from '../navConfig';
 import { useNavCounts } from '../hooks/useNavCounts';
 import SettingsDialog from './SettingsDialog';
 import HelpDialog from './HelpDialog';
+import NotificationDock from './NotificationDock';
 
 interface SidebarProps {
   /** Mobile: off-canvas drawer open state */
@@ -54,6 +55,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   }, [collapsed]);
 
   const [query, setQuery] = useState('');
+  const [repoOpen, setRepoOpen] = useState(true);
   const [moreOpen, setMoreOpen] = useState(true);
   const navRef = useRef<HTMLElement>(null);
 
@@ -73,6 +75,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
   }
   const secondary = model.secondary.filter(matches);
   const searching = q.length > 0;
+  const repoExpanded = searching || repoOpen;
   const moreExpanded = searching || moreOpen;
   const noMatch =
     searching && primary.length === 0 && !content && secondary.length === 0;
@@ -153,7 +156,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
           </span>
           <span className="sb-brand">
             <span className="sb-brand-name">Legal Analyzer</span>
-            <span className="sb-brand-sub">LA Lintasarta Core</span>
+            <span className="sb-brand-sub">Lintasarta Core</span>
           </span>
           <button
             type="button"
@@ -193,8 +196,19 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
 
           {content && (
             <div className="sb-group">
-              {renderRow(content.parent, false, railMode && content.children.some(isActive))}
-              <div className="sb-group-children">
+              <button
+                type="button"
+                className={`sb-row sb-group-btn${railMode && content.children.some(isActive) ? ' sb-active' : ''}`}
+                aria-expanded={repoExpanded}
+                aria-controls="sb-repo"
+                onClick={() => setRepoOpen((o) => !o)}
+                data-tip={t[content.parent.labelKey]}
+              >
+                {content.parent.icon && <content.parent.icon size={20} className="sb-icon" aria-hidden="true" />}
+                <span className="sb-label">{t[content.parent.labelKey]}</span>
+                <ChevronDown size={16} className="sb-chevron" aria-hidden="true" />
+              </button>
+              <div className="sb-group-children" id="sb-repo">
                 {content.children.map((item) => renderRow(item, true))}
               </div>
             </div>
@@ -215,7 +229,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
                 <ChevronDown size={16} className="sb-chevron" aria-hidden="true" />
               </button>
               <div className="sb-group-children" id="sb-more">
-                {secondary.map((item) => renderRow(item))}
+                {secondary.map((item) => renderRow(item, true))}
               </div>
             </div>
           )}
@@ -226,6 +240,7 @@ export default function Sidebar({ mobileOpen = false, onClose }: SidebarProps = 
         <div className="sb-footer">
           <SettingsDialog variant="sidebar" triggerLabel={t.settings} />
           <HelpDialog triggerLabel={t.sbHelp} />
+          <NotificationDock />
         </div>
       </aside>
     </>

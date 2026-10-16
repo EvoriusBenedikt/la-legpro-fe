@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Database, File, Upload, CheckCircle2, BookOpen, FolderOpen, Zap, FileCheck, X, Trash2, Clock, Bot, Scale, AlertCircle, Loader2, History } from 'lucide-react';
+import { Search, Database, File, Upload, CheckCircle2, BookOpen, FolderOpen, Zap, FileCheck, X, Trash2, Clock, Bot, Scale, AlertCircle, AlertTriangle, Loader2, History } from 'lucide-react';
 import DocumentDrawer from './DocumentDrawer';
 import LoadingOrb from './LoadingOrb';
 import WorkBeam from './WorkBeam';
 import { useDialogA11y } from '../hooks/useDialogA11y';
 import { useAuth } from '../hooks/useAuth';
+import { useJobStatus } from '../context/JobStatusContext';
 import ComplianceResultsViewer, {
   type ComplianceResult,
   type ComplianceSummary,
@@ -132,8 +133,84 @@ const shortJudul = (judul: string): string => {
   return (sp >= 45 ? cut.slice(0, sp) : cut.trimEnd()) + '…';
 };
 
+interface ConfirmState {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  /** 'danger' (default) for destructive acts; 'primary' for reversible ones. */
+  confirmTone?: 'danger' | 'primary';
+  /** Resolves → dialog closes. Rejects → dialog stays open with the error
+      inline, so the user can retry or cancel with full context. */
+  onConfirm: () => Promise<void>;
+}
+
+/** System dialog standard (critique 2026-10-12 P1·1): replaces every native
+    confirm()/alert() destructive path with the house ConfirmDialog grammar —
+    same pattern as AdminDashboard and ContractMonitor (useDialogA11y trap +
+    .confirm-modal, pending state blocks Esc/backdrop mid-mutation, failures
+    surface inline instead of the dialog vanishing). */
+const ConfirmDialog = ({ state, onClose }: { state: ConfirmState; onClose: () => void }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Mounted only while open; Escape is a no-op mid-mutation so the dialog
+  // cannot vanish during the DELETE. Focus restores to the trigger on close.
+  useDialogA11y(true, pending ? () => undefined : onClose, dialogRef);
+
+  const runConfirm = async () => {
+    setPending(true);
+    setError(null);
+    try {
+      await state.onConfirm();
+      onClose();
+    } catch (e) {
+      // Stay open: the user sees why it failed and can retry or cancel.
+      setError(e instanceof Error ? e.message : 'Terjadi kesalahan tak terduga.');
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div
+      className="modal-overlay"
+      onMouseDown={e => { if (e.target === e.currentTarget && !pending) onClose(); }}
+    >
+      <div
+        ref={dialogRef}
+        className="confirm-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="repo-confirm-title"
+        aria-busy={pending}
+        tabIndex={-1}
+      >
+        <h3 className="confirm-modal-title" id="repo-confirm-title">{state.title}</h3>
+        <p className="confirm-modal-body">{state.body}</p>
+        {error && <p className="confirm-modal-error" role="alert">{error}</p>}
+        <div className="confirm-modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={pending}>
+            Batal
+          </button>
+          <button
+            type="button"
+            className={`btn ${state.confirmTone === 'primary' ? 'btn-primary' : 'btn-danger'}`}
+            onClick={() => { void runConfirm(); }}
+            disabled={pending}
+          >
+            {pending && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
+            {pending ? 'Memproses...' : state.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export default function LegalRepository() {
   const { user, token } = useAuth();
+  const { addJob, updateJob } = useJobStatus();
   const { formatDate, formatDateTime } = useDateFormatters();
   // URL state (critique re-score P1): search/filters/sort/page restore from the
   // query string on mount and mirror back (debounced, replace) on change, so a
@@ -165,6 +242,26 @@ export default function LegalRepository() {
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [taxonomyList, setTaxonomyList] = useState<{id: number, name: string}[]>([]);
   const [selectedTaxonomy] = useState<string>('');
+
+  // --- House dialog + feedback grammar (critique 2026-10-12 P1·1) ---
+  // Destructive actions route through the module-level ConfirmDialog; result
+  // messages go to a floating .admin-feedback banner (errors persist until
+  // dismissed, successes auto-clear after 8 s — AdminDashboard grammar).
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const feedbackTimer = useRef<number | undefined>(undefined);
+  const showFeedback = useCallback((kind: 'success' | 'error', text: string) => {
+    window.clearTimeout(feedbackTimer.current);
+    setFeedback({ kind, text });
+    if (kind === 'success') {
+      feedbackTimer.current = window.setTimeout(() => setFeedback(null), 8000);
+    }
+  }, []);
+  useEffect(() => () => window.clearTimeout(feedbackTimer.current), []);
+  // Pending-confirm card state: per-doc busy + inline error (replaces the
+  // native alerts around handleConfirmPending).
+  const [pendingBusy, setPendingBusy] = useState<string | null>(null);
+  const [pendingActionError, setPendingActionError] = useState<{ docId: string; text: string } | null>(null);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
   // Adopt an externally changed ?tab during render (React's "adjust
@@ -285,54 +382,70 @@ export default function LegalRepository() {
     }
   };
 
-  const handleDeleteDocument = async (docId: string) => {
-    if (!window.confirm("Apakah Anda yakin ingin menghapus dokumen ini? Semua relasi dan akses akan dihapus.")) return;
-    
-    try {
-      await api.delete(`/api/repository/document/${docId}`).catch((e) => {
-        if (e.response) throw new Error(e.response.data?.detail || 'Gagal menghapus dokumen');
-        throw e;
-      });
-      
-      alert("Dokumen berhasil dihapus!");
-      fetchDocs();
-      fetchPendingDocs();
-    } catch (err) {
-      alert(`Gagal menghapus dokumen: ${err instanceof Error ? err.message : String(err)}`);
-    }
+  // Opens the house ConfirmDialog (danger): names the document that dies,
+  // runs the DELETE in a pending state, failure surfaces inline in the
+  // dialog, success lands in the feedback banner. Was confirm() + 2 alerts.
+  const handleDeleteDocument = (doc: OJKDocument) => {
+    setConfirmState({
+      title: 'Hapus dokumen?',
+      body: `"${shortJudul(doc.judul)}" akan dihapus permanen beserta semua relasi dan aksesnya. Tindakan ini tidak dapat dibatalkan.`,
+      confirmLabel: 'Hapus dokumen',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/api/repository/document/${doc.id}`);
+        } catch (e) {
+          // Rethrow so the dialog stays open with the reason inline.
+          throw new Error(isHttpError(e) ? (e.response.data?.detail || 'Gagal menghapus dokumen.') : 'Terjadi kesalahan koneksi.');
+        }
+        showFeedback('success', `"${shortJudul(doc.judul)}" dihapus dari repositori.`);
+        fetchDocs();
+        fetchPendingDocs();
+      },
+    });
   };
 
   const handleConfirmPending = async (docId: string, klasifikasi: string, jenis?: string) => {
+    setPendingBusy(docId);
+    setPendingActionError(null);
     try {
       await api.post(`/api/repository/pending/${docId}/confirm`, { klasifikasi, jenis });
-      alert('Dokumen berhasil dikonfirmasi dan dimasukkan ke repositori!');
+      // The confirmed card leaves the queue on refetch, so the success
+      // message must outlive it: floating banner instead of a native alert.
+      showFeedback('success', 'Dokumen berhasil dikonfirmasi dan dimasukkan ke repositori.');
       fetchPendingDocs();
       fetchDocs();
     } catch (e) {
       if (isHttpError(e)) {
-        alert(e.response?.data?.detail || 'Gagal mengkonfirmasi dokumen.');
+        setPendingActionError({ docId, text: e.response?.data?.detail || 'Gagal mengkonfirmasi dokumen.' });
       } else {
         console.error(e);
-        alert('Terjadi kesalahan koneksi.');
+        setPendingActionError({ docId, text: 'Terjadi kesalahan koneksi.' });
       }
+    } finally {
+      setPendingBusy(null);
     }
   };
 
   // Reject = delete the pending doc (file + row) before it ever reaches the
   // repository; reuses the audited DELETE endpoint (log_audit DELETE_DOCUMENT).
-  const handleRejectPending = async (doc: OJKDocument) => {
-    if (!window.confirm(`Tolak "${doc.judul}"? Dokumen akan dihapus permanen dari antrean dan tidak masuk ke repositori.`)) return;
-    try {
-      await api.delete(`/api/repository/document/${doc.id}`);
-      fetchPendingDocs();
-    } catch (e) {
-      if (isHttpError(e)) {
-        alert(e.response?.data?.detail || 'Gagal menolak dokumen.');
-      } else {
-        console.error(e);
-        alert('Terjadi kesalahan koneksi.');
-      }
-    }
+  // Opens the house ConfirmDialog (danger) — was window.confirm + alerts.
+  const handleRejectPending = (doc: OJKDocument) => {
+    setConfirmState({
+      title: 'Tolak dokumen?',
+      body: `"${shortJudul(doc.judul)}" akan dihapus permanen dari antrean dan tidak masuk ke repositori.`,
+      confirmLabel: 'Tolak dokumen',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/api/repository/document/${doc.id}`);
+        } catch (e) {
+          if (!isHttpError(e)) console.error(e);
+          // Rethrow so the dialog stays open with the reason inline.
+          throw new Error(isHttpError(e) ? (e.response?.data?.detail || 'Gagal menolak dokumen.') : 'Terjadi kesalahan koneksi.');
+        }
+        showFeedback('success', `"${shortJudul(doc.judul)}" ditolak dan dihapus dari antrean.`);
+        fetchPendingDocs();
+      },
+    });
   };
 
   const fetchDocs = async () => {
@@ -367,7 +480,7 @@ export default function LegalRepository() {
       setSelectedHistoryDoc(response.data);
     } catch (err) {
       console.error(err);
-      alert('Gagal memuat detail hasil analisis');
+      showFeedback('error', 'Gagal memuat detail hasil analisis.');
     } finally {
       setLoadingReportId(null);
     }
@@ -414,17 +527,16 @@ export default function LegalRepository() {
         expires_at: shareExpiry || null
       });
       
-      alert(res.data.message || 'Akses berhasil diberikan.');
+      showFeedback('success', res.data.message || 'Akses berhasil diberikan.');
       setShowShareModal(null);
       setShareUser('');
       setShareReason('');
       setShareExpiry('');
     } catch (e) {
-      if (isHttpError(e)) {
-        alert(e.response.data?.detail || 'Gagal memberikan akses.');
-      } else {
-        alert('Terjadi kesalahan saat memberikan akses.');
-      }
+      // Inline in the share modal, which stays open on failure — was alerts.
+      setShareError(isHttpError(e)
+        ? (e.response.data?.detail || 'Gagal memberikan akses.')
+        : 'Terjadi kesalahan saat memberikan akses.');
     } finally {
       setIsSharing(false);
     }
@@ -547,10 +659,10 @@ export default function LegalRepository() {
       setGeneratedDoc(response.data.generated_document);
     } catch (e) {
       if (isHttpError(e)) {
-        alert('Gagal membuat dokumen dari template');
+        showFeedback('error', 'Gagal membuat dokumen dari template.');
       } else {
         console.error(e);
-        alert('Terjadi kesalahan koneksi');
+        showFeedback('error', 'Terjadi kesalahan koneksi.');
       }
     } finally {
       setIsGenerating(false);
@@ -600,19 +712,31 @@ export default function LegalRepository() {
     URL.revokeObjectURL(url);
   };
 
-  const handleClearFailedDocuments = async () => {
-    if (!confirm('Apakah Anda yakin ingin menghapus semua dokumen yang gagal diproses (termasuk duplikat)?')) return;
-    try {
-      const response = await api.delete('/api/repository/failed');
-      alert(response.data.message);
-      fetchDocs();
-    } catch (e) {
-      if (isHttpError(e)) {
-        alert(e.response.data?.detail || 'Gagal menghapus dokumen.');
-      } else {
-        alert('Terjadi kesalahan koneksi.');
-      }
-    }
+  // Client-side mirror of DELETE /api/repository/failed (BE predicate:
+  // status LIKE 'Gagal%', which includes 'Gagal - Duplikat'), so the confirm
+  // names real counts before anything dies (critique 2026-10-12 P1·2 — the
+  // button said "Bersihkan Duplikat" while deleting every failed doc, and an
+  // auto-accepted native confirm once destroyed 18 rows).
+  const failedDocsAll = documents.filter(d => d.status.startsWith('Gagal'));
+  const failedTotal = failedDocsAll.length;
+  const failedDupTotal = failedDocsAll.filter(d => d.status.includes('Duplikat')).length;
+
+  const handleClearFailedDocuments = () => {
+    setConfirmState({
+      title: 'Bersihkan dokumen gagal?',
+      body: `${failedTotal} dokumen berstatus Gagal (termasuk ${failedDupTotal} duplikat) akan dihapus permanen dari repositori beserta berkasnya di server. Tindakan ini tidak dapat dibatalkan.`,
+      confirmLabel: `Hapus ${failedTotal} dokumen`,
+      onConfirm: async () => {
+        try {
+          const response = await api.delete('/api/repository/failed');
+          showFeedback('success', response.data.message || `${failedTotal} dokumen gagal dihapus.`);
+        } catch (e) {
+          // Rethrow so the dialog stays open with the reason inline.
+          throw new Error(isHttpError(e) ? (e.response.data?.detail || 'Gagal menghapus dokumen.') : 'Terjadi kesalahan koneksi.');
+        }
+        fetchDocs();
+      },
+    });
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -622,7 +746,7 @@ export default function LegalRepository() {
     // Filter PDFs only
     const validFiles = Array.from(files).filter(f => f.type === "application/pdf");
     if (validFiles.length === 0) {
-      alert("Hanya format PDF yang didukung.");
+      showFeedback('error', 'Hanya format PDF yang didukung.');
       return;
     }
 
@@ -642,12 +766,16 @@ export default function LegalRepository() {
       if (selectedTaxonomy) formData.append("jenis_dokumen", selectedTaxonomy);
       formData.append("klasifikasi", selectedKlasifikasi[0] ?? 'Umum');
 
+      const repoJobId = `repo-${Date.now()}-${i}`;
+      addJob(repoJobId, 'uploading', file.name, 'repository');
+
       try {
         await api.post(endpoint, formData);
-
         successCount++;
+        updateJob(repoJobId, 'completed');
       } catch (error) {
         console.error("Gagal mengunggah:", file.name, error);
+        updateJob(repoJobId, 'failed');
       }
     }
 
@@ -933,6 +1061,30 @@ export default function LegalRepository() {
 
   return (
     <div className="view-container repository-view">
+      {/* Mutation feedback — house .admin-feedback grammar (components.css),
+          floated top-right because this page scrolls far past the header;
+          role=status/alert announces it regardless of scroll position. */}
+      {feedback && (
+        <div
+          className={`admin-feedback admin-feedback--${feedback.kind}`}
+          role={feedback.kind === 'error' ? 'alert' : 'status'}
+          style={{ position: 'fixed', top: '76px', right: '24px', zIndex: 900, maxWidth: '420px', margin: 0, boxShadow: '0 8px 24px rgba(2, 6, 23, 0.35)' }}
+        >
+          {feedback.kind === 'error' && <AlertTriangle size={16} aria-hidden="true" />}
+          {feedback.text}
+          {feedback.kind === 'error' && (
+            <button
+              type="button"
+              className="admin-feedback-dismiss"
+              onClick={() => setFeedback(null)}
+              aria-label="Tutup pesan error"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Upload Overlay */}
       {isUploading && (
         <div className="upload-overlay">
@@ -1032,16 +1184,22 @@ export default function LegalRepository() {
       <div className="view-header repo-header" style={{ marginTop: '24px' }}>
         <div>
           <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Rincian Repositori</h3>
+          {/* Demoted out of the primary toolbar (critique P1·2): honest label
+              + live count, rendered only when there is something to clean. */}
+          <ProtectedRoute minRole="manajer">
+            {failedTotal > 0 && (
+              <button
+                onClick={handleClearFailedDocuments}
+                title={`Hapus permanen ${failedTotal} dokumen berstatus Gagal, termasuk ${failedDupTotal} duplikat`}
+                style={{ marginTop: '6px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: 'var(--danger-text)', display: 'inline-flex', alignItems: 'center', gap: '5px', textDecoration: 'underline' }}
+              >
+                <Trash2 size={12} /> Bersihkan Gagal & Duplikat ({failedTotal})
+              </button>
+            )}
+          </ProtectedRoute>
         </div>
         <ProtectedRoute minRole="manajer">
           <div className="repo-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <button
-              className="btn-danger-outline"
-              onClick={handleClearFailedDocuments}
-              title="Hapus permanen semua dokumen yang gagal diproses dan duplikat"
-            >
-              <Trash2 size={16} /> Bersihkan Duplikat
-            </button>
             {/* The facets filter the regulations/internal doc lists only —
                 on analyzed/templates/history the panel used to show internal
                 -doc counts while doing nothing to the rendered list. */}
@@ -1147,7 +1305,11 @@ export default function LegalRepository() {
               )}
             </div>
             )}
-            <button className="upload-btn" onClick={() => fileInputRef.current?.click()} style={{ background: 'var(--accent-color)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* No inline colors: .upload-btn's ink-on-accent pairing is the
+                documented AA-safe face (theme-dark.css). The inline white
+                override measured 3.7:1 in dark — critique P1, DESIGN.md
+                "Dark Theme" open item. */}
+            <button className="upload-btn" onClick={() => fileInputRef.current?.click()}>
               <Upload size={18} /> Tambah PDF
             </button>
           </div>
@@ -1356,7 +1518,10 @@ export default function LegalRepository() {
                       key={o || 'all'}
                       onClick={() => { setHistoryOutcome(o); fetchUploadHistory({ outcome: o }); }}
                       style={historyOutcome === o
-                        ? { ...chipStyle, background: 'var(--accent-color)', color: 'white', borderColor: 'var(--accent-color)' }
+                        /* White-text face: pinned to the theme-dark.css re-pin
+                           value (#2563eb — 5.1:1 under white in both themes);
+                           inline styles cannot be themed from CSS. */
+                        ? { ...chipStyle, background: '#2563eb', color: 'white', borderColor: 'var(--accent-color)' }
                         : chipStyle}
                     >
                       {o === '' ? `Semua${historyTotal > 0 ? ` (${historyTotal})` : ''}` : (OUTCOME_META[o]?.label || o)}
@@ -1555,16 +1720,28 @@ export default function LegalRepository() {
                     ))}
                   </select>
 
+                  {pendingActionError?.docId === doc.id && (
+                    <p role="alert" style={{ margin: '0 0 8px', fontSize: '0.83rem', color: 'var(--danger-text)' }}>
+                      <AlertCircle size={13} style={{ verticalAlign: '-2px', marginRight: '5px' }} aria-hidden="true" />
+                      {pendingActionError.text}
+                    </p>
+                  )}
                   <button
                     onClick={() => {
                       const finalClass = pendingSel[doc.id]?.klass ?? doc.klasifikasi;
-                      if (!finalClass) return alert("Pilih klasifikasi terlebih dahulu!");
+                      if (!finalClass) {
+                        setPendingActionError({ docId: doc.id, text: 'Pilih klasifikasi terlebih dahulu.' });
+                        return;
+                      }
+                      setPendingActionError(null);
                       const finalJenis = pendingSel[doc.id]?.jenis ?? doc.ai_jenis ?? doc.jenis;
-                      handleConfirmPending(doc.id, finalClass, finalJenis);
+                      void handleConfirmPending(doc.id, finalClass, finalJenis);
                     }}
-                    style={{ width: '100%', background: '#92400e', color: 'white', border: 'none', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                    disabled={pendingBusy === doc.id}
+                    style={{ width: '100%', background: '#92400e', color: 'white', border: 'none', padding: '8px', borderRadius: '6px', cursor: pendingBusy === doc.id ? 'not-allowed' : 'pointer', fontWeight: 600, opacity: pendingBusy === doc.id ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                   >
-                    Konfirmasi & Simpan
+                    {pendingBusy === doc.id && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
+                    {pendingBusy === doc.id ? 'Memproses...' : 'Konfirmasi & Simpan'}
                   </button>
                   <button
                     onClick={() => handleRejectPending(doc)}
@@ -1587,8 +1764,8 @@ export default function LegalRepository() {
                   {tpl.description}
                 </p>
                 <button
-                  className="analyze-btn"
-                  style={{ background: 'var(--accent-color)', color: 'white' }}
+                  className="btn btn-primary"
+                  style={{ width: '100%', marginTop: '12px' }}
                   onClick={() => setShowPromptModal(tpl.id)}
                 >
                   <File size={14} /> Gunakan Template
@@ -1670,7 +1847,7 @@ export default function LegalRepository() {
                   </button>
                   {['sekretaris perusahaan', 'dewa'].includes(user?.role?.toLowerCase() || '') && (
                     <button
-                      onClick={() => handleDeleteDocument(doc.id)}
+                      onClick={() => handleDeleteDocument(doc)}
                       style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger-text)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '0 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
                       title="Hapus Dokumen"
                       aria-label="Hapus dokumen"
@@ -1723,7 +1900,9 @@ export default function LegalRepository() {
                   key={n}
                   onClick={() => gotoPage(n)}
                   style={n === pagerCur
-                    ? { ...navBtn, background: 'var(--accent-color)', borderColor: 'var(--accent-color)', color: 'white' }
+                    /* White-text face: pinned to #2563eb (theme-dark.css re-pin
+                       value; 5.1:1 under white in both themes). */
+                    ? { ...navBtn, background: '#2563eb', borderColor: 'var(--accent-color)', color: 'white' }
                     : navBtn}
                 >
                   {n}
@@ -1840,8 +2019,10 @@ export default function LegalRepository() {
               <button 
                 type="submit"
                 disabled={isSharing}
-                style={{ background: 'var(--accent-color)', color: 'white', border: 'none', padding: '12px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, marginTop: '8px' }}
+                className="btn btn-primary"
+                style={{ marginTop: '8px' }}
               >
+                {isSharing && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
                 {isSharing ? 'Memproses...' : 'Beri Akses'}
               </button>
             </form>
@@ -1873,7 +2054,7 @@ export default function LegalRepository() {
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
                   <button onClick={() => { setShowPromptModal(null); setPromptInput(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #475569', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Batal</button>
-                  <button onClick={() => handleGenerateTemplate(showPromptModal)} disabled={isGenerating || !promptInput.trim()} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'var(--accent-color)', color: 'white', cursor: isGenerating || !promptInput.trim() ? 'not-allowed' : 'pointer', opacity: isGenerating || !promptInput.trim() ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button onClick={() => handleGenerateTemplate(showPromptModal)} disabled={isGenerating || !promptInput.trim()} className="btn btn-primary">
                     {isGenerating ? <Database size={16} className="animate-pulse" /> : <Zap size={16} />}
                     {isGenerating ? 'Menyusun...' : 'Buat Dokumen'}
                   </button>
@@ -1891,13 +2072,16 @@ export default function LegalRepository() {
                   <button onClick={() => handleExportWord(generatedDoc!)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #3b82f6', background: 'rgba(59, 130, 246, 0.15)', color: 'var(--accent-hover)', cursor: 'pointer', fontWeight: 600 }}>
                     ↓ Ekspor ke Word
                   </button>
-                  <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: 'var(--accent-color)', color: 'white', cursor: 'pointer' }}>Selesai</button>
+                  <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} className="btn btn-primary">Selesai</button>
                 </div>
               </>
             )}
           </div>
         </div>
       )}
+
+      {/* Destructive-path confirmations (critique 2026-10-12 P1·1) */}
+      {confirmState && <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />}
     </div>
   );
 }

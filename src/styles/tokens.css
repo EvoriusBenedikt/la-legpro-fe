@@ -37,6 +37,7 @@
   --danger-text: #b91c1c;    /* AA-hardened variant for small text on light glass */
   --info: #3B82F6;
   --info-bg: rgba(59, 130, 246, 0.1);
+  --info-text: #1D4ED8;     /* AA-hardened info ink for small text on --info-bg (mirrors the verdict -text trio) */
 
   /* Categorical data-viz hues (admin dashboard klasifikasi bars/legends;
      knowledge-graph sidebar/legend text since 2026-10-07 — critique P2: the
@@ -55,6 +56,7 @@
      selection is --info-bg; the former --user-bubble token is retired. */
   --ai-bubble: rgba(255, 255, 255, 0.9);
   --overlay-veil: rgba(15, 23, 42, 0.55);  /* shared ink-navy veil for modal/drawer backdrops */
+  --overlay-veil-deep: rgba(15, 23, 42, 0.72);  /* chat image-lightbox veil (2026-10-12 critique): darker so artwork keeps contrast; no dark-theme override — 0.72 ink already reads correctly on the dark base */
 
   --sidebar-width: 264px;   /* expanded column (2026-10-11 sidebar redesign) */
   --sidebar-rail: 64px;     /* collapsed icon rail */
@@ -78,6 +80,7 @@
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
+  --radius-xl: 24px; /* composer tier (2026-10-12): the floating chat composer card; formalizes the 24px the sidebar pill and Maker card already carried ad hoc */
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
@@ -131,6 +134,7 @@
   --danger-text: #f87171;
   --info: #3b82f6;
   --info-bg: rgba(59, 130, 246, 0.14);
+  --info-text: #60a5fa;     /* 400-level tint, mirrors the -text trio flip (5.3:1 on composited --info-bg) */
   /* Data-viz hues flip to bright 300-level tints (>=8.6:1 on card) */
   --dv-cyan: #67e8f9;
   --dv-rose: #fda4af;

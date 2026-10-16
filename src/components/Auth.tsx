@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { LogIn, UserPlus, Eye, EyeOff, Check, Circle, AlertTriangle, KeyRound } from 'lucide-react';
+import { LogIn, UserPlus, Eye, EyeOff, Check, Circle, AlertTriangle, KeyRound, ShieldCheck } from 'lucide-react';
 import api, { isHttpError, isNetworkError } from '../services/api';
 import { Link } from 'react-router-dom';
 import { useStrings, useLocale, type StringKey } from '../i18n';
 import LoadingOrb from './LoadingOrb';
-import { setSetting } from '../settings';
+import { setSetting, getSettings } from '../settings';
 import { FlagId, FlagUs } from './LangFlags';
 
 /* Flag language toggle (owner 2026-10-11): the FlagId/FlagUs SVGs now
@@ -99,6 +99,12 @@ export default function Auth() {
   // instead of dropping back to the base rule and restarting fadeIn.
   const [shake, setShake] = useState<'off' | 'on' | 'settled'>('off');
   const settleTimer = useRef<number | null>(null);
+  // Critique P2 harden (2026-10-13): every raiseError bumps the nonce so
+  // the recovery effect below re-runs even when the same message repeats
+  // (setError alone bails out on identical strings); the ref anchors the
+  // banner for scroll-into-view on banner-only failures.
+  const [errorNonce, setErrorNonce] = useState(0);
+  const errorBannerRef = useRef<HTMLDivElement | null>(null);
   const { login } = useAuth();
 
   // Live password requirements (the register checklist and the submit gate
@@ -132,6 +138,7 @@ export default function Auth() {
   // animationend), so the next error retriggers.
   const raiseError = (message: string, fields?: AuthField[]) => {
     setError(message);
+    setErrorNonce((n) => n + 1);
     if (fields) markFields(fields);
     setShake('on');
     if (settleTimer.current !== null) window.clearTimeout(settleTimer.current);
@@ -145,6 +152,30 @@ export default function Auth() {
   useEffect(() => () => {
     if (settleTimer.current !== null) window.clearTimeout(settleTimer.current);
   }, []);
+
+  // Error recovery (critique P2, harden 2026-10-13): a failed submit must
+  // move the user — on the ~1000px mobile register form the banner can
+  // render entirely off-screen while nothing near the thumb changes.
+  // Field failures focus the first errored input (its fix is the next
+  // action) and scroll it to center; banner-only failures (network,
+  // deactivated, generic) scroll the banner to center instead.
+  // preventScroll on the focus keeps the single scrollIntoView in charge
+  // of the viewport. Smooth scroll honors the app reduce-motion setting
+  // (LegalOpinion precedent). The nonce in the deps retriggers identical
+  // consecutive errors, which setError alone would bail out on.
+  useEffect(() => {
+    if (!error) return;
+    const behavior: ScrollBehavior = getSettings().reduceMotion ? 'auto' : 'smooth';
+    const firstErrored = document.querySelector<HTMLElement>(
+      '.auth-single .float-field.field-error input'
+    );
+    if (firstErrored) {
+      firstErrored.scrollIntoView({ behavior, block: 'center' });
+      firstErrored.focus({ preventScroll: true });
+    } else {
+      errorBannerRef.current?.scrollIntoView({ behavior, block: 'center' });
+    }
+  }, [error, errorNonce]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,7 +244,16 @@ export default function Auth() {
     setLoading(true);
 
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-    const payload = isLogin ? { username, password } : { username, email, password };
+    // Critique P1 (harden 2026-10-13): trim edge whitespace from the
+    // username — a pasted " user " sent verbatim was a false
+    // INVALID_CREDENTIALS with both fields blamed red. Trimmed here, not
+    // in onChange (that would eat the space bar mid-typing for names with
+    // internal spaces) and not rejected like email whitespace (rejecting
+    // invisible characters is unreadable). Email needs no trim: any
+    // whitespace in it is already rejected above, never auto-stripped.
+    const payload = isLogin
+      ? { username: username.trim(), password }
+      : { username: username.trim(), email, password };
     
     try {
       const response = await api.post(endpoint, payload);
@@ -326,10 +366,24 @@ export default function Auth() {
               is unchanged — the only global heading rule (components.css)
               treats h1-h6 alike. */}
           <h1>{isLogin ? t.authWelcome : t.authRegisterTitle}</h1>
+          {/* On-premises trust line (critique clarify, restored
+              2026-10-13): the 2026-10-06 owner copy survived the
+              redesign only on the frozen legacy page — the on-prem moat
+              belongs exactly here, at credential entry. ShieldCheck
+              inherits the secondary color; a green tint would be
+              decorative Verdict-Triad use (AuthLegacy convention). */}
+          <p className="auths-trust">
+            <ShieldCheck size={14} aria-hidden="true" />
+            {t.authTrustNote}
+          </p>
+          {/* Role disclosure (critique clarify): register hardcodes the
+              pengguna role (BE auth.py) — surfaced before signup so the
+              granted level is not a surprise after. */}
+          {!isLogin && <p className="auths-role-note">{t.authRegisterRoleNote}</p>}
         </div>
 
         {error && (
-          <div id="auth-error-msg" className="auth-error" role="alert">
+          <div id="auth-error-msg" className="auth-error" role="alert" ref={errorBannerRef}>
             {error}
           </div>
         )}
@@ -516,22 +570,23 @@ export default function Auth() {
           </span>
         </form>
 
-        {/* Passkey rollout stub (2026-10-09 plan decision 2): the real
-            disabled attribute is deliberate here (unlike the submit's
-            aria-disabled pattern) — a placeholder with no pending action
-            must not be focusable or announce as actionable; the visible
-            hint carries the coming-soon state. Isolated block for DevOps
-            to replace when the real passkey flow lands. */}
+        {/* Passkey rollout stub (2026-10-09 plan decision 2), QUIETED
+            (critique polish 2026-10-13): the disabled button was an
+            unselectable option — control chrome promising an action that
+            cannot happen, dimmed to 2.87:1 text. The roadmap signal
+            survives as a plain status line under the divider (key icon +
+            coming-soon copy, non-interactive, full secondary contrast).
+            Isolated block for DevOps to replace when the real passkey
+            flow lands; t.authPasskey is parked unused until then. */}
         {isLogin && (
           <div className="auths-passkey">
             <div className="auths-divider" role="separator">
               <span>{t.authOrLoginWith}</span>
             </div>
-            <button type="button" className="auths-passkey-btn" disabled>
-              <KeyRound size={18} aria-hidden="true" />
-              {t.authPasskey}
-            </button>
-            <p className="auths-passkey-hint">{t.authPasskeySoon}</p>
+            <p className="auths-passkey-hint">
+              <KeyRound size={12} aria-hidden="true" />
+              {t.authPasskeySoon}
+            </p>
           </div>
         )}
 
@@ -547,8 +602,12 @@ export default function Auth() {
           <p className="auth-contact-note">{t.authContactNote}</p>
           <span className="auths-credit">{t.authCredit}</span>
           <div className="auth-toggle auth-toggle--tight">
+            {/* Critique clarify (2026-10-13): authBackLanding, not
+                authBack — logged-out "/" renders the marketing
+                LandingPage, not an "ikhtisar". authBack stays verbatim
+                for the frozen legacy page (fingerprint contract). */}
             <Link to="/" className="auth-back-link">
-              {t.authBack}
+              {t.authBackLanding}
             </Link>
           </div>
         </div>

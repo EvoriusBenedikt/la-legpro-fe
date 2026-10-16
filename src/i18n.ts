@@ -53,6 +53,7 @@ const id = {
   sbCollapse: 'Ciutkan sidebar',
   sbExpand: 'Bentangkan sidebar',
   sbNoMatch: 'Tidak ada menu yang cocok',
+  sbChildDocs: 'Dokumen',
   sbChildPending: 'Menunggu Konfirmasi',
   sbChildHistory: 'Riwayat Unggahan',
   sbHelp: 'Bantuan',
@@ -112,13 +113,40 @@ const id = {
   autoTitle: 'Gulir otomatis ke pesan terbaru',
   autoDesc:
     'Pada Legal Opinion, tampilan mengikuti pesan terakhir saat jawaban baru masuk. Matikan untuk membaca riwayat percakapan tanpa gangguan guliran.',
-  avatarTitle: 'Avatar Sage',
+  avatarTitle: 'Avatar gemma',
   avatarDesc:
-    'Pilih bentuk maskot Sage yang digunakan di seluruh tampilan chat Legal Opinion.',
-  avatarColorTitle: 'Warna avatar Sage',
+    'Pilih bentuk maskot gemma yang digunakan di seluruh tampilan chat Legal Opinion.',
+  avatarColorTitle: 'Warna avatar gemma',
   avatarColorDesc:
-    'Warna tubuh maskot Sage di seluruh tampilan chat. Chip pertama mengikuti aksen tema (bawaan).',
+    'Warna tubuh maskot gemma di seluruh tampilan chat. Chip pertama mengikuti aksen tema (bawaan).',
   avatarColorAccent: 'Aksen tema (bawaan)',
+  /* Nama tampilan bentuk + swatch gemma (2026-10-13, kritik P1·2): nama
+     yang dapat diakses untuk radio picker — slug library adalah pengenal
+     internal, bukan label. Peta kunci ada di SettingsDialog.tsx. */
+  avatarNameClover: 'Semanggi',
+  avatarNameFlower: 'Bunga',
+  avatarNameTriangle: 'Segitiga',
+  avatarNameSquare: 'Persegi',
+  avatarNameBlob: 'Blob',
+  avatarNameGhost: 'Hantu',
+  avatarNameCircle: 'Lingkaran',
+  avatarNameDrop: 'Tetesan',
+  avatarNameStar: 'Bintang',
+  avatarNameDroid: 'Droid',
+  avatarNameMech: 'Mech',
+  avatarNameAlien: 'Alien',
+  avatarNameHexagon: 'Heksagon',
+  avatarNameCat: 'Kucing',
+  avatarNameCloud: 'Awan',
+  avatarNamePill: 'Kapsul',
+  avatarNamePebble: 'Kerikil',
+  avatarNamePuddle: 'Genangan',
+  avatarColorViolet: 'Ungu',
+  avatarColorRose: 'Mawar',
+  avatarColorEmerald: 'Zamrud',
+  avatarColorAmber: 'Ambar',
+  avatarColorTeal: 'Teal',
+  avatarColorSlate: 'Slate',
   spacingTitle: 'Spasi baris bacaan',
   spacingDesc:
     'Jarak baris untuk teks panjang: jawaban percakapan, kutipan sumber, dan hasil analisis kepatuhan. Pratinjau mengikuti pilihan Anda.',
@@ -145,11 +173,11 @@ const id = {
   resetDesc:
     'Mengembalikan seluruh preferensi di perangkat ini ke nilai bawaan. Tindakan ini tidak dapat dibatalkan.',
   resetBtn: 'Reset semua',
-  resetConfirm: 'Reset semua pengaturan ke nilai bawaan?',
+  resetConfirm: 'Reset semua pengaturan ke nilai bawaan? Tindakan ini tidak dapat dibatalkan.',
   secJobsData: 'Riwayat analisis',
   jobsRetTitle: 'Retensi riwayat analisis',
   jobsRetDesc:
-    'Entri selesai di panel Riwayat Analisis (Kontrak) dihapus otomatis dari perangkat ini setelah melewati usia ini; dokumen hasil analisis tidak terpengaruh. Analisis yang sedang berjalan tidak pernah dihapus. Saat ini: {v}.',
+    'Entri selesai di panel Riwayat Analisis (Kontrak) dihapus dari perangkat ini setelah melewati usia ini — termasuk entri yang sudah ada. Dokumen hasil analisis dan analisis yang sedang berjalan tidak terpengaruh. Saat ini: {v}.',
   jobsRetOff: 'Matikan (simpan selamanya)',
   jobsRetWeek: '1 minggu',
   jobsRetMonth1: '1 bulan',
@@ -160,6 +188,10 @@ const id = {
   jobsRetCustom: 'Kustom…',
   jobsRetDaysUnit: 'hari',
   jobsRetDaysAria: 'Jumlah hari sebelum entri riwayat dihapus',
+  jobsRetDaysHint: 'Antara {min} dan {max} hari.',
+  jobsRetDaysInvalid: 'Masukkan jumlah hari antara {min} dan {max}.',
+  jobsRetPrunedOne: '{n} entri riwayat lama dihapus dari perangkat ini.',
+  jobsRetPrunedMany: '{n} entri riwayat lama dihapus dari perangkat ini.',
 
   /* Footer corporate labels (values/addresses/brand stay untouched) */
   footProducts: 'Produk & Layanan',
@@ -189,7 +221,7 @@ const id = {
   opDelete: 'Hapus',
   opHistoryLabel: 'Riwayat percakapan',
   opYou: 'Anda',
-  opAiName: 'Sage',
+  opAiName: 'gemma',
   opSources: 'Sumber Dokumen yang Ditemukan:',
   opOpenDoc: 'Buka Dokumen',
   /* Wait/error/citation copy (2026-10-08 critique remediation P1-1/2/3,
@@ -237,6 +269,8 @@ const id = {
   opDeleteSelected: 'Hapus terpilih',
   opDeleteManyTitle: 'Hapus percakapan?',
   opDeleteManyBody: '{n} percakapan akan dihapus permanen dari perangkat ini.',
+  opDeleteAllTitle: 'Hapus semua percakapan?',
+  opDeleteAllBody: 'Semua {n} percakapan akan dihapus permanen. Percakapan baru akan dibuat untuk Anda.',
   opSortLabel: 'Urutkan percakapan',
   opSortCreated: 'Tanggal dibuat',
   opSortName: 'Nama (A–Z)',
@@ -254,7 +288,7 @@ const id = {
   opGreetMorning: 'Selamat pagi',
   opGreetAfternoon: 'Selamat siang',
   opGreetNight: 'Selamat malam',
-  opGreetOffer: 'Bagaimana Sage dapat membantu Anda?',
+  opGreetOffer: 'Bagaimana gemma dapat membantu Anda?',
   /* Chat attachments (2026-10-12): paperclip upload of images + PDFs in
      the Legal Opinion composer; {e} interpolates the failure reason. */
   opAttach: 'Lampirkan berkas',
@@ -264,6 +298,11 @@ const id = {
   opAttachGhost: 'Berkas tidak tersedia',
   opAttachRemove: 'Hapus lampiran',
   opAttachClose: 'Tutup',
+  /* Critique remediation (2026-10-12): a noun label for the pending list —
+     the verb "Lampirkan berkas" belongs on the paperclip — and the
+     over-cap notice that replaces the old silent drop. */
+  opAttachPendingList: 'Lampiran menunggu kirim',
+  opAttachTruncated: 'Maksimal {max} berkas per pesan — {n} berkas tidak ditambahkan',
 
   /* Document Drawer (migrated 2026-10-08, critique remediation P2-5): the
      drawer follows the app locale like the rest of the chrome; async error
@@ -352,6 +391,15 @@ const id = {
   authHaveAccount: 'Sudah punya akun? ',
   authLoginHere: 'Masuk di sini',
   authBack: '← Kembali ke ikhtisar',
+  /* New-/login back link (critique clarify 2026-10-13): logged-out "/"
+     renders the marketing LandingPage, not an "ikhtisar". authBack stays
+     verbatim — the frozen legacy page renders it (fingerprint contract
+     e112e530d3108821). */
+  authBackLanding: '← Kembali ke beranda',
+  /* Register-mode role disclosure (critique clarify 2026-10-13): BE
+     auth.py register hardcodes the pengguna role — stated before signup
+     so the granted level is not a surprise after. */
+  authRegisterRoleNote: 'Akun baru dibuat dengan peran pengguna.',
   /* Static guidance line (2026-10-06): replaces the authContactAdmin mailto —
      no SMTP or real administrator contact is configured yet, so the row is
      non-interactive copy instead of a dead link. */
@@ -432,6 +480,7 @@ const en: Record<StringKey, string> = {
   sbCollapse: 'Collapse sidebar',
   sbExpand: 'Expand sidebar',
   sbNoMatch: 'No matching menus',
+  sbChildDocs: 'Documents',
   sbChildPending: 'Pending Confirmation',
   sbChildHistory: 'Upload History',
   sbHelp: 'Help',
@@ -486,13 +535,37 @@ const en: Record<StringKey, string> = {
   autoTitle: 'Auto-scroll to the newest message',
   autoDesc:
     'In Legal Opinion, the view follows the latest message as new answers arrive. Turn off to read the history without scroll jumps.',
-  avatarTitle: 'Sage avatar',
+  avatarTitle: 'gemma avatar',
   avatarDesc:
-    'Choose the Sage mascot shape used across the Legal Opinion chat surfaces.',
-  avatarColorTitle: 'Sage avatar color',
+    'Choose the gemma mascot shape used across the Legal Opinion chat surfaces.',
+  avatarColorTitle: 'gemma avatar color',
   avatarColorDesc:
-    'Body colour of the Sage mascot across the chat surfaces. The first chip follows the theme accent (default).',
+    'Body colour of the gemma mascot across the chat surfaces. The first chip follows the theme accent (default).',
   avatarColorAccent: 'Theme accent (default)',
+  avatarNameClover: 'Clover',
+  avatarNameFlower: 'Flower',
+  avatarNameTriangle: 'Triangle',
+  avatarNameSquare: 'Square',
+  avatarNameBlob: 'Blob',
+  avatarNameGhost: 'Ghost',
+  avatarNameCircle: 'Circle',
+  avatarNameDrop: 'Drop',
+  avatarNameStar: 'Star',
+  avatarNameDroid: 'Droid',
+  avatarNameMech: 'Mech',
+  avatarNameAlien: 'Alien',
+  avatarNameHexagon: 'Hexagon',
+  avatarNameCat: 'Cat',
+  avatarNameCloud: 'Cloud',
+  avatarNamePill: 'Pill',
+  avatarNamePebble: 'Pebble',
+  avatarNamePuddle: 'Puddle',
+  avatarColorViolet: 'Violet',
+  avatarColorRose: 'Rose',
+  avatarColorEmerald: 'Emerald',
+  avatarColorAmber: 'Amber',
+  avatarColorTeal: 'Teal',
+  avatarColorSlate: 'Slate',
   spacingTitle: 'Reading line spacing',
   spacingDesc:
     'Line spacing for long-form text: conversation answers, source quotes, and compliance analysis results. The preview follows your choice.',
@@ -519,11 +592,11 @@ const en: Record<StringKey, string> = {
   resetDesc:
     'Return every preference on this device to its default value. This cannot be undone.',
   resetBtn: 'Reset all',
-  resetConfirm: 'Reset all settings to their defaults?',
+  resetConfirm: 'Reset all settings to their defaults? This cannot be undone.',
   secJobsData: 'Analysis history',
   jobsRetTitle: 'Analysis history retention',
   jobsRetDesc:
-    'Finished entries in the Analysis History panel (Contracts) are deleted from this device once older than this; analyzed documents themselves are unaffected. Running analyses are never deleted. Current: {v}.',
+    'Finished entries in the Analysis History panel (Contracts) are deleted from this device once older than this — including entries that already exist. Analyzed documents and running analyses are unaffected. Current: {v}.',
   jobsRetOff: 'Off (keep forever)',
   jobsRetWeek: '1 week',
   jobsRetMonth1: '1 month',
@@ -534,6 +607,10 @@ const en: Record<StringKey, string> = {
   jobsRetCustom: 'Custom…',
   jobsRetDaysUnit: 'days',
   jobsRetDaysAria: 'Number of days before history entries are deleted',
+  jobsRetDaysHint: 'Between {min} and {max} days.',
+  jobsRetDaysInvalid: 'Enter a number of days between {min} and {max}.',
+  jobsRetPrunedOne: '{n} old history entry removed from this device.',
+  jobsRetPrunedMany: '{n} old history entries removed from this device.',
 
   footProducts: 'Products & Services',
   footSolutions: 'Solutions',
@@ -561,7 +638,7 @@ const en: Record<StringKey, string> = {
   opDelete: 'Delete',
   opHistoryLabel: 'Conversation history',
   opYou: 'You',
-  opAiName: 'Sage',
+  opAiName: 'gemma',
   opSources: 'Source documents found:',
   opOpenDoc: 'Open document',
   /* Wait/error/citation copy (2026-10-08 critique remediation) — mirrors id */
@@ -605,6 +682,8 @@ const en: Record<StringKey, string> = {
   opDeleteSelected: 'Delete selected',
   opDeleteManyTitle: 'Delete conversations?',
   opDeleteManyBody: '{n} conversations will be permanently deleted from this device.',
+  opDeleteAllTitle: 'Delete all conversations?',
+  opDeleteAllBody: 'All {n} conversations will be permanently deleted. A new conversation will be started for you.',
   opSortLabel: 'Sort conversations',
   opSortCreated: 'Date created',
   opSortName: 'Name (A–Z)',
@@ -624,7 +703,7 @@ const en: Record<StringKey, string> = {
   // Night bucket (18:00–04:59): "Good evening" is the correct English
   // greeting; "Good night" is a parting phrase.
   opGreetNight: 'Good evening',
-  opGreetOffer: 'How can Sage help you?',
+  opGreetOffer: 'How can gemma help you?',
   /* Chat attachments (2026-10-12): paperclip upload of images + PDFs in
      the Legal Opinion composer; {e} interpolates the failure reason. */
   opAttach: 'Attach a file',
@@ -634,6 +713,9 @@ const en: Record<StringKey, string> = {
   opAttachGhost: 'File unavailable',
   opAttachRemove: 'Remove attachment',
   opAttachClose: 'Close',
+  /* Critique remediation (2026-10-12) — see the id block. */
+  opAttachPendingList: 'Pending attachments',
+  opAttachTruncated: 'Up to {max} files per message — {n} files were not added',
 
   /* Document Drawer (migrated 2026-10-08, critique remediation P2-5) */
   drawerTabsLabel: 'Document sections',
@@ -712,6 +794,8 @@ const en: Record<StringKey, string> = {
   authHaveAccount: 'Already have an account? ',
   authLoginHere: 'Login here',
   authBack: '← Back to overview',
+  authBackLanding: '← Back to home',
+  authRegisterRoleNote: 'New accounts are created with the user role.',
   authContactNote: 'Trouble signing in? Contact your organization\'s administrator.',
   authForgotNote:
     'Forgot your password? Your organization\'s administrator can help reset it.',
@@ -761,24 +845,28 @@ export const STRINGS: Record<Locale, Record<StringKey, string>> = { id, en };
    each new chat rotates. */
 export const GREETING_POOLS: Record<Locale, string[]> = {
   id: [
+    /* 2026-10-12 critique (polish): register re-aim — the casual variants
+       ("kita bedah", "gemma di sini", "bisa … carikan") drifted from the
+       formal-Indonesian voice the rest of the product holds. */
     '{time}! {offer}',
-    '{time}! Siap membantu — apa yang kita analisis lebih dulu?',
-    '{time}! Regulasi mana yang kita bedah hari ini?',
-    'Halo! Sage di sini. {offer}',
+    '{time}! Siap membantu — apa yang ingin Anda analisis lebih dulu?',
+    '{time}! Regulasi mana yang ingin Anda tinjau hari ini?',
+    'Halo, gemma siap mendampingi. {offer}',
     '{time}! Tanyakan apa saja soal regulasi keuangan dan perbankan.',
     'Selamat datang kembali! {offer}',
-    '{time}! Dokumen atau aturan mana yang kita tinjau bersama?',
-    'Halo — Sage siap membantu. Apa yang bisa saya carikan untuk Anda?',
+    '{time}! Dokumen atau aturan mana yang ingin Anda tinjau?',
+    'Halo — gemma siap membantu. Apa yang dapat saya telusuri untuk Anda?',
   ],
   en: [
+    /* 2026-10-12 critique (polish): register re-aim, mirroring the id pool. */
     '{time}! {offer}',
-    '{time}! Ready when you are — what shall we analyze first?',
-    '{time}! Which regulation are we untangling today?',
-    'Hello! Sage here. {offer}',
+    '{time}! Ready when you are — what would you like to analyze first?',
+    '{time}! Which regulation would you like to review today?',
+    'Hello, gemma is here to assist. {offer}',
     '{time}! Ask me anything about financial and banking regulations.',
     'Welcome back! {offer}',
-    '{time}! What document or rule should we review together?',
-    'Hi there — Sage at your service. What can I dig up for you?',
+    '{time}! Which document or rule would you like to review?',
+    'Hello — gemma at your service. What may I look up for you?',
   ],
 };
 

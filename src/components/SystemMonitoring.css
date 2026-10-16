@@ -296,6 +296,15 @@
   margin: 8px 0 0 0;
 }
 
+/* Provenance footnote under the KPI grid: tight to its group, generous to the
+   next block (craft-floor spacing). Names the measurement scope so the
+   container-runtime CPU/RAM are never misread as host hardware. */
+.kpi-provenance {
+  margin: -8px 0 24px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
 .db-rows { margin-top: 12px; }
 .db-row {
   display: flex;
@@ -306,6 +315,25 @@
 }
 .db-row span:first-child { color: var(--text-secondary); }
 .db-row span:last-child { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ── Server hardware specs (Kesehatan section) ──────────────
+   Reuses the .stat-tile grammar; only the grid and the value
+   step are new: CPU-model and GPU strings run long, so the
+   value wraps at a smaller Outfit step instead of overflowing
+   the tile. */
+.spec-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  gap: 12px;
+  padding: 16px 20px;
+}
+.spec-tile-value {
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
 
 /* ── Module grid & cards ──────────────────────────────────── */
 .modules-grid {
@@ -855,4 +883,175 @@
   .verdict-meta { white-space: normal; flex-basis: 100%; }
   .health-verdict { flex-wrap: wrap; padding: 16px; }
   .monitoring-table th, .monitoring-table td { padding: 10px 12px; }
+}
+
+/* ── Antrean Pemrosesan (ProcessingQueue.tsx) ────────────────
+   Full-width module: rows are stacked cards, not a table, because each
+   task carries a progress line, a stage stepper and a failure reason. */
+.queue-card .module-content { max-height: 520px; }
+.queue-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.queue-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.queue-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 20px 4px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+.queue-summary-part { display: inline-flex; align-items: center; gap: 8px; }
+.queue-summary-empty { font-size: 0.84rem; }
+.queue-count {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.queue-count strong { font-family: 'Outfit', sans-serif; font-size: 1.05rem; }
+.queue-count:hover { background: var(--bg-element); }
+.queue-count.tone-danger,
+.queue-count.tone-danger strong { color: var(--danger-text); }
+.queue-count.tone-info strong { color: var(--accent-color); }
+
+.queue-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 20px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+.queue-tabs { display: inline-flex; gap: 4px; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 3px; }
+.queue-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 5px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.queue-tab:hover { color: var(--text-primary); }
+.queue-tab.is-selected { background: var(--bg-card); color: var(--text-primary); box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12); }
+.queue-tab-count { font-size: 0.7rem; font-variant-numeric: tabular-nums; color: var(--text-secondary); }
+
+.queue-list { list-style: none; margin: 0; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.queue-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+.queue-row.tone-danger { border-color: var(--danger-border); }
+.queue-row-main { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+
+.queue-file {
+  flex: 1;
+  min-width: 120px;
+  display: flex;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: left;
+}
+.queue-file-base { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.queue-file-ext { flex-shrink: 0; white-space: nowrap; }
+.queue-file-link { cursor: pointer; }
+.queue-file-link:hover .queue-file-base,
+.queue-file-link:hover .queue-file-ext { color: var(--accent-color); text-decoration: underline; text-underline-offset: 3px; }
+
+.queue-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+.queue-confirm { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.queue-confirm-note { font-size: 0.74rem; font-weight: 500; color: var(--warning-text); }
+
+.queue-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 0.75rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.queue-meta-item { display: inline-flex; align-items: center; gap: 5px; }
+.queue-meta-item.is-exhausted { color: var(--danger-text); font-weight: 600; }
+
+.queue-progress { display: flex; align-items: center; gap: 12px; }
+.queue-progress-track { margin-top: 0; flex: 1; }
+.queue-progress-label { font-size: 0.74rem; font-weight: 500; color: var(--text-secondary); white-space: nowrap; }
+
+.queue-stages { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.queue-stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-element);
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.queue-stage.is-done { color: var(--success-text); background: var(--success-bg); border-color: var(--success-border); }
+.queue-stage.is-running { color: var(--accent-color); background: var(--info-bg); border-color: var(--border-highlight); }
+.queue-stage.is-failed { color: var(--danger-text); background: var(--danger-bg); border-color: var(--danger-border); }
+
+.queue-error {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: var(--danger-text);
+}
+.queue-error.is-neutral { background: var(--bg-element); border-color: var(--border-color); color: var(--text-secondary); }
+.queue-error > svg { flex-shrink: 0; margin-top: 2px; }
+.queue-error p { margin: 0; font-size: 0.78rem; overflow-wrap: anywhere; }
+.queue-error-reason { font-weight: 600; }
+.queue-error-hint { margin-top: 2px; font-weight: 500; }
+.queue-error-hint:empty { display: none; }
+
+.queue-more {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+@media (max-width: 767px) {
+  .queue-summary, .queue-toolbar, .queue-more { padding-left: 16px; padding-right: 16px; }
+  .queue-actions { margin-left: 0; width: 100%; }
+  .queue-progress { flex-direction: column; align-items: stretch; gap: 6px; }
+  .queue-progress-label { white-space: normal; }
 }

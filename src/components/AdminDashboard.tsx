@@ -1,9 +1,16 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Shield, Database, FileText, AlertTriangle, CheckCircle2,
   Clock, Users, Server, Eye, Lock, XCircle, RefreshCw,
-  X, Trash2, ChevronLeft, ChevronRight, Download, UserX, UserCheck, Loader2
+  X, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  ArrowUp, ArrowDown, ArrowUpDown, Download, UserX, UserCheck, Loader2,
+  MoreHorizontal, LogOut, KeyRound, Info, MailCheck, MailX
 } from 'lucide-react';
+import { HighchartsReact } from 'highcharts-react-official';
+import Highcharts from 'highcharts';
+import 'highcharts/highcharts-3d';
+import { useSearchParams } from 'react-router-dom';
 import api, { isHttpError } from '../services/api';
 import { useDateFormatters } from '../format';
 import { useAuth } from '../hooks/useAuth';
@@ -14,6 +21,9 @@ interface StatusDoc {
   id: number;
   judul: string;
   nomor: string | null;
+  /** Document-type classification (POJK/SEOJK/...) rendered as the row's
+      sub-line badge; nomor stays in the payload for the search filter. */
+  jenis: string | null;
   status: string;
 }
 
@@ -55,6 +65,8 @@ interface ManagedUser {
   role: string;
   is_active: boolean;
   created_at: string;
+  last_login: string | null;    // migration 010 — null until first login after upgrade
+  email_verified: boolean;       // migration 010 — false by default
   /** Server-computed: target strictly below the actor's role level and not
       the actor. Presentation only — every mutation re-checks server-side. */
   manageable: boolean;
@@ -62,6 +74,20 @@ interface ManagedUser {
 }
 
 type Tone = 'success' | 'warning' | 'danger';
+
+/** Sortable users-table columns (client-side — the directory is fetched
+    whole, so sorting is a view concern). [sort key, header label]. */
+type UserSortKey = 'username' | 'email' | 'role' | 'status' | 'created' | 'last_login';
+const USER_SORT_COLUMNS: [UserSortKey, string][] = [
+  ['username', 'Pengguna'],
+  ['email', 'Email'],
+  ['role', 'Peran'],
+  ['status', 'Status'],
+  ['created', 'Terdaftar'],
+  ['last_login', 'Login Terakhir'],
+];
+
+const USERS_PAGE_SIZE = 15;
 
 interface StatusCardProps {
   label: string;
@@ -132,6 +158,9 @@ const ACTION_CHIP: Record<string, string> = {
   CHANGE_ROLE: 'status-chip--neutral',
   ACTIVATE_USER: 'status-chip--success',
   DEACTIVATE_USER: 'status-chip--revoked',
+  FORCE_LOGOUT: 'status-chip--warning',
+  RESET_PASSWORD: 'status-chip--warning',
+  SET_EMAIL_VERIFIED: 'status-chip--neutral',
   CREATE_TAXONOMY: 'status-chip--new',
   RENAME_TAXONOMY: 'status-chip--neutral',
   ACTIVATE_TAXONOMY: 'status-chip--success',
@@ -206,12 +235,26 @@ const StatusCard = ({ label, value, tone, icon, docs, totalDocs }: StatusCardPro
             filteredDocs.map(d => (
               <div key={d.id} className="admin-doc-item">
                 <div className="admin-doc-title">{d.judul}</div>
-                {d.nomor && <div className="admin-doc-nomor">{d.nomor}</div>}
+                {d.jenis && (
+                  <div className="admin-doc-jenis">
+                    <span className="jenis-badge">{d.jenis}</span>
+                  </div>
+                )}
               </div>
             ))
           ) : (
             <p className="admin-list-empty">
-              {q ? `Tidak ada dokumen yang cocok dengan "${search.trim()}".` : 'Belum ada dokumen.'}
+              {q
+                ? (capped
+                  // Cap-owning copy (critique P1·3): a zero-match here only
+                  // proves absence from the loaded preview, never from the
+                  // corpus — with 889 live Berlaku docs vs a 100-doc preview
+                  // the old "no documents match" was a confident false
+                  // negative. FR-24 bars admins from the repository, so the
+                  // copy owns the limit instead of routing to a denied page.
+                  ? `Tidak ada kecocokan untuk "${search.trim()}" di antara ${docs.length} dokumen pertama yang dimuat (dari total ${value}). Daftar kartu adalah pratinjau, bukan pencarian lengkap.`
+                  : `Tidak ada dokumen yang cocok dengan "${search.trim()}".`)
+                : 'Belum ada dokumen.'}
             </p>
           )}
         </div>
@@ -290,6 +333,166 @@ const ConfirmDialog = ({ state, onClose }: { state: ConfirmState; onClose: () =>
   );
 };
 
+/** Fixed-position tooltip portal for hint cells (2026-10-13 critique P2·4).
+    The old CSS ::after hint painted inside `.compliance-table-wrap`
+    (`overflow-y: auto`), so lower-row tooltips clipped or spawned stray
+    scrollbars — live-verified. Portaling to body with a viewport-aware
+    flip/clamp means they can never be clipped again.
+    `focusable` cells (hint-only content: full UUIDs, permission-denial
+    justifications) keep tabIndex=0 and gain a visually-hidden
+    aria-describedby twin per the house contract (LegalRepository's
+    status-hint pattern); cells whose full text is already in the DOM are
+    hover-only, not tab stops (~40 extra stops per page removed). */
+const HINT_GAP = 8;
+
+const HintTooltip = ({ anchor, text }: { anchor: DOMRect; text: string }) => {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  // Height estimate for the flip decision (0.75rem/1.45 ≈ 18px lines, ~38
+  // chars per 260px content width). The tooltip is transient; a measurement
+  // pass would be overkill.
+  const estH = Math.ceil(text.length / 38) * 18 + 18;
+  const placeAbove = anchor.bottom + HINT_GAP + estH > vh - HINT_GAP
+    && anchor.top - HINT_GAP - estH >= HINT_GAP;
+  const style: React.CSSProperties = {
+    right: Math.max(HINT_GAP, vw - anchor.right - HINT_GAP),
+    ...(placeAbove
+      ? { bottom: vh - anchor.top + HINT_GAP }
+      : { top: anchor.bottom + HINT_GAP }),
+  };
+  return createPortal(
+    <span className="admin-hint-pop" role="tooltip" style={style}>{text}</span>,
+    document.body
+  );
+};
+
+const HintCell = ({ hint, focusable = false, children }: {
+  hint: string;
+  focusable?: boolean;
+  children: React.ReactNode;
+}) => {
+  const twinId = useId();
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  return (
+    <span
+      className="admin-hint-cell"
+      {...(focusable ? { tabIndex: 0, 'aria-describedby': twinId } : {})}
+      onMouseEnter={e => setAnchor(e.currentTarget.getBoundingClientRect())}
+      onMouseLeave={() => setAnchor(null)}
+      onFocus={e => setAnchor(e.currentTarget.getBoundingClientRect())}
+      onBlur={() => setAnchor(null)}
+      onKeyDown={e => { if (e.key === 'Escape') setAnchor(null); }}
+    >
+      {children}
+      {focusable && <span id={twinId} className="visually-hidden">{hint}</span>}
+      {anchor && <HintTooltip anchor={anchor} text={hint} />}
+    </span>
+  );
+};
+
+// ── Klasifikasi pie chart ─────────────────────────────────────────────────
+// Highcharts 3-D pie — the side-effect import of 'highcharts/highcharts-3d'
+// above registers the 3D module via its compose() calls. CSS variables are
+// resolved at render time so the chart matches the app's light/dark theme.
+
+interface KlasPieProps {
+  data: Record<string, number>;
+  totalDocs: number;
+}
+
+const KlasifikasiPieChart = ({ data, totalDocs }: KlasPieProps) => {
+  const seriesData = useMemo(
+    () => Object.entries(data).map(([klas, count]) => ({
+      name: klas,
+      y: count,
+      color: KLASIFIKASI_COLOR[klas] ?? FALLBACK_COLOR,
+    })),
+    [data],
+  );
+
+  // Read computed CSS tokens so Highcharts inherits the live theme palette.
+  const root = typeof window !== 'undefined'
+    ? getComputedStyle(document.documentElement)
+    : null;
+  const textColor   = root?.getPropertyValue('--text-primary').trim()   || '#e2e8f0';
+  const subColor    = root?.getPropertyValue('--text-secondary').trim()  || '#94a3b8';
+  const bgSurface   = root?.getPropertyValue('--bg-surface').trim()      || '#1e293b';
+  const borderColor = root?.getPropertyValue('--border-color').trim()    || '#334155';
+
+  const options = useMemo<Highcharts.Options>(() => ({
+    chart: {
+      type: 'pie',
+      backgroundColor: 'transparent',
+      margin: [10, 10, 60, 10],
+      options3d: {
+        enabled: true,
+        alpha: 48,
+        beta: 0,
+      },
+      style: { fontFamily: 'Inter, sans-serif' },
+      animation: { duration: 700 },
+    },
+    title: { text: undefined },
+    credits: { enabled: false },
+    legend: {
+      enabled: true,
+      align: 'center',
+      verticalAlign: 'bottom',
+      layout: 'horizontal',
+      itemStyle: { color: subColor, fontSize: '0.78rem', fontWeight: '400' },
+      itemHoverStyle: { color: textColor },
+      symbolRadius: 4,
+      // Each legend item shows "Name — N docs"
+      labelFormatter(this: Highcharts.Point) {
+        return `${this.name} — <b>${this.y}</b>`;
+      },
+    },
+    tooltip: {
+      useHTML: true,
+      outside: true,
+      backgroundColor: bgSurface,
+      borderColor,
+      borderRadius: 6,
+      shadow: false,
+      style: { color: '#ffffff', fontSize: '0.82rem' },
+      headerFormat: '',
+      pointFormatter(this: Highcharts.Point) {
+        const pct = totalDocs > 0
+          ? ((( this.y ?? 0) / totalDocs) * 100).toFixed(1)
+          : '—';
+        return `<span style="font-size:0.78rem;font-weight:600;color:#ffffff">${this.name}</span><br/>`
+          + `<span style="color:${this.color as string}">\u25CF</span> `
+          + `<span style="color:#ffffff">${this.series.name}: <b>${this.y} dokumen</b> (${pct}%)</span><br/>`;
+      },
+    },
+    plotOptions: {
+      pie: {
+        depth: 35,
+        innerSize: '40%',
+        allowPointSelect: true,
+        cursor: 'pointer',
+        dataLabels: { enabled: false },
+        showInLegend: true,
+        states: {
+          hover: { brightness: 0.12 },
+          select: { color: undefined, borderColor: textColor, borderWidth: 2 },
+        },
+      },
+    },
+    series: [{
+      type: 'pie',
+      name: 'Dokumen',
+      data: seriesData,
+    }],
+  }), [seriesData, totalDocs, textColor, subColor, bgSurface, borderColor]);
+
+  return (
+    <div className="admin-pie-wrap">
+      <HighchartsReact highcharts={Highcharts} options={options} />
+    </div>
+  );
+};
+
 export default function AdminDashboard() {
   const { formatDateTime, formatTime } = useDateFormatters();
   const { user } = useAuth();
@@ -305,8 +508,26 @@ export default function AdminDashboard() {
   const [newExclusion, setNewExclusion] = useState('');
   const [addingExclusion, setAddingExclusion] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
-  const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
-  const feedbackTimer = useRef<number | undefined>(undefined);
+
+  /* Local toast strip (house pattern from KnowledgeGraph/SystemMonitoring —
+     there is no app-wide toast context to join). Mutation/export feedback
+     used to be a banner at page top, which could render thousands of px
+     above the viewport while the action happened down-page (critique P1·1:
+     export success live-verified at top −3034 px). The bottom-right fixed
+     stack is always in view. */
+  const toastIdRef = useRef(0);
+  const [toasts, setToasts] = useState<{ id: number; kind: 'success' | 'error'; message: string }[]>([]);
+  const dismissToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+  const pushToast = useCallback((kind: 'success' | 'error', message: string) => {
+    const id = ++toastIdRef.current;
+    setToasts(prev => [...prev, { id, kind, message }]);
+    // Successes auto-dismiss so they don't stack up during a batch of edits;
+    // errors persist until dismissed (2026-10-06 critique P2 — preserved in
+    // toast form) so a failed destructive action can never vanish unread.
+    if (kind === 'success') window.setTimeout(() => dismissToast(id), 8000);
+  }, [dismissToast]);
 
   // User management (critique P0) — exact-role admin only; the BE re-checks
   // every guard, the FE gate is presentation.
@@ -316,41 +537,59 @@ export default function AdminDashboard() {
   const [usersError, setUsersError] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const [userRoleFilter, setUserRoleFilter] = useState('');
+  const [usersPage, setUsersPage] = useState(1);
+  const [exportingUsers, setExportingUsers] = useState(false);
+  // Drawer: show full user detail
+  const [drawerUser, setDrawerUser] = useState<ManagedUser | null>(null);
+  // Per-row action menu (force logout, reset pwd, open drawer)
+  const [rowMenu, setRowMenu] = useState<{ userId: string; top: number; right: number } | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement | null>(null);
+  // Temp password shown after reset (one-time display)
+  const [tempPwdInfo, setTempPwdInfo] = useState<{ username: string; pwd: string } | null>(null);
 
   // Audit viewer (critique P1) — server-side pagination/filtering; auditQuery
-  // is the debounced copy of auditSearch that actually hits the API.
+  // is the debounced copy of auditSearch that actually hits the API. Filter
+  // and page state seed from and sync to URL search params (critique P2·5):
+  // a built audit view survives F5, can be bookmarked, and can be handed to
+  // a colleague.
+  const [searchParams, setSearchParams] = useSearchParams();
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditTotal, setAuditTotal] = useState(0);
   const [auditActionTypes, setAuditActionTypes] = useState<string[]>([]);
-  const [auditSearch, setAuditSearch] = useState('');
-  const [auditQuery, setAuditQuery] = useState('');
-  const [auditAction, setAuditAction] = useState('');
-  const [auditFrom, setAuditFrom] = useState('');
-  const [auditTo, setAuditTo] = useState('');
-  const [auditPage, setAuditPage] = useState(1); // 1-based, matches the API
+  const [auditSearch, setAuditSearch] = useState(() => searchParams.get('q') ?? '');
+  const [auditQuery, setAuditQuery] = useState(() => searchParams.get('q') ?? '');
+  const [auditAction, setAuditAction] = useState(() => searchParams.get('action') ?? '');
+  const [auditFrom, setAuditFrom] = useState(() => searchParams.get('from') ?? '');
+  const [auditTo, setAuditTo] = useState(() => searchParams.get('to') ?? '');
+  const [auditPage, setAuditPage] = useState(() => {
+    const p = parseInt(searchParams.get('page') ?? '1', 10);
+    return Number.isNaN(p) ? 1 : Math.max(1, p);
+  }); // 1-based, matches the API
   const [auditLoading, setAuditLoading] = useState(true); // first fetch is in flight on mount
   const [auditError, setAuditError] = useState(false);
   const [exporting, setExporting] = useState<'csv' | 'json' | null>(null);
-
-  const showFeedback = useCallback((kind: 'success' | 'error', text: string) => {
-    window.clearTimeout(feedbackTimer.current);
-    setFeedback({ kind, text });
-    // Errors persist until dismissed (critique P2: the old 8 s auto-dismiss
-    // could hide a failed destructive action before it was read); successes
-    // keep the timeout so they don't stack up during a batch of edits.
-    if (kind === 'success') {
-      feedbackTimer.current = window.setTimeout(() => setFeedback(null), 8000);
-    }
-  }, []);
-
-  useEffect(() => () => window.clearTimeout(feedbackTimer.current), []);
+  // Page-jump scratch value (critique P2·5) — committed on Enter; the
+  // placeholder shows "current/total" while empty.
+  const [pageJump, setPageJump] = useState('');
 
   /** Refresh never blanks the page: the skeleton shows only while data is
       null; later pulls keep the (stale) view, spin the hero button, and
       surface failures as an inline alert instead of a content vacuum. */
   const runFetch = useCallback(async () => {
-    // Per-call catch: a failing endpoint still lets the other one load
-    const res = await api.get('/api/admin/dashboard').catch((e) => { console.error('Dashboard fetch error:', e); return null; });
+    // Parallel round-trips (critique P2·5): three sequential awaits made
+    // every hero refresh ~3× slower than the slowest single endpoint.
+    // Per-call catches keep the partial-failure contract — one dead
+    // endpoint still lets the others load.
+    const [res, excRes, usersRes] = await Promise.all([
+      api.get('/api/admin/dashboard').catch((e) => { console.error('Dashboard fetch error:', e); return null; }),
+      api.get('/api/admin/kg-exclusions').catch((e) => { console.error('KG exclusions fetch error:', e); return null; }),
+      // User management is exact-role admin only (the BE would 403 anyway —
+      // skipping the call keeps sekretaris perusahaan's network tab clean).
+      isAdminRole
+        ? api.get('/api/admin/users').catch((e) => { console.error('Users fetch error:', e); return null; })
+        : Promise.resolve(undefined),
+    ]);
+
     if (res) {
       setData(res.data);
       setLastRefresh(new Date());
@@ -359,7 +598,6 @@ export default function AdminDashboard() {
       setLoadError('Gagal memuat statistik dashboard.');
     }
 
-    const excRes = await api.get('/api/admin/kg-exclusions').catch((e) => { console.error('KG exclusions fetch error:', e); return null; });
     if (excRes) {
       setExclusions(excRes.data.exclusions);
       setExclusionsError(false);
@@ -367,10 +605,7 @@ export default function AdminDashboard() {
       setExclusionsError(true);
     }
 
-    // User management is exact-role admin only (the BE would 403 anyway —
-    // skipping the call keeps sekretaris perusahaan's network tab clean).
     if (isAdminRole) {
-      const usersRes = await api.get('/api/admin/users').catch((e) => { console.error('Users fetch error:', e); return null; });
       if (usersRes) {
         setManagedUsers(usersRes.data.users);
         setUsersError(false);
@@ -401,6 +636,10 @@ export default function AdminDashboard() {
     })();
   }, [runFetch]);
 
+  // Abort + sequence refs for the audit race guard (see fetchAudit below).
+  const auditAbortRef = useRef<AbortController | null>(null);
+  const auditSeqRef = useRef(0);
+
   /** Audit viewer (critique P1): its own endpoint, its own error state —
       filter/page changes refetch without touching the rest of the view.
       No setState before the first await: the busy flag is raised by the
@@ -409,6 +648,15 @@ export default function AdminDashboard() {
       (react-hooks/set-state-in-effect — same contract as
       SystemMonitoring.fetchAuditLogs). */
   const fetchAudit = useCallback(async () => {
+    // Race guard (critique P1·2; the 2026-10-12 functional scan confirmed
+    // out-of-order responses at API level): a newer fetch aborts the
+    // in-flight one, and a sequence number fences whatever still resolves,
+    // so a stale response can never paint rows contradicting the visible
+    // filters.
+    auditAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    auditAbortRef.current = ctrl;
+    const seq = ++auditSeqRef.current;
     const res = await api.get('/api/admin/audit-logs', {
       params: {
         search: auditQuery || undefined,
@@ -418,7 +666,13 @@ export default function AdminDashboard() {
         page: auditPage,
         page_size: AUDIT_PAGE_SIZE,
       },
-    }).catch((e) => { console.error('Audit fetch error:', e); return null; });
+      signal: ctrl.signal,
+    }).catch((e) => {
+      // An aborted request was superseded by a newer fetch — not an error.
+      if (!ctrl.signal.aborted) console.error('Audit fetch error:', e);
+      return null;
+    });
+    if (seq !== auditSeqRef.current) return;
     if (res) {
       setAuditLogs(res.data.logs);
       setAuditTotal(res.data.total);
@@ -437,6 +691,9 @@ export default function AdminDashboard() {
     (async () => { await fetchAudit(); })();
   }, [fetchAudit]);
 
+  // Abort any in-flight audit request on unmount (route change mid-fetch).
+  useEffect(() => () => auditAbortRef.current?.abort(), []);
+
   // Debounce the search field (350 ms) into the server query and restart at
   // page 1 — inside the timeout, not the effect body (set-state-in-effect).
   // The busy flag is only raised when the query really changes, so typing
@@ -451,6 +708,22 @@ export default function AdminDashboard() {
     }, 350);
     return () => window.clearTimeout(t);
   }, [auditSearch, auditQuery]);
+
+  // One-way state → URL sync (critique P2·5). replace-not-push: filter
+  // typing must not flood the history stack (and with no intermediate
+  // entries, back-navigation can never strand the viewer on a rewritten
+  // URL). The string comparison keeps a no-op replace from re-triggering.
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (auditQuery) next.set('q', auditQuery);
+    if (auditAction) next.set('action', auditAction);
+    if (auditFrom) next.set('from', auditFrom);
+    if (auditTo) next.set('to', auditTo);
+    if (auditPage > 1) next.set('page', String(auditPage));
+    if (searchParams.toString() !== next.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [auditQuery, auditAction, auditFrom, auditTo, auditPage, searchParams, setSearchParams]);
 
   const exportAudit = async (fmt: 'csv' | 'json') => {
     setExporting(fmt);
@@ -479,9 +752,9 @@ export default function AdminDashboard() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      showFeedback('success', `Ekspor ${fmt.toUpperCase()} log audit selesai diunduh (${filename}).`);
+      pushToast('success', `Ekspor ${fmt.toUpperCase()} log audit selesai diunduh (${filename}).`);
     } catch (e) {
-      showFeedback('error', `Gagal mengekspor log audit sebagai ${fmt.toUpperCase()}.`);
+      pushToast('error', `Gagal mengekspor log audit sebagai ${fmt.toUpperCase()}.`);
       console.error('Audit export error:', e);
     } finally {
       setExporting(null);
@@ -498,7 +771,7 @@ export default function AdminDashboard() {
       // FR-30 deletes matching KG nodes/edges server-side; report exactly
       // what was destroyed instead of a silent success (backend returns
       // the counts, admin.py POST /kg-exclusions).
-      showFeedback('success', deletedNodes + deletedEdges > 0
+      pushToast('success', deletedNodes + deletedEdges > 0
         ? `Pengecualian "${name}" ditambahkan — ${deletedNodes} node dan ${deletedEdges} relasi dihapus dari Knowledge Graph.`
         : `Pengecualian "${name}" ditambahkan. Tidak ada node atau relasi yang cocok untuk dihapus.`);
       await fetchAll(true);
@@ -507,7 +780,7 @@ export default function AdminDashboard() {
       const message = detail === 'Entity already in exclusion list'
         ? `"${name}" sudah ada dalam daftar pengecualian.`
         : `Gagal menambahkan pengecualian${detail ? `: ${detail}` : '.'}`;
-      showFeedback('error', message);
+      pushToast('error', message);
       console.error('Add exclusion error:', e);
       // Rethrow so the ConfirmDialog stays open with the failure inline
       // instead of closing over a mutation that never landed (critique P2).
@@ -530,7 +803,7 @@ export default function AdminDashboard() {
       const nodes: number = res.data?.matching_nodes ?? 0;
       const edges: number = res.data?.matching_edges ?? 0;
       if (res.data?.already_excluded) {
-        showFeedback('error', `"${name}" sudah ada dalam daftar pengecualian.`);
+        pushToast('error', `"${name}" sudah ada dalam daftar pengecualian.`);
         return;
       }
       body = nodes + edges > 0
@@ -551,11 +824,11 @@ export default function AdminDashboard() {
   const deleteExclusion = async (exc: Exclusion) => {
     try {
       await api.delete(`/api/admin/kg-exclusions/${exc.id}`);
-      showFeedback('success', `Pengecualian "${exc.entity_name}" dihapus.`);
+      pushToast('success', `Pengecualian "${exc.entity_name}" dihapus.`);
       await fetchAll(true);
     } catch (e) {
       const message = `Gagal menghapus pengecualian "${exc.entity_name}".`;
-      showFeedback('error', message);
+      pushToast('error', message);
       console.error('Delete exclusion error:', e);
       throw new Error(message); // keeps the ConfirmDialog open (critique P2)
     }
@@ -578,13 +851,13 @@ export default function AdminDashboard() {
   const changeUserRole = async (target: ManagedUser, newRole: string) => {
     try {
       await api.patch(`/api/admin/users/${target.id}/role`, { role: newRole });
-      showFeedback('success', `Peran ${target.username} diubah dari ${ROLE_LABELS[target.role] ?? target.role} menjadi ${ROLE_LABELS[newRole] ?? newRole}.`);
+      pushToast('success', `Peran ${target.username} diubah dari ${ROLE_LABELS[target.role] ?? target.role} menjadi ${ROLE_LABELS[newRole] ?? newRole}.`);
       await fetchAll(true);
       void fetchAudit();
     } catch (e) {
       const detail = isHttpError(e) ? (e.response.data?.detail as string | undefined) : undefined;
       const message = `Gagal mengubah peran ${target.username}${detail ? `: ${detail}` : '.'}`;
-      showFeedback('error', message);
+      pushToast('error', message);
       console.error('Change role error:', e);
       throw new Error(message);
     }
@@ -603,7 +876,7 @@ export default function AdminDashboard() {
   const setUserActive = async (target: ManagedUser, nextActive: boolean) => {
     try {
       await api.patch(`/api/admin/users/${target.id}/status`, { is_active: nextActive });
-      showFeedback('success', nextActive
+      pushToast('success', nextActive
         ? `Akun ${target.username} diaktifkan kembali.`
         : `Akun ${target.username} dinonaktifkan — permintaan berikutnya dari akun itu akan ditolak.`);
       await fetchAll(true);
@@ -611,7 +884,7 @@ export default function AdminDashboard() {
     } catch (e) {
       const detail = isHttpError(e) ? (e.response.data?.detail as string | undefined) : undefined;
       const message = `Gagal ${nextActive ? 'mengaktifkan' : 'menonaktifkan'} akun ${target.username}${detail ? `: ${detail}` : '.'}`;
-      showFeedback('error', message);
+      pushToast('error', message);
       console.error('Set user status error:', e);
       throw new Error(message);
     }
@@ -651,6 +924,35 @@ export default function AdminDashboard() {
     ? '0 entri'
     : `${(auditPage - 1) * AUDIT_PAGE_SIZE + 1}\u2013${Math.min(auditPage * AUDIT_PAGE_SIZE, auditTotal)} dari ${auditTotal}`;
 
+  // "Reset Filter" (critique P2·5): auditHasFilters used to power only the
+  // empty-state copy; now it gates a real control. Whenever resettable, at
+  // least one settled fetch dep (a filter value or the page) differs from
+  // its reset value, so the refetch effect is guaranteed to fire and the
+  // busy flag raised here can never strand the viewer.
+  const auditResettable = auditHasFilters || auditPage !== 1;
+  const resetAuditFilters = () => {
+    if (!auditResettable) return;
+    setAuditSearch('');
+    setAuditQuery('');
+    setAuditAction('');
+    setAuditFrom('');
+    setAuditTo('');
+    setAuditPage(1);
+    setAuditLoading(true);
+  };
+
+  // Page-jump commit (Enter): clamps into the real range; empty, NaN, or
+  // same-page values are no-ops. Escape/blur discard the scratch value.
+  const commitPageJump = () => {
+    const n = parseInt(pageJump, 10);
+    setPageJump('');
+    if (Number.isNaN(n)) return;
+    const clamped = Math.min(pageCount, Math.max(1, n));
+    if (clamped === auditPage) return;
+    setAuditLoading(true);
+    setAuditPage(clamped);
+  };
+
   // Roles this actor may assign: strictly below their own level (matches the
   // BE guard in admin.py admin_change_role).
   const assignableRoles = useMemo(
@@ -667,6 +969,220 @@ export default function AdminDashboard() {
         (u.username || '').toLowerCase().includes(q) ||
         (u.email || '').toLowerCase().includes(q)));
   }, [managedUsers, userSearch, userRoleFilter]);
+
+  // ── Bulk account actions (critique P2·5) ────────────────────────────────
+  // Row checkboxes + a selection bar. Same guard rails as the single-row
+  // flow: only manageable non-self rows are selectable, and the BE re-checks
+  // every row anyway. The selection is a set of ids; selectedManaged
+  // re-validates against the latest managedUsers on every render, so stale
+  // ids (a refresh demoted or removed a row) can never ride into a bulk
+  // mutation.
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+  const selectedManaged = useMemo(
+    () => managedUsers.filter(u => selectedUsers.has(u.id) && u.manageable && !u.is_self),
+    [managedUsers, selectedUsers]);
+  const bulkDeactivateTargets = useMemo(() => selectedManaged.filter(u => u.is_active), [selectedManaged]);
+  const bulkActivateTargets = useMemo(() => selectedManaged.filter(u => !u.is_active), [selectedManaged]);
+  const visibleManageable = useMemo(
+    () => visibleUsers.filter(u => u.manageable && !u.is_self),
+    [visibleUsers]);
+  const allVisibleSelected = visibleManageable.length > 0
+    && visibleManageable.every(u => selectedUsers.has(u.id));
+
+  const toggleSelectUser = (id: string, on: boolean) => {
+    setSelectedUsers(prev => {
+      const next = new Set(prev);
+      if (on) next.add(id); else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedUsers(prev => {
+      const next = new Set(prev);
+      if (allVisibleSelected) visibleManageable.forEach(u => next.delete(u.id));
+      else visibleManageable.forEach(u => next.add(u.id));
+      return next;
+    });
+  };
+
+  /** Sequential per-row mutation with one result-summary toast (critique
+      P2·5; also answers Riley's "batches have no summary" flag). Partial
+      failure closes the dialog — the persistent error toast carries the
+      per-account detail, and a dialog hovering over a half-finished batch
+      helps nobody. Directory + audit feed refresh once, not per row. */
+  const bulkSetActive = async (targets: ManagedUser[], nextActive: boolean) => {
+    let ok = 0;
+    const failed: string[] = [];
+    for (const t of targets) {
+      try {
+        await api.patch(`/api/admin/users/${t.id}/status`, { is_active: nextActive });
+        ok += 1;
+      } catch (e) {
+        const detail = isHttpError(e) ? (e.response.data?.detail as string | undefined) : undefined;
+        failed.push(`${t.username}${detail ? ` (${detail})` : ''}`);
+        console.error('Bulk user status error:', e);
+      }
+    }
+    const verb = nextActive ? 'diaktifkan kembali' : 'dinonaktifkan';
+    if (failed.length === 0) {
+      pushToast('success', `${ok} akun ${verb}.`);
+    } else if (ok === 0) {
+      pushToast('error', `Gagal memproses ${failed.length} akun: ${failed.join(', ')}.`);
+    } else {
+      pushToast('error', `${ok} dari ${targets.length} akun ${verb}. Gagal: ${failed.join(', ')}.`);
+    }
+    setSelectedUsers(new Set());
+    await fetchAll(true);
+    void fetchAudit();
+  };
+
+  const requestBulkToggle = (nextActive: boolean) => {
+    const targets = nextActive ? bulkActivateTargets : bulkDeactivateTargets;
+    if (targets.length === 0) return;
+    const names = targets.slice(0, 6).map(t => t.username).join(', ')
+      + (targets.length > 6 ? ` dan ${targets.length - 6} akun lainnya` : '');
+    setConfirmState({
+      title: nextActive
+        ? `Aktifkan kembali ${targets.length} akun?`
+        : `Nonaktifkan ${targets.length} akun?`,
+      body: nextActive
+        ? `${names} akan dapat masuk kembali dengan peran masing-masing.`
+        : `${names} tidak dapat masuk lagi, dan sesi yang sedang berjalan ditolak pada permintaan berikutnya. Akun dapat diaktifkan kembali kapan saja.`,
+      confirmLabel: nextActive
+        ? `Aktifkan ${targets.length} Akun`
+        : `Nonaktifkan ${targets.length} Akun`,
+      confirmTone: nextActive ? 'primary' : 'danger',
+      onConfirm: () => bulkSetActive(targets, nextActive),
+    });
+  };
+
+  // ── Users-table column sorting (critique P2·5) ──────────────────────────
+  // null = the server's directory order (default). First click sorts asc,
+  // second desc; the th carries aria-sort for screen readers.
+  const [userSort, setUserSort] = useState<{ key: UserSortKey; dir: 'asc' | 'desc' } | null>(null);
+  const toggleUserSort = (key: UserSortKey) => {
+    setUserSort(prev => (prev?.key === key
+      ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+      : { key, dir: 'asc' }));
+  };
+  const sortedUsers = useMemo(() => {
+    if (!userSort) return visibleUsers;
+    const dir = userSort.dir === 'asc' ? 1 : -1;
+    return [...visibleUsers].sort((a, b) => {
+      switch (userSort.key) {
+        case 'username': return a.username.localeCompare(b.username) * dir;
+        case 'email': return (a.email ?? '').localeCompare(b.email ?? '') * dir;
+        case 'role': return ((ROLE_LEVELS[a.role] ?? 0) - (ROLE_LEVELS[b.role] ?? 0)) * dir;
+        case 'status': return (Number(a.is_active) - Number(b.is_active)) * dir;
+        case 'created': return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * dir;
+        case 'last_login': {
+          const ta = a.last_login ? new Date(a.last_login).getTime() : 0;
+          const tb = b.last_login ? new Date(b.last_login).getTime() : 0;
+          return (ta - tb) * dir;
+        }
+        default: return 0;
+      }
+    });
+  }, [visibleUsers, userSort]);
+
+  // Client-side pagination for the users table.
+  const usersTotalPages = Math.max(1, Math.ceil(sortedUsers.length / USERS_PAGE_SIZE));
+  const usersPageClamped = Math.min(usersPage, usersTotalPages);
+  const pagedUsers = sortedUsers.slice(
+    (usersPageClamped - 1) * USERS_PAGE_SIZE,
+    usersPageClamped * USERS_PAGE_SIZE,
+  );
+  const usersRangeLabel = sortedUsers.length === 0
+    ? '0 akun'
+    : `${(usersPageClamped - 1) * USERS_PAGE_SIZE + 1}–${Math.min(usersPageClamped * USERS_PAGE_SIZE, sortedUsers.length)} dari ${sortedUsers.length}`;
+
+  // ── New user management mutations ───────────────────────────────────────
+
+  const forceLogout = async (target: ManagedUser) => {
+    try {
+      await api.post(`/api/admin/users/${target.id}/force-logout`);
+      pushToast('success', `Sesi ${target.username} telah diakhiri.`);
+      void fetchAudit();
+    } catch (e) {
+      const detail = isHttpError(e) ? (e.response.data?.detail as string | undefined) : undefined;
+      const message = `Gagal mengakhiri sesi ${target.username}${detail ? `: ${detail}` : '.'}`;
+      pushToast('error', message);
+      throw new Error(message);
+    }
+  };
+
+  const requestForceLogout = (target: ManagedUser) => {
+    setRowMenu(null);
+    setConfirmState({
+      title: 'Akhiri sesi pengguna?',
+      body: `Sesi aktif ${target.username} akan diakhiri segera. Akun tidak dinonaktifkan — mereka dapat masuk kembali.`,
+      confirmLabel: 'Akhiri Sesi',
+      confirmTone: 'danger',
+      onConfirm: () => forceLogout(target),
+    });
+  };
+
+  const resetPassword = async (target: ManagedUser) => {
+    try {
+      const res = await api.post(`/api/admin/users/${target.id}/reset-password`);
+      const pwd: string = res.data.temp_password;
+      setTempPwdInfo({ username: target.username, pwd });
+      void fetchAudit();
+    } catch (e) {
+      const detail = isHttpError(e) ? (e.response.data?.detail as string | undefined) : undefined;
+      const message = `Gagal mereset kata sandi ${target.username}${detail ? `: ${detail}` : '.'}`;
+      pushToast('error', message);
+      throw new Error(message);
+    }
+  };
+
+  const requestResetPassword = (target: ManagedUser) => {
+    setRowMenu(null);
+    setConfirmState({
+      title: 'Reset kata sandi?',
+      body: `Kata sandi ${target.username} akan direset ke kata sandi sementara yang harus segera diubah. Sesi aktif mereka juga akan diakhiri.`,
+      confirmLabel: 'Reset Kata Sandi',
+      confirmTone: 'danger',
+      onConfirm: () => resetPassword(target),
+    });
+  };
+
+  const exportUsers = async () => {
+    setExportingUsers(true);
+    try {
+      const res = await api.get('/api/admin/users/export', { responseType: 'blob' });
+      const cd = (res.headers['content-disposition'] as string | undefined) ?? '';
+      const named = /filename="?([^";]+)"?/.exec(cd);
+      const filename = named?.[1] ?? `users-${Date.now()}.csv`;
+      const url = URL.createObjectURL(res.data as Blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      pushToast('success', `Ekspor CSV pengguna selesai (${filename}).`);
+    } catch (e) {
+      pushToast('error', 'Gagal mengekspor daftar pengguna.');
+      console.error('User export error:', e);
+    } finally {
+      setExportingUsers(false);
+    }
+  };
+
+  // Close row menu on outside click / Escape.
+  useEffect(() => {
+    if (!rowMenu) return;
+    const onDown = (e: MouseEvent) => {
+      if (rowMenuRef.current && !rowMenuRef.current.contains(e.target as Node)) setRowMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setRowMenu(null); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [rowMenu]);
 
   const isSekretaris = (user?.role || '').toLowerCase() === 'sekretaris perusahaan';
   const heroSubtitle = isSekretaris
@@ -723,28 +1239,10 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {/* Mutation feedback, screen-global (moved out of the KG panel
-              2026-10-06: it now also reports user-management results).
-              Errors persist until dismissed (critique P2). */}
-          {feedback && (
-            <div
-              className={`admin-feedback admin-feedback--${feedback.kind}`}
-              role={feedback.kind === 'error' ? 'alert' : 'status'}
-            >
-              {feedback.kind === 'error' && <AlertTriangle size={16} aria-hidden="true" />}
-              {feedback.text}
-              {feedback.kind === 'error' && (
-                <button
-                  type="button"
-                  className="admin-feedback-dismiss"
-                  onClick={() => setFeedback(null)}
-                  aria-label="Tutup pesan error"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          )}
+          {/* Mutation + export feedback now rides the bottom-right toast
+              strip (house pattern — rendered at the end of this component):
+              the old screen-global banner sat at page top, up to thousands
+              of px above the actions that produced it (critique P1·1). */}
 
           {/* System health + counters */}
           <div className="admin-health-grid">
@@ -787,47 +1285,34 @@ export default function AdminDashboard() {
             ))}
           </div>
 
-          {/* Volume by Klasifikasi & Jenis */}
+          {/* Volume by Klasifikasi & Jenis. Panel titles are h2 (page h1 →
+              panel h2 → dialog h3): the skipped tier broke SR heading
+              navigation (detector: skipped-heading). */}
           <div className="admin-panels-2col">
             <section className="admin-panel" aria-labelledby="admin-klas-title">
               <div className="admin-panel-head">
-                <h3 className="admin-panel-title" id="admin-klas-title">
+                <h2 className="admin-panel-title" id="admin-klas-title">
                   <Lock size={18} color="var(--accent-color)" aria-hidden="true" />
                   Volume per Klasifikasi
-                </h3>
+                </h2>
               </div>
               <p className="admin-panel-hint">Porsi terhadap total {totalDocs} dokumen.</p>
-              {Object.entries(data.doc_by_klasifikasi).map(([klas, count]) => {
-                const color = KLASIFIKASI_COLOR[klas] ?? FALLBACK_COLOR;
-                return (
-                  <div key={klas} className="admin-bar-row">
-                    <div className="admin-bar-head">
-                      <span className="admin-bar-label">
-                        <span className="admin-legend-dot" style={{ background: color }} aria-hidden="true" />
-                        <span className="admin-bar-name" title={klas}>{klas}</span>
-                      </span>
-                      <span className="admin-bar-count" style={{ color }}>{count}</span>
-                    </div>
-                    <div className="admin-bar-track" aria-hidden="true">
-                      <div
-                        className="admin-bar-fill"
-                        style={{ background: color, transform: `scaleX(${totalDocs > 0 ? count / totalDocs : 0})` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-              {Object.keys(data.doc_by_klasifikasi).length === 0 && (
+              {Object.keys(data.doc_by_klasifikasi).length === 0 ? (
                 <p className="admin-list-empty">Tidak ada data</p>
+              ) : (
+                <KlasifikasiPieChart
+                  data={data.doc_by_klasifikasi}
+                  totalDocs={totalDocs}
+                />
               )}
             </section>
 
             <section className="admin-panel" aria-labelledby="admin-jenis-title">
               <div className="admin-panel-head">
-                <h3 className="admin-panel-title" id="admin-jenis-title">
+                <h2 className="admin-panel-title" id="admin-jenis-title">
                   <FileText size={18} color="var(--accent-color)" aria-hidden="true" />
                   Volume per Jenis
-                </h3>
+                </h2>
               </div>
               <p className="admin-panel-hint">10 jenis teratas — panjang batang relatif terhadap jenis terbanyak.</p>
               {data.doc_by_jenis.length === 0 ? (
@@ -861,11 +1346,23 @@ export default function AdminDashboard() {
           {isAdminRole && (
             <section className="admin-panel" aria-labelledby="admin-users-title">
               <div className="admin-panel-head">
-                <h3 className="admin-panel-title" id="admin-users-title">
+                <h2 className="admin-panel-title" id="admin-users-title">
                   <Users size={18} color="var(--accent-color)" aria-hidden="true" />
                   Manajemen Pengguna
-                </h3>
+                </h2>
                 <span className="admin-panel-note">{managedUsers.length} akun terdaftar</span>
+                <button
+                  type="button"
+                  className="btn btn-secondary admin-export-btn"
+                  onClick={() => { void exportUsers(); }}
+                  disabled={exportingUsers || managedUsers.length === 0}
+                  title="Ekspor semua pengguna ke CSV"
+                >
+                  {exportingUsers
+                    ? <Loader2 size={14} className="admin-spin" aria-hidden="true" />
+                    : <Download size={14} aria-hidden="true" />}
+                  CSV
+                </button>
               </div>
               <p className="admin-panel-hint">
                 Ubah peran atau nonaktifkan akun di bawah level peran Anda. Perubahan berlaku
@@ -881,19 +1378,51 @@ export default function AdminDashboard() {
                   type="text"
                   placeholder="Cari nama pengguna atau email..."
                   value={userSearch}
-                  onChange={e => setUserSearch(e.target.value)}
+                  onChange={e => { setUserSearch(e.target.value); setUsersPage(1); }}
                 />
                 <label htmlFor="admin-user-role" className="visually-hidden">Filter peran</label>
                 <select
                   id="admin-user-role"
                   className="admin-select"
                   value={userRoleFilter}
-                  onChange={e => setUserRoleFilter(e.target.value)}
+                  onChange={e => { setUserRoleFilter(e.target.value); setUsersPage(1); }}
                 >
                   <option value="">Semua Peran</option>
                   {Object.keys(ROLE_LABELS).map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                 </select>
               </div>
+
+              {selectedManaged.length > 0 && (
+                <div className="admin-bulk-bar" role="group" aria-label="Aksi massal akun terpilih">
+                  <span className="admin-bulk-count">{selectedManaged.length} akun dipilih</span>
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => requestBulkToggle(false)}
+                    disabled={bulkDeactivateTargets.length === 0}
+                  >
+                    <UserX size={14} aria-hidden="true" />
+                    Nonaktifkan{bulkDeactivateTargets.length > 0 ? ` (${bulkDeactivateTargets.length})` : ''}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => requestBulkToggle(true)}
+                    disabled={bulkActivateTargets.length === 0}
+                  >
+                    <UserCheck size={14} aria-hidden="true" />
+                    Aktifkan Kembali{bulkActivateTargets.length > 0 ? ` (${bulkActivateTargets.length})` : ''}
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-bulk-clear"
+                    onClick={() => setSelectedUsers(new Set())}
+                    aria-label="Batalkan pemilihan akun"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
 
               {usersError ? (
                 <div className="admin-feedback admin-feedback--error" role="alert">
@@ -904,92 +1433,174 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               ) : (
-                <div className="compliance-table-wrap">
-                  <table className="compliance-table">
-                    <caption className="visually-hidden">Daftar akun pengguna beserta peran dan statusnya</caption>
-                    <thead>
-                      <tr>
-                        <th scope="col">Pengguna</th>
-                        <th scope="col">Email</th>
-                        <th scope="col">Peran</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Terdaftar</th>
-                        <th scope="col" className="admin-th-action">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visibleUsers.map(u => (
-                        <tr key={u.id} className={u.is_active ? undefined : 'admin-row-inactive'}>
-                          <td className="admin-entity-name">
-                            {u.username}
-                            {u.is_self && <span className="status-chip status-chip--neutral admin-self-chip">Anda</span>}
-                          </td>
-                          <td className="admin-cell-secondary">{u.email || '\u2014'}</td>
-                          <td>
-                            {u.manageable && !u.is_self ? (
-                              <>
-                                <label htmlFor={`admin-role-${u.id}`} className="visually-hidden">
-                                  Ubah peran {u.username}
-                                </label>
-                                <select
-                                  id={`admin-role-${u.id}`}
-                                  className="admin-select admin-select--row"
-                                  value={u.role}
-                                  onChange={e => {
-                                    const next = e.target.value;
-                                    if (next !== u.role) requestRoleChange(u, next);
-                                  }}
-                                >
-                                  {assignableRoles.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                                </select>
-                              </>
-                            ) : (
-                              <span
-                                className="status-chip status-chip--neutral"
-                                data-hint={u.is_self
-                                  ? 'Akun Anda sendiri tidak dapat diubah dari panel ini.'
-                                  : 'Peran pada atau di atas level Anda tidak dapat dikelola dari akun ini.'}
-                                tabIndex={0}
-                              >
-                                {ROLE_LABELS[u.role] ?? u.role}
-                              </span>
-                            )}
-                          </td>
-                          <td>
-                            <span className={`status-chip ${u.is_active ? 'status-chip--success' : 'status-chip--danger'}`}>
-                              {u.is_active ? 'Aktif' : 'Nonaktif'}
-                            </span>
-                          </td>
-                          <td className="admin-cell-secondary admin-nowrap">{formatDateTime(u.created_at)}</td>
-                          <td className="admin-cell-action">
-                            {u.manageable && !u.is_self && (
+                <>
+                  <div className="compliance-table-wrap">
+                    <table className="compliance-table">
+                      <caption className="visually-hidden">Daftar akun pengguna beserta peran dan statusnya</caption>
+                      <thead>
+                        <tr>
+                          <th scope="col" className="admin-th-check">
+                            <input
+                              type="checkbox"
+                              checked={allVisibleSelected}
+                              ref={el => {
+                                if (el) el.indeterminate = !allVisibleSelected && visibleManageable.some(u => selectedUsers.has(u.id));
+                              }}
+                              onChange={toggleSelectAllVisible}
+                              disabled={visibleManageable.length === 0}
+                              aria-label="Pilih semua akun yang dapat dikelola dalam daftar ini"
+                            />
+                          </th>
+                          {USER_SORT_COLUMNS.map(([key, label]) => (
+                            <th
+                              key={key}
+                              scope="col"
+                              aria-sort={userSort?.key === key
+                                ? (userSort.dir === 'asc' ? 'ascending' : 'descending')
+                                : 'none'}
+                            >
+                              <button type="button" className="admin-th-sort" onClick={() => { toggleUserSort(key); setUsersPage(1); }}>
+                                {label}
+                                {userSort?.key === key
+                                  ? (userSort.dir === 'asc'
+                                    ? <ArrowUp size={12} aria-hidden="true" />
+                                    : <ArrowDown size={12} aria-hidden="true" />)
+                                  : <ArrowUpDown size={12} aria-hidden="true" />}
+                              </button>
+                            </th>
+                          ))}
+                          {/* Email verified column header */}
+                          <th scope="col" title="Verifikasi email">
+                            <span className="visually-hidden">Verifikasi Email</span>
+                            <MailCheck size={14} aria-hidden="true" />
+                          </th>
+                          <th scope="col" className="admin-th-action">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pagedUsers.map(u => (
+                          <tr key={u.id} className={u.is_active ? undefined : 'admin-row-inactive'}>
+                            <td className="admin-cell-check">
+                              {u.manageable && !u.is_self && (
+                                <input
+                                  type="checkbox"
+                                  checked={selectedUsers.has(u.id)}
+                                  onChange={e => toggleSelectUser(u.id, e.target.checked)}
+                                  aria-label={`Pilih akun ${u.username} untuk aksi massal`}
+                                />
+                              )}
+                            </td>
+                            <td className="admin-entity-name">
                               <button
                                 type="button"
-                                className={`admin-icon-btn ${u.is_active ? 'admin-icon-btn--danger' : 'admin-icon-btn--success'}`}
-                                onClick={() => requestToggleActive(u)}
-                                aria-label={u.is_active
-                                  ? `Nonaktifkan akun ${u.username}`
-                                  : `Aktifkan kembali akun ${u.username}`}
-                                title={u.is_active ? 'Nonaktifkan akun' : 'Aktifkan kembali akun'}
+                                className="admin-user-name-btn"
+                                onClick={() => setDrawerUser(u)}
+                                title={`Lihat detail ${u.username}`}
                               >
-                                {u.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
+                                {u.username}
                               </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                      {visibleUsers.length === 0 && (
-                        <tr>
-                          <td colSpan={6} className="admin-table-empty">
-                            {managedUsers.length === 0
-                              ? 'Tidak ada akun terdaftar.'
-                              : 'Tidak ada pengguna yang cocok dengan pencarian atau filter.'}
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                              {u.is_self && <span className="status-chip status-chip--neutral admin-self-chip">Anda</span>}
+                            </td>
+                            <td className="admin-cell-secondary">{u.email || '\u2014'}</td>
+                            <td>
+                              {u.manageable && !u.is_self ? (
+                                <>
+                                  <label htmlFor={`admin-role-${u.id}`} className="visually-hidden">
+                                    Ubah peran {u.username}
+                                  </label>
+                                  <select
+                                    id={`admin-role-${u.id}`}
+                                    className="admin-select admin-select--row"
+                                    value={u.role}
+                                    onChange={e => {
+                                      const next = e.target.value;
+                                      if (next !== u.role) requestRoleChange(u, next);
+                                    }}
+                                  >
+                                    {assignableRoles.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                                  </select>
+                                </>
+                              ) : (
+                                <HintCell
+                                  focusable
+                                  hint={u.is_self
+                                    ? 'Akun Anda sendiri tidak dapat diubah dari panel ini.'
+                                    : 'Peran pada atau di atas level Anda tidak dapat dikelola dari akun ini.'}
+                                >
+                                  <span className="status-chip status-chip--neutral">
+                                    {ROLE_LABELS[u.role] ?? u.role}
+                                  </span>
+                                </HintCell>
+                              )}
+                            </td>
+                            <td>
+                              <span className={`status-chip ${u.is_active ? 'status-chip--success' : 'status-chip--danger'}`}>
+                                {u.is_active ? 'Aktif' : 'Nonaktif'}
+                              </span>
+                            </td>
+                            <td className="admin-cell-secondary admin-nowrap">{formatDateTime(u.created_at)}</td>
+                            <td className="admin-cell-secondary admin-nowrap">
+                              {u.last_login ? formatDateTime(u.last_login) : <span className="admin-null-val">Belum pernah</span>}
+                            </td>
+                            <td className="admin-cell-verify">
+                              {u.email_verified
+                                ? <MailCheck size={14} className="admin-verify-ok" aria-label="Email terverifikasi" />
+                                : <MailX size={14} className="admin-verify-no" aria-label="Email belum terverifikasi" />}
+                            </td>
+                            <td className="admin-cell-action">
+                              <div className="admin-row-actions">
+                                {u.manageable && !u.is_self && (
+                                  <button
+                                    type="button"
+                                    className={`admin-icon-btn ${u.is_active ? 'admin-icon-btn--danger' : 'admin-icon-btn--success'}`}
+                                    onClick={() => requestToggleActive(u)}
+                                    aria-label={u.is_active ? `Nonaktifkan akun ${u.username}` : `Aktifkan kembali akun ${u.username}`}
+                                    title={u.is_active ? 'Nonaktifkan akun' : 'Aktifkan kembali akun'}
+                                  >
+                                    {u.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="admin-icon-btn"
+                                  aria-label={`Menu aksi untuk ${u.username}`}
+                                  title="Aksi lainnya"
+                                  onClick={e => {
+                                    const r = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                                    setRowMenu(prev => prev?.userId === u.id ? null : { userId: u.id, top: r.bottom + 4, right: window.innerWidth - r.right });
+                                  }}
+                                >
+                                  <MoreHorizontal size={16} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {pagedUsers.length === 0 && (
+                          <tr>
+                            <td colSpan={9} className="admin-table-empty">
+                              {managedUsers.length === 0
+                                ? 'Tidak ada akun terdaftar.'
+                                : 'Tidak ada pengguna yang cocok dengan pencarian atau filter.'}
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Users table pagination */}
+                  {usersTotalPages > 1 && (
+                    <div className="admin-pagination">
+                      <span className="admin-page-info" role="status">{usersRangeLabel}</span>
+                      <button type="button" className="admin-page-btn" onClick={() => setUsersPage(1)} disabled={usersPageClamped <= 1} aria-label="Halaman pertama"><ChevronsLeft size={14} /></button>
+                      <button type="button" className="admin-page-btn" onClick={() => setUsersPage(p => Math.max(1, p - 1))} disabled={usersPageClamped <= 1} aria-label="Halaman sebelumnya"><ChevronLeft size={14} /></button>
+                      <span className="admin-page-info">{usersPageClamped} / {usersTotalPages}</span>
+                      <button type="button" className="admin-page-btn" onClick={() => setUsersPage(p => Math.min(usersTotalPages, p + 1))} disabled={usersPageClamped >= usersTotalPages} aria-label="Halaman berikutnya"><ChevronRight size={14} /></button>
+                      <button type="button" className="admin-page-btn" onClick={() => setUsersPage(usersTotalPages)} disabled={usersPageClamped >= usersTotalPages} aria-label="Halaman terakhir"><ChevronsRight size={14} /></button>
+                    </div>
+                  )}
+                </>
               )}
             </section>
           )}
@@ -997,10 +1608,10 @@ export default function AdminDashboard() {
           {/* FR-30: KG entity exclusions */}
           <section className="admin-panel" aria-labelledby="admin-kg-title">
             <div className="admin-panel-head">
-              <h3 className="admin-panel-title" id="admin-kg-title">
+              <h2 className="admin-panel-title" id="admin-kg-title">
                 <Shield size={18} color="var(--danger)" aria-hidden="true" />
                 Pengecualian Entitas Knowledge Graph
-              </h3>
+              </h2>
             </div>
             <p className="admin-panel-hint">
               Entitas yang dikecualikan tidak diekstraksi ke dalam Knowledge Graph.
@@ -1084,10 +1695,10 @@ export default function AdminDashboard() {
               set (critique P1; GET /api/admin/audit-logs + /export). */}
           <section className="admin-panel" aria-labelledby="admin-audit-title" aria-busy={auditLoading}>
             <div className="admin-panel-head">
-              <h3 className="admin-panel-title" id="admin-audit-title">
+              <h2 className="admin-panel-title" id="admin-audit-title">
                 <Eye size={18} color="var(--warning)" aria-hidden="true" />
                 Log Audit
-              </h3>
+              </h2>
               <span className="status-chip status-chip--neutral">Append-Only</span>
               <span className="admin-panel-note">{auditTotal} entri</span>
               <button
@@ -1152,6 +1763,15 @@ export default function AdminDashboard() {
                 min={auditFrom || undefined}
                 onChange={e => { setAuditLoading(true); setAuditTo(e.target.value); setAuditPage(1); }}
               />
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={resetAuditFilters}
+                disabled={!auditResettable}
+              >
+                <X size={14} aria-hidden="true" />
+                Reset Filter
+              </button>
             </div>
 
             {auditError ? (
@@ -1178,22 +1798,24 @@ export default function AdminDashboard() {
                         ))}
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className={auditLoading ? 'admin-audit-tbody admin-audit-tbody--busy' : 'admin-audit-tbody'}>
                       {auditLogs.map(log => (
                         <tr key={log.id}>
                           <td className="admin-cell-secondary admin-nowrap">{formatDateTime(log.timestamp)}</td>
-                          {/* Pengguna: username join with the full UUID as a
-                              keyboard-reachable hint; deleted accounts fall
-                              back to the UUID prefix (critique P1). */}
+                          {/* Pengguna: username join; the full UUID is
+                              hint-only content, so the cell stays focusable
+                              and carries an aria-describedby twin
+                              (critique P2·4). Deleted accounts fall back to
+                              the UUID prefix (critique P1). */}
                           <td className="admin-cell-secondary">
                             {log.username ? (
-                              <span className="admin-hint-cell" data-hint={log.user_id} tabIndex={0}>
+                              <HintCell focusable hint={log.user_id}>
                                 <span className="admin-hint-text">{log.username}</span>
-                              </span>
+                              </HintCell>
                             ) : log.user_id ? (
-                              <span className="admin-hint-cell" data-hint={log.user_id} tabIndex={0}>
+                              <HintCell focusable hint={log.user_id}>
                                 <span className="admin-mono admin-hint-text">{`${log.user_id.slice(0, 8)}\u2026`}</span>
-                              </span>
+                              </HintCell>
                             ) : '\u2014'}
                           </td>
                           <td>
@@ -1201,24 +1823,25 @@ export default function AdminDashboard() {
                               {log.action_type}
                             </span>
                           </td>
-                          {/* Truncated cells: data-hint + tabIndex replace the
-                              hover-only title (critique P2 a11y) — the full
-                              text stays in the DOM for screen readers. */}
+                          {/* Truncated cells: the full text stays in the DOM
+                              for screen readers, so the hint is hover-only —
+                              these cells are no longer tab stops
+                              (critique P2·4: ~40 extra stops per page). */}
                           <td className="admin-cell-secondary">
                             {log.resource_id
                               ? (
-                                <span className="admin-hint-cell" data-hint={log.resource_id} tabIndex={0}>
+                                <HintCell hint={log.resource_id}>
                                   <span className="admin-mono admin-hint-text">{log.resource_id}</span>
-                                </span>
+                                </HintCell>
                               )
                               : '\u2014'}
                           </td>
                           <td className="admin-cell-secondary">
                             {log.details
                               ? (
-                                <span className="admin-hint-cell" data-hint={log.details} tabIndex={0}>
+                                <HintCell hint={log.details}>
                                   <span className="admin-hint-text">{log.details}</span>
-                                </span>
+                                </HintCell>
                               )
                               : '\u2014'}
                           </td>
@@ -1233,7 +1856,19 @@ export default function AdminDashboard() {
                   </table>
                 </div>
                 <div className="admin-pagination">
-                  <span className="admin-page-info">{rangeLabel}</span>
+                  {/* role="status": the new range is announced after every
+                      refetch — the visible counterpart of aria-busy
+                      (critique P1·2 / Sam's silent-update flag). */}
+                  <span className="admin-page-info" role="status">{rangeLabel}</span>
+                  <button
+                    type="button"
+                    className="admin-page-btn"
+                    onClick={() => { setAuditLoading(true); setAuditPage(1); }}
+                    disabled={auditPage <= 1 || auditLoading}
+                    aria-label="Halaman pertama"
+                  >
+                    <ChevronsLeft size={14} />
+                  </button>
                   <button
                     type="button"
                     className="admin-page-btn"
@@ -1243,6 +1878,25 @@ export default function AdminDashboard() {
                   >
                     <ChevronLeft size={14} />
                   </button>
+                  <label htmlFor="admin-audit-page-jump" className="visually-hidden">
+                    Lompat ke halaman (1 sampai {pageCount})
+                  </label>
+                  <input
+                    id="admin-audit-page-jump"
+                    className="admin-input admin-page-jump"
+                    type="number"
+                    min={1}
+                    max={pageCount}
+                    placeholder={`${auditPage}/${pageCount}`}
+                    value={pageJump}
+                    disabled={auditLoading}
+                    onChange={e => setPageJump(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') commitPageJump();
+                      if (e.key === 'Escape') setPageJump('');
+                    }}
+                    onBlur={() => setPageJump('')}
+                  />
                   <button
                     type="button"
                     className="admin-page-btn"
@@ -1251,6 +1905,15 @@ export default function AdminDashboard() {
                     aria-label="Halaman berikutnya"
                   >
                     <ChevronRight size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-page-btn"
+                    onClick={() => { setAuditLoading(true); setAuditPage(pageCount); }}
+                    disabled={auditPage >= pageCount || auditLoading}
+                    aria-label="Halaman terakhir"
+                  >
+                    <ChevronsRight size={14} />
                   </button>
                 </div>
               </>
@@ -1262,6 +1925,183 @@ export default function AdminDashboard() {
       {confirmState && (
         <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
       )}
+
+      {/* Per-row action dropdown menu — portaled so it escapes table overflow */}
+      {rowMenu && createPortal((() => {
+        const target = managedUsers.find(u => u.id === rowMenu.userId);
+        if (!target) return null;
+        return (
+          <div
+            ref={rowMenuRef}
+            className="admin-row-menu"
+            style={{ top: rowMenu.top, right: rowMenu.right }}
+            role="menu"
+            aria-label={`Aksi untuk ${target.username}`}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="admin-row-menu-item"
+              onClick={() => { setRowMenu(null); setDrawerUser(target); }}
+            >
+              <Info size={14} aria-hidden="true" />
+              Lihat Detail
+            </button>
+            {target.manageable && !target.is_self && (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="admin-row-menu-item admin-row-menu-item--danger"
+                  onClick={() => requestForceLogout(target)}
+                >
+                  <LogOut size={14} aria-hidden="true" />
+                  Akhiri Sesi
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="admin-row-menu-item admin-row-menu-item--danger"
+                  onClick={() => requestResetPassword(target)}
+                >
+                  <KeyRound size={14} aria-hidden="true" />
+                  Reset Kata Sandi
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })(), document.body)}
+
+      {/* User detail drawer */}
+      {drawerUser && createPortal(
+        <div className="admin-drawer-overlay" onClick={e => { if (e.target === e.currentTarget) setDrawerUser(null); }}>
+          <div className="admin-drawer" role="dialog" aria-modal="true" aria-label={`Detail akun ${drawerUser.username}`}>
+            <div className="admin-drawer-head">
+              <h3 className="admin-drawer-title">{drawerUser.username}</h3>
+              <button type="button" className="admin-icon-btn" onClick={() => setDrawerUser(null)} aria-label="Tutup drawer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="admin-drawer-body">
+              <div className="admin-drawer-section">
+                <div className="admin-drawer-grid">
+                  <span className="admin-drawer-label">Email</span>
+                  <span className="admin-drawer-value">{drawerUser.email || '—'}</span>
+
+                  <span className="admin-drawer-label">Peran</span>
+                  <span className="admin-drawer-value">{ROLE_LABELS[drawerUser.role] ?? drawerUser.role}</span>
+
+                  <span className="admin-drawer-label">Status</span>
+                  <span className="admin-drawer-value">
+                    <span className={`status-chip ${drawerUser.is_active ? 'status-chip--success' : 'status-chip--danger'}`}>
+                      {drawerUser.is_active ? 'Aktif' : 'Nonaktif'}
+                    </span>
+                  </span>
+
+                  <span className="admin-drawer-label">Terdaftar</span>
+                  <span className="admin-drawer-value admin-nowrap">{formatDateTime(drawerUser.created_at)}</span>
+
+                  <span className="admin-drawer-label">Login Terakhir</span>
+                  <span className="admin-drawer-value admin-nowrap">
+                    {drawerUser.last_login ? formatDateTime(drawerUser.last_login) : <span className="admin-null-val">Belum pernah</span>}
+                  </span>
+
+                  <span className="admin-drawer-label">Verifikasi Email</span>
+                  <span className="admin-drawer-value">
+                    {drawerUser.email_verified
+                      ? <span className="admin-verify-ok admin-drawer-verify"><MailCheck size={14} /> Terverifikasi</span>
+                      : <span className="admin-verify-no admin-drawer-verify"><MailX size={14} /> Belum terverifikasi</span>}
+                  </span>
+
+                  <span className="admin-drawer-label">ID Akun</span>
+                  <span className="admin-drawer-value admin-mono" style={{ fontSize: '0.75rem' }}>{drawerUser.id}</span>
+                </div>
+              </div>
+
+              {drawerUser.manageable && !drawerUser.is_self && (
+                <div className="admin-drawer-section">
+                  <div className="admin-drawer-section-title">Aksi Akun</div>
+                  <div className="admin-drawer-actions">
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => { setDrawerUser(null); requestToggleActive(drawerUser); }}
+                    >
+                      {drawerUser.is_active ? <UserX size={14} aria-hidden="true" /> : <UserCheck size={14} aria-hidden="true" />}
+                      {drawerUser.is_active ? 'Nonaktifkan Akun' : 'Aktifkan Kembali'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => { setDrawerUser(null); requestForceLogout(drawerUser); }}
+                    >
+                      <LogOut size={14} aria-hidden="true" />
+                      Akhiri Sesi
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => { setDrawerUser(null); requestResetPassword(drawerUser); }}
+                    >
+                      <KeyRound size={14} aria-hidden="true" />
+                      Reset Kata Sandi
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Temp password one-time display */}
+      {tempPwdInfo && createPortal(
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setTempPwdInfo(null); }}>
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="admin-tmpwd-title">
+            <h3 className="confirm-modal-title" id="admin-tmpwd-title">Kata Sandi Sementara</h3>
+            <p className="confirm-modal-body">
+              Kata sandi sementara untuk <strong>{tempPwdInfo.username}</strong> berhasil dibuat.
+              Sampaikan kepada pengguna melalui saluran aman — kata sandi ini tidak akan ditampilkan lagi.
+            </p>
+            <div className="admin-tmpwd-box">
+              <code className="admin-tmpwd-code">{tempPwdInfo.pwd}</code>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => navigator.clipboard?.writeText(tempPwdInfo.pwd).then(() => pushToast('success', 'Kata sandi disalin.')).catch(() => {})}
+              >
+                Salin
+              </button>
+            </div>
+            <div className="confirm-modal-actions">
+              <button type="button" className="btn btn-primary" onClick={() => setTempPwdInfo(null)}>
+                Selesai
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Local toast strip — reuses the UploadProvider's .upload-toast
+          grammar (components.css); the house pattern for pages without the
+          upload context (KnowledgeGraph, SystemMonitoring do the same). The
+          container is always mounted so the live region pre-exists its
+          first announcement (critique P1·1). */}
+      <div className="upload-toast-container" aria-live="polite">
+        {toasts.map(t => (
+          <div key={t.id} className={`upload-toast upload-toast--${t.kind}`} role={t.kind === 'error' ? 'alert' : 'status'}>
+            {t.kind === 'success' ? <CheckCircle2 size={16} aria-hidden="true" /> : <AlertTriangle size={16} aria-hidden="true" />}
+            <span>{t.message}</span>
+            <button type="button" className="upload-toast-close" onClick={() => dismissToast(t.id)} aria-label="Tutup notifikasi">
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

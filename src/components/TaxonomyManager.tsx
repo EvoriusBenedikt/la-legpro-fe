@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Edit2, Trash2, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, CheckCircle2, XCircle, AlertCircle, Loader2, Check, X } from 'lucide-react';
 import api, { isHttpError } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import { useDialogA11y } from '../hooks/useDialogA11y';
@@ -35,6 +35,29 @@ const errorDetail = (e: unknown, fallback: string): string =>
 
 const retryable = (e: unknown): boolean => !isHttpError(e) || e.response.status >= 500;
 
+/* Twin-name defense (2026-10-12, critique Issue 5 — FE-only per user
+   decision; the BE normalized unique index was declined): the join and the
+   unique constraint are byte-exact, so case/whitespace variants coexist as
+   confusing twins. Folded comparison catches them client-side. */
+const foldName = (s: string): string => s.trim().toLowerCase().replace(/\s+/g, ' ');
+const findNameConflict = (raw: string, list: Taxonomy[], excludeId?: number | null) => {
+  const name = raw.trim();
+  if (!name) return null;
+  const exact = list.find(t => t.id !== excludeId && t.name === name);
+  if (exact) return { kind: 'exact' as const, existing: exact };
+  const twin = list.find(t => t.id !== excludeId && foldName(t.name) === foldName(name));
+  return twin ? { kind: 'twin' as const, existing: twin } : null;
+};
+
+/* Copy (plan step 5): the exact-duplicate message mirrors the BE 400 detail
+   word-for-word (a closing period is added for the FE sentence) so the
+   client-side block and the server-side block speak with one voice; the
+   twin warning names the existing type and never blocks. */
+const conflictCopy = (c: { kind: 'exact' | 'twin'; existing: Taxonomy }): string =>
+  c.kind === 'exact'
+    ? 'Jenis dokumen dengan nama tersebut sudah ada.'
+    : `Sudah ada jenis dokumen dengan nama serupa: “${c.existing.name}”. Nama yang nyaris sama memecah klasifikasi dokumen.`;
+
 /** System-consistent choice dialog (mirrors AdminDashboard's ConfirmDialog
     pattern): replaces window.confirm for the destructive delete, and offers
     the reversible deactivate path first (2026-10-06 critique remediation).
@@ -49,12 +72,16 @@ const retryable = (e: unknown): boolean => !isHttpError(e) || e.response.status 
 const ChoiceDialog = ({
   tax,
   canDelete,
+  showEvidence,
+  adminNote,
   onClose,
   onDeactivate,
   onDelete,
 }: {
   tax: Taxonomy;
   canDelete: boolean;
+  showEvidence: boolean;
+  adminNote: boolean;
   onClose: () => void;
   onDeactivate: () => Promise<void>;
   onDelete: () => Promise<void>;
@@ -62,6 +89,37 @@ const ChoiceDialog = ({
   const dialogRef = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState<'deactivate' | 'delete' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Evidence preview (2026-10-12, critique Issue 1): up to 3 sample judul for
+  // this jenis, fetched from the repository API when the dialog opens for a
+  // role the parent gates in (insinyur ti). A fetch failure degrades to a
+  // message and the dialog stays functional; the copy says "contoh" and never
+  // claims completeness (Review Focus 5).
+  const [samples, setSamples] = useState<{ titles: string[]; hidden: number } | null>(null);
+  const [samplesFailed, setSamplesFailed] = useState(false);
+
+  useEffect(() => {
+    if (!showEvidence) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get('/api/repository');
+        const docs = (res.data?.documents ?? []).filter(
+          (d: { jenis?: string }) => d.jenis === tax.name,
+        );
+        const titles: string[] = [];
+        for (const d of docs) {
+          const j = ((d as { judul?: string }).judul ?? '').trim();
+          if (!j) continue;
+          titles.push(j.length > 60 ? `${j.slice(0, 57)}…` : j);
+          if (titles.length === 3) break;
+        }
+        if (!cancelled) setSamples({ titles, hidden: docs.length - titles.length });
+      } catch {
+        if (!cancelled) setSamplesFailed(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [showEvidence, tax.name]);
 
   // Mounted only while open, so `open` is a constant true. While a mutation
   // is in flight Escape gets a no-op handler — the dialog cannot vanish
@@ -70,6 +128,7 @@ const ChoiceDialog = ({
   useDialogA11y(true, pending ? () => undefined : onClose, dialogRef);
 
   const run = async (which: 'deactivate' | 'delete', action: () => Promise<void>, fallback: string) => {
+    if (pending) return;
     setPending(which);
     setError(null);
     try {
@@ -121,6 +180,30 @@ const ChoiceDialog = ({
             ? `Menghapus menghilangkan jenis ini secara permanen; klasifikasi ${tax.usage_count} dokumen tersebut akan merujuk ke nama yang tidak lagi ada. Membuat ulang jenis dengan nama yang sama akan menghubungkan kembali dokumen-dokumen itu.`
             : 'Menghapus menghilangkan jenis ini secara permanen dari sistem.'}
         </p>
+        {/* Evidence preview (2026-10-12, critique Issue 1) — grammar reuse:
+            confirm-modal-note, no new CSS. Never claims completeness. */}
+        {showEvidence && samples === null && !samplesFailed && (
+          <p className="confirm-modal-note">Memuat contoh dokumen...</p>
+        )}
+        {showEvidence && samplesFailed && (
+          <p className="confirm-modal-note">Contoh dokumen tidak dapat dimuat.</p>
+        )}
+        {showEvidence && samples !== null && samples.titles.length === 0 && (
+          <p className="confirm-modal-note">
+            Dokumen jenis ini tidak terlihat dengan hak akses peran Anda.
+          </p>
+        )}
+        {showEvidence && samples !== null && samples.titles.length > 0 && (
+          <p className="confirm-modal-note">
+            {`Contoh dokumen dengan jenis ini: ${samples.titles.map(t => `“${t}”`).join(', ')}${samples.hidden > 0 ? ` (dan ${samples.hidden} lainnya)` : ''}.`}
+          </p>
+        )}
+        {adminNote && (
+          <p className="confirm-modal-note">
+            Peran admin tidak memiliki akses baca ke repositori dokumen, sehingga
+            daftar dokumen terdampak tidak dapat ditampilkan di sini.
+          </p>
+        )}
         {!canDelete && (
           <p className="confirm-modal-note">
             {tax.is_active
@@ -130,7 +213,7 @@ const ChoiceDialog = ({
         )}
         {error && <p className="confirm-modal-error" role="alert">{error}</p>}
         <div className="confirm-modal-actions">
-          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={pending !== null}>
+          <button type="button" className="btn btn-secondary" onClick={() => { if (!pending) onClose(); }} aria-disabled={pending !== null || undefined}>
             Batal
           </button>
           {tax.is_active && (
@@ -138,7 +221,7 @@ const ChoiceDialog = ({
               type="button"
               className="btn btn-primary"
               onClick={() => { void run('deactivate', onDeactivate, 'Gagal mengubah status jenis dokumen'); }}
-              disabled={pending !== null}
+              aria-disabled={pending !== null || undefined}
             >
               {pending === 'deactivate' && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
               {pending === 'deactivate' ? 'Memproses...' : 'Nonaktifkan'}
@@ -148,7 +231,8 @@ const ChoiceDialog = ({
             type="button"
             className="btn btn-danger"
             onClick={() => { void run('delete', onDelete, 'Gagal menghapus jenis dokumen'); }}
-            disabled={pending !== null || !canDelete}
+            disabled={!canDelete}
+            aria-disabled={pending !== null || undefined}
           >
             {pending === 'delete' && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
             {pending === 'delete' ? 'Memproses...' : 'Hapus Permanen'}
@@ -190,6 +274,7 @@ const RenameDialog = ({
   useDialogA11y(true, pending ? () => undefined : onClose, dialogRef);
 
   const run = async () => {
+    if (pending) return;
     setPending(true);
     setError(null);
     try {
@@ -229,14 +314,14 @@ const RenameDialog = ({
         </p>
         {error && <p className="confirm-modal-error" role="alert">{error}</p>}
         <div className="confirm-modal-actions">
-          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={pending}>
+          <button type="button" className="btn btn-secondary" onClick={() => { if (!pending) onClose(); }} aria-disabled={pending || undefined}>
             Batal
           </button>
           <button
             type="button"
             className="btn btn-primary"
             onClick={() => { void run(); }}
-            disabled={pending}
+            aria-disabled={pending || undefined}
           >
             {pending && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
             {pending ? 'Memproses...' : 'Ubah Nama'}
@@ -249,15 +334,24 @@ const RenameDialog = ({
 
 export default function TaxonomyManager() {
   const { user } = useAuth();
+  const roleLower = (user?.role || '').toLowerCase();
   // Usage-based dual gate (2026-10-06, user decision): admin / insinyur ti may
   // hard-delete in-use types; other writer roles only when usage_count is 0.
   // The BE enforces the same rule on DELETE — this mirrors it for button state.
-  const privileged = ['admin', 'insinyur ti', 'dewa'].includes((user?.role || '').toLowerCase());
+  const privileged = ['admin', 'insinyur ti', 'dewa'].includes(roleLower);
   // Only sekretaris perusahaan (regular-routes block) and dewa (full union)
   // hold the /repository route (App.tsx) — for admin/insinyur ti a usage link
   // would bounce off their catch-all redirect, so their count stays plain
   // text (2026-10-08 shape pass, critique Issue 5).
-  const canBrowseRepository = ['sekretaris perusahaan', 'dewa'].includes((user?.role || '').toLowerCase());
+  const canBrowseRepository = ['sekretaris perusahaan', 'dewa'].includes(roleLower);
+  // Evidence preview (2026-10-12, critique Issue 1): FR-24 bars admin from the
+  // repository API, so the in-dialog sample preview serves insinyur ti — the
+  // only privileged role that is API-allowed yet lacks the /repository deep
+  // link (dewa + sekretaris keep the link); admin gets the FR-24 explanation
+  // note instead. The preview copy says "contoh" and never claims completeness
+  // (the role's klasifikasi filter may hide documents — Review Focus 5).
+  const evidencePreview = roleLower === 'insinyur ti';
+  const adminRepoBlocked = roleLower === 'admin';
   const [taxonomyList, setTaxonomyList] = useState<Taxonomy[]>([]);
   const [loading, setLoading] = useState(true);
   // Two error lanes (2026-10-06 clarify pass, critique F4): mutation failures
@@ -272,6 +366,11 @@ export default function TaxonomyManager() {
   // dismiss timer — a deps list on the string alone skips the re-fire (the
   // "toggle two types within 4s" trap from the critique's reviewer notes).
   const [noticeSeq, setNoticeSeq] = useState(0);
+  // Undo-on-delete (2026-10-12, critique Issue 2): the full deleted row, held
+  // so the delete notice can offer "Urungkan" — a re-POST of {name, is_active}
+  // is a COMPLETE recovery because regulation classification joins on the name
+  // (id churn irrelevant). Retires when any newer notice replaces it.
+  const [undoTarget, setUndoTarget] = useState<Taxonomy | null>(null);
 
   // States for Adding
   const [adding, setAdding] = useState(false);
@@ -281,8 +380,16 @@ export default function TaxonomyManager() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
 
-  // In-flight lock for every mutation (double-submit guard)
-  const [busy, setBusy] = useState(false);
+  // In-flight lock for every mutation (double-submit guard). Since the
+  // 2026-10-12 audit pass (critique Issue 3) the lock is a SCOPED pending
+  // state: `busy` stays the derived any-mutation flag for guards, while
+  // kind/id drive the acting-control spinner and keep the control focusable —
+  // native disabled on the clicked element drops focus to <body> and punches
+  // a hole in the dialog Tab trap. Doctrine: native `disabled` = steady-state
+  // conditions (empty input, exact duplicate, unprivileged delete);
+  // `aria-disabled` + handler guard = transient in-flight lock.
+  const [pending, setPending] = useState<{ kind: 'add' | 'rename' | 'toggle' | 'undo'; id?: number } | null>(null);
+  const busy = pending !== null;
 
   // Delete-or-deactivate choice dialog target
   const [choice, setChoice] = useState<Taxonomy | null>(null);
@@ -310,6 +417,13 @@ export default function TaxonomyManager() {
   // `again` is optional since the 2026-10-08 harden pass: deterministic 4xx
   // failures (duplicate name, privilege) get the banner WITHOUT "Coba lagi" —
   // a retry there is a guaranteed-identical failure (critique Riley dead-end).
+  // `() => again` is the REQUIRED React idiom for storing a function in state:
+  // a function passed to a setter is consumed as an UPDATER, so React calls
+  // `(() => again)(prev)` and stores `again` itself. A bare `setRetry(again)`
+  // would instead INVOKE `again` during the update (spurious retry) and store
+  // its Promise result as state. The 2026-10-12 review's "inert retry" finding
+  // was a static misread of this idiom — disproved live 2026-10-13 (network
+  // probe: the retry click fired the real PUT end-to-end). Do not "simplify".
   const fail = (message: string, again?: () => void) => {
     setError(message);
     setRetry(again ? () => again : null);
@@ -317,15 +431,29 @@ export default function TaxonomyManager() {
 
   const notify = (text: string) => {
     setNotice(text);
+    // Any newer notice retires a pending undo (single-notice grammar).
+    setUndoTarget(null);
     setNoticeSeq(s => s + 1);
   };
 
-  // Success confirmations are short positive sentences that dismiss themselves
+  // The delete notice is the only lane that carries an undo affordance: it
+  // persists until dismissed (timer exemption below) and offers the re-POST
+  // of the deleted row (2026-10-12, critique Issue 2).
+  const notifyDelete = (text: string, tax: Taxonomy) => {
+    setNotice(text);
+    setUndoTarget(tax);
+    setNoticeSeq(s => s + 1);
+  };
+
+  // Success confirmations are short positive sentences that dismiss themselves —
+  // EXCEPT the delete notice while it carries "Urungkan": an undo affordance
+  // must not die on a 4-second timer (2026-10-12, critique Issue 2), so that
+  // notice persists until dismissed or replaced.
   useEffect(() => {
-    if (!notice) return;
+    if (!notice || undoTarget) return;
     const t = setTimeout(() => setNotice(''), 4000);
     return () => clearTimeout(t);
-  }, [notice, noticeSeq]);
+  }, [notice, noticeSeq, undoTarget]);
 
   const fetchTaxonomy = async () => {
     setLoading(true);
@@ -350,7 +478,11 @@ export default function TaxonomyManager() {
   const handleAdd = async () => {
     const name = newName.trim();
     if (!name || busy) return;
-    setBusy(true);
+    // Exact duplicate = deterministic BE 400: Simpan is native-disabled and
+    // the visible message explains why; this closes the Enter-submit path
+    // (the server stays the authority).
+    if (findNameConflict(name, taxonomyList)?.kind === 'exact') return;
+    setPending({ kind: 'add' });
     try {
       await api.post('/api/taxonomy', { name });
       setNewName('');
@@ -368,11 +500,23 @@ export default function TaxonomyManager() {
         fail(NETWORK_ERROR, handleAdd);
       }
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   };
 
+  // Live name checks (2026-10-12 harden, critique Issue 5): computed on the
+  // full in-memory list — no per-keystroke round trip (H7's complaint). The
+  // Task-4 single-editor invariant gives activeConflict exactly one source.
+  const addConflict = findNameConflict(newName, taxonomyList);
+  const editConflict = editingId !== null ? findNameConflict(editName, taxonomyList, editingId) : null;
+  const activeConflict = editingId !== null ? editConflict : addConflict;
+
   const startEdit = (tax: Taxonomy) => {
+    // Exactly one editor surface at a time (2026-10-12 clarify, critique
+    // Issue 4): blur no longer cancels, so opening one editor must close the
+    // other — the add form yields to the row editor.
+    setAdding(false);
+    setNewName('');
     setEditingId(tax.id);
     setEditName(tax.name);
   };
@@ -408,7 +552,7 @@ export default function TaxonomyManager() {
   // state the retry depended on — a guaranteed silent no-op (critique F3b).
   const commitRename = async (id: number, name: string, from: string) => {
     if (busy) return;
-    setBusy(true);
+    setPending({ kind: 'rename', id });
     try {
       await renameTax(id, name, from);
     } catch (e) {
@@ -420,12 +564,14 @@ export default function TaxonomyManager() {
         fail(NETWORK_ERROR, () => commitRename(id, name, from));
       }
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   };
 
-  // Enter = save, Escape = cancel, blur = cancel (suppressed while the rename
-  // dialog is open); a PUT fires only when the value actually changed. An
+  // Enter = save, Escape = cancel — blur PRESERVES the draft (2026-10-12
+  // clarify, critique Issue 4: the destructive blur destroyed uncommitted
+  // work); the ✓/✕ tiles are the visible contract, Enter/Esc the
+  // accelerators. A PUT fires only when the value actually changed. An
   // in-use type gates behind the informational dialog first (critique F3a;
   // FYI semantics since the 2026-10-08 BE cascade).
   const commitEdit = async (id: number) => {
@@ -433,13 +579,17 @@ export default function TaxonomyManager() {
     if (!original) return;
     const name = editName.trim();
     // Whitespace-only is neither a save nor a cancel (2026-10-08 harden,
-    // critique Riley): the editor stays open — Escape and blur remain the
-    // cancels — so a blank Enter can never look like a swallowed save.
+    // critique Riley): the editor stays open — Escape and the ✕ tile remain
+    // the cancels — so a blank Enter can never look like a swallowed save.
     if (!name) return;
     if (name === original.name) {
       cancelEdit();
       return;
     }
+    // Exact duplicate = deterministic BE 400 — the visible message under the
+    // editor already explains it; twins never block (2026-10-12 user
+    // decision).
+    if (findNameConflict(name, taxonomyList, id)?.kind === 'exact') return;
     if (busy) return;
     if (original.usage_count > 0) {
       setRenameConfirm({ id, from: original.name, to: name, usage: original.usage_count });
@@ -455,20 +605,56 @@ export default function TaxonomyManager() {
     await api.put(`/api/taxonomy/${tax.id}`, { is_active: !tax.is_active });
     await fetchTaxonomy();
     notify(tax.is_active ? `“${tax.name}” dinonaktifkan.` : `“${tax.name}” diaktifkan kembali.`);
+    // The refetch's loading re-render unmounts the acting chip — without a
+    // deliberate landing, focus falls to <body> (2026-10-12 audit, critique
+    // Issue 3). The <table> survives the loading state; same doctrine as the
+    // rename/delete lanes. Covers the chip lane AND the dialog deactivate lane.
+    tableRef.current?.focus();
   };
 
   const deleteTax = async (tax: Taxonomy) => {
     await api.delete(`/api/taxonomy/${tax.id}`);
     await fetchTaxonomy();
-    notify(`“${tax.name}” berhasil dihapus.`);
+    notifyDelete(`“${tax.name}” berhasil dihapus.`, tax);
     // The opener row just vanished — land focus on the table; the dialog's
     // opener-restore is a no-op on the detached button (critique F5).
     tableRef.current?.focus();
   };
 
+  // Undo lane (2026-10-12, critique Issue 2): a re-POST of the deleted row.
+  // The recovery is faithful — the name is the join key for regulation
+  // classification, and POST accepts the deleted row's is_active, so an
+  // inactive type comes back inactive. If the name was re-taken meanwhile the
+  // POST 400s deterministically (no "Coba lagi") — and the documents are
+  // already re-attached to the existing name, so no data-loss path remains.
+  const restoreTax = async (tax: Taxonomy) => {
+    await api.post('/api/taxonomy', { name: tax.name, is_active: tax.is_active });
+    await fetchTaxonomy();
+    notify(`“${tax.name}” dipulihkan.`);
+  };
+
+  const handleUndo = async () => {
+    if (busy || !undoTarget) return;
+    const tax = undoTarget;
+    setPending({ kind: 'undo' });
+    try {
+      await restoreTax(tax);
+    } catch (e) {
+      if (isHttpError(e)) {
+        fail(errorDetail(e, 'Gagal memulihkan jenis dokumen'),
+             retryable(e) ? handleUndo : undefined);
+      } else {
+        console.error(e);
+        fail(NETWORK_ERROR, handleUndo);
+      }
+    } finally {
+      setPending(null);
+    }
+  };
+
   const handleToggleActive = async (tax: Taxonomy) => {
     if (busy) return;
-    setBusy(true);
+    setPending({ kind: 'toggle', id: tax.id });
     try {
       await toggleActive(tax);
     } catch (e) {
@@ -480,12 +666,12 @@ export default function TaxonomyManager() {
         fail(NETWORK_ERROR, () => handleToggleActive(tax));
       }
     } finally {
-      setBusy(false);
+      setPending(null);
     }
   };
 
-  const toggleAdd = () => { addOriginRef.current = 'header'; setAdding(a => !a); setNewName(''); };
-  const openAdd = () => { addOriginRef.current = 'empty'; setAdding(true); setNewName(''); };
+  const toggleAdd = () => { cancelEdit(); addOriginRef.current = 'header'; setAdding(a => !a); setNewName(''); };
+  const openAdd = () => { cancelEdit(); addOriginRef.current = 'empty'; setAdding(true); setNewName(''); };
 
   return (
     <div className="admin-view">
@@ -499,7 +685,7 @@ export default function TaxonomyManager() {
           type="button"
           className={`btn ${adding ? 'btn-secondary' : 'btn-primary'}`}
           onClick={toggleAdd}
-          disabled={busy}
+          aria-disabled={busy || undefined}
         >
           {adding ? <XCircle size={16} /> : <Plus size={16} />}
           {adding ? 'Batal' : 'Tambah Jenis Dokumen'}
@@ -534,15 +720,34 @@ export default function TaxonomyManager() {
               placeholder="Contoh: Peraturan Direksi"
               maxLength={100}
               autoFocus
+              aria-describedby={addConflict ? 'tax-add-conflict' : undefined}
             />
             {/* maxLength truncates pasted text invisibly (critique §8.3):
                 the counter states the budget and turns danger at the cap. */}
             <span className={`tax-charcount${newName.length >= 100 ? ' tax-charcount--max' : ''}`}>
               {newName.length}/100
             </span>
+            {/* Live name check (2026-10-12 harden, critique Issue 5): exact
+                duplicates block (danger tone, BE 400 wording, Simpan
+                native-disabled); case/whitespace twins warn in warning tones
+                and never block (user decision). */}
+            {addConflict && (
+              <p
+                id="tax-add-conflict"
+                className={`tax-conflict${addConflict.kind === 'exact' ? ' tax-conflict--exact' : ''}`}
+              >
+                {conflictCopy(addConflict)}
+              </p>
+            )}
           </div>
-          <button type="submit" className="btn btn-primary" disabled={busy || !newName.trim()}>
-            Simpan
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={!newName.trim() || addConflict?.kind === 'exact'}
+            aria-disabled={busy || undefined}
+          >
+            {pending?.kind === 'add' && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
+            {pending?.kind === 'add' ? 'Memproses...' : 'Simpan'}
           </button>
         </form>
       )}
@@ -552,7 +757,7 @@ export default function TaxonomyManager() {
           <AlertCircle size={18} />
           <span>{error}</span>
           {retry && (
-            <button type="button" className="btn btn-secondary tax-retry" onClick={() => retry && retry()} disabled={busy}>
+            <button type="button" className="btn btn-secondary tax-retry" onClick={() => { if (busy) return; retry?.(); }} aria-disabled={busy || undefined}>
               Coba lagi
             </button>
           )}
@@ -563,6 +768,40 @@ export default function TaxonomyManager() {
         <div className="tax-notice" role="status">
           <CheckCircle2 size={18} />
           <span>{notice}</span>
+          {undoTarget && (
+            <>
+              {/* Undo-on-delete (2026-10-12, critique Issue 2): the re-POST of
+                  the deleted row — a complete recovery because classification
+                  joins on the name. Task 3 migration done: aria-disabled +
+                  handleUndo's busy guard + acting-control spinner. */}
+              <button
+                type="button"
+                className="btn btn-secondary tax-undo"
+                onClick={() => { void handleUndo(); }}
+                aria-disabled={busy || undefined}
+              >
+                {pending?.kind === 'undo' && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
+                {pending?.kind === 'undo' ? 'Memproses...' : 'Urungkan'}
+              </button>
+              {/* Clears the notice only — undoTarget survives so the banner's
+                  "Coba lagi" (handleUndo) keeps the restore lane available
+                  after a failed restore whose notice was dismissed. NOTE: the
+                  setRetry(() => again) idiom in fail() stores the retry
+                  closure correctly (React updater semantics; live-proven
+                  2026-10-13) — the 2026-10-12 "KNOWN INHERITED DEFECT: inert
+                  retry" note that stood here was a false static finding,
+                  disproved by the live RED probe and replaced with this
+                  correction the same day. */}
+              <button
+                type="button"
+                className="tax-notice-close"
+                onClick={() => setNotice('')}
+                aria-label="Tutup pemberitahuan"
+              >
+                <XCircle size={16} />
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -594,7 +833,7 @@ export default function TaxonomyManager() {
                   <div className="tax-error" role="alert">
                     <AlertCircle size={18} />
                     <span>{loadError}</span>
-                    <button type="button" className="btn btn-secondary tax-retry" onClick={fetchTaxonomy} disabled={busy}>
+                    <button type="button" className="btn btn-secondary tax-retry" onClick={() => { if (!busy) void fetchTaxonomy(); }} aria-disabled={busy || undefined}>
                       Coba lagi
                     </button>
                   </div>
@@ -613,33 +852,81 @@ export default function TaxonomyManager() {
                 </td>
               </tr>
             ) : taxonomyList.map(tax => (
-              <tr key={tax.id} className={tax.is_active ? undefined : 'tax-row-inactive'}>
+              <tr
+                key={tax.id}
+                className={
+                  [
+                    !tax.is_active ? 'tax-row-inactive' : '',
+                    // The counterparty row of a live name conflict lights up
+                    // (2026-10-12 harden, critique Issue 5): the draft's
+                    // clash target becomes visible in the table itself.
+                    activeConflict?.existing.id === tax.id
+                      ? `tax-row-conflict${activeConflict.kind === 'exact' ? ' tax-row-conflict--exact' : ''}`
+                      : '',
+                  ].filter(Boolean).join(' ') || undefined
+                }
+              >
                 {/* Row-header semantics (2026-10-08 polish, minor 8) —
                     .tax-name-cell styles the th back to td appearance, so
                     the change is a visual no-op. */}
                 <th scope="row" className="tax-name-cell">
                   {editingId === tax.id ? (
                     <div>
-                      <input
-                        className="tax-input tax-input--inline"
-                        type="text"
-                        value={editName}
-                        onChange={e => setEditName(e.target.value)}
-                        maxLength={100}
-                        onBlur={() => { if (!renameConfirm) cancelEdit(); }}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') { e.preventDefault(); commitEdit(tax.id); }
-                          // Escape cancels and lands on the table — the same
-                          // deliberate landing as the post-mutation paths
-                          // (critique F5 pattern, §8.4 consistency).
-                          else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); tableRef.current?.focus(); }
-                        }}
-                        autoFocus
-                        aria-label={`Nama baru untuk ${tax.name}`}
-                      />
+                      {/* Visible contract (2026-10-12 clarify, critique Issue
+                          4): the ✓/✕ tiles make save/cancel discoverable —
+                          Enter/Esc stay as accelerators. Blur no longer
+                          cancels: clicking away preserves the draft (the
+                          destructive blur was the issue's core complaint;
+                          the renameConfirm suppression died with it). */}
+                      <div className="tax-edit-box">
+                        <input
+                          className="tax-input tax-input--inline"
+                          type="text"
+                          value={editName}
+                          onChange={e => setEditName(e.target.value)}
+                          maxLength={100}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') { e.preventDefault(); commitEdit(tax.id); }
+                            // Escape cancels and lands on the table — the same
+                            // deliberate landing as the post-mutation paths
+                            // (critique F5 pattern, §8.4 consistency).
+                            else if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); tableRef.current?.focus(); }
+                          }}
+                          autoFocus
+                          aria-label={`Nama baru untuk ${tax.name}`}
+                          aria-describedby={editConflict ? 'tax-edit-conflict' : undefined}
+                        />
+                        <button
+                          type="button"
+                          className="tax-icon-btn"
+                          aria-label={`Simpan nama baru untuk ${tax.name}`}
+                          onClick={() => { void commitEdit(tax.id); }}
+                          aria-disabled={(pending?.kind === 'rename' && pending.id === tax.id) || undefined}
+                        >
+                          {pending?.kind === 'rename' && pending.id === tax.id
+                            ? <Loader2 size={16} className="admin-spin" aria-hidden="true" />
+                            : <Check size={16} />}
+                        </button>
+                        <button
+                          type="button"
+                          className="tax-icon-btn"
+                          aria-label={`Batal ubah nama ${tax.name}`}
+                          onClick={() => { cancelEdit(); tableRef.current?.focus(); }}
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
                       <span className={`tax-charcount${editName.length >= 100 ? ' tax-charcount--max' : ''}`}>
                         {editName.length}/100
                       </span>
+                      {editConflict && (
+                        <p
+                          id="tax-edit-conflict"
+                          className={`tax-conflict${editConflict.kind === 'exact' ? ' tax-conflict--exact' : ''}`}
+                        >
+                          {conflictCopy(editConflict)}
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <span className="tax-name">{tax.name}</span>
@@ -654,6 +941,7 @@ export default function TaxonomyManager() {
                     aria-label={`Status ${tax.name}`}
                     data-hint={tax.is_active ? 'Klik untuk menonaktifkan' : 'Klik untuk mengaktifkan'}
                     onClick={() => {
+                      if (busy) return;
                       // Deactivating an IN-USE type changes upload/classification
                       // behavior repository-wide — it routes through the
                       // ChoiceDialog's consequence copy instead of firing
@@ -665,9 +953,16 @@ export default function TaxonomyManager() {
                       if (tax.is_active && tax.usage_count > 0) setChoice(tax);
                       else void handleToggleActive(tax);
                     }}
-                    disabled={busy}
+                    aria-disabled={busy || undefined}
                   >
-                    {tax.is_active ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+                    {/* Acting-control spinner (2026-10-12 audit, critique
+                        Issue 3): the toggling chip swaps its state icon for
+                        the house spinner — the label (accessible name) never
+                        shifts mid-toggle. Settles the H1 residual "chip toggle
+                        has no in-flight indicator". */}
+                    {pending?.kind === 'toggle' && pending.id === tax.id
+                      ? <Loader2 size={12} className="admin-spin" aria-hidden="true" />
+                      : tax.is_active ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
                     {tax.is_active ? 'Aktif' : 'Nonaktif'}
                   </button>
                 </td>
@@ -705,7 +1000,7 @@ export default function TaxonomyManager() {
                     title="Ubah Nama"
                     aria-label={`Ubah nama ${tax.name}`}
                     onClick={() => startEdit(tax)}
-                    disabled={busy}
+                    aria-disabled={busy || undefined}
                   >
                     <Edit2 size={16} />
                   </button>
@@ -714,8 +1009,8 @@ export default function TaxonomyManager() {
                     className="tax-icon-btn tax-icon-btn--danger"
                     title={tax.is_active ? 'Hapus atau nonaktifkan' : 'Hapus'}
                     aria-label={tax.is_active ? `Hapus atau nonaktifkan ${tax.name}` : `Hapus ${tax.name}`}
-                    onClick={() => setChoice(tax)}
-                    disabled={busy}
+                    onClick={() => { if (!busy) setChoice(tax); }}
+                    aria-disabled={busy || undefined}
                   >
                     <Trash2 size={16} />
                   </button>
@@ -730,6 +1025,8 @@ export default function TaxonomyManager() {
         <ChoiceDialog
           tax={choice}
           canDelete={privileged || choice.usage_count === 0}
+          showEvidence={evidencePreview && choice.usage_count > 0}
+          adminNote={adminRepoBlocked && choice.usage_count > 0}
           onClose={() => setChoice(null)}
           onDeactivate={() => toggleActive(choice)}
           onDelete={() => deleteTax(choice)}

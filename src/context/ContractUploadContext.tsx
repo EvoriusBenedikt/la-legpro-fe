@@ -2,10 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle, RefreshCw, X } from 'lucide-react';
 import api, { isHttpError } from '../services/api';
 import { getSettings, subscribeSettings } from '../settings';
-/* UploadJob, the context object and the useContractUpload hook moved to
-   hooks/useContractUpload.ts (2026-10-06) so this file exports only the
-   UploadProvider component (react-refresh/only-export-components). */
 import { ContractUploadContext, type UploadJob } from '../hooks/useContractUpload';
+import { MAX_JOBS, loadPersistedJobs, persistJobs, pruneByRetention } from '../uploadJobs';
+import { useJobStatus } from './JobStatusContext';
 
 interface UploadToast {
   id: number;
@@ -13,46 +12,7 @@ interface UploadToast {
   message: string;
 }
 
-const MAX_JOBS = 20;
-const JOBS_STORAGE_KEY = 'la_upload_jobs';
 const NETWORK_ERROR = 'Tidak dapat menghubungi server. Periksa koneksi Anda lalu coba lagi.';
-
-/* Job records persist to localStorage (critique P1 #1): a refresh
-   mid-analysis used to evaporate every trace of the work. The File itself
-   cannot survive a reload, so restored 'processing' records come back as
-   honest 'interrupted' entries with a re-upload hint; failures that happen
-   within the session keep their File handle and offer a real retry. */
-function loadPersistedJobs(): UploadJob[] {
-  try {
-    const raw = window.localStorage.getItem(JOBS_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as UploadJob[];
-    if (!Array.isArray(parsed)) return [];
-    const now = Date.now();
-    return parsed.slice(-MAX_JOBS).map(j => ({
-      ...j,
-      status: j.status === 'processing' ? ('interrupted' as const) : j.status,
-      // Records persisted before createdAt existed get stamped at load:
-      // conservative — they will not auto-prune until a full retention
-      // window has elapsed from today.
-      createdAt: j.createdAt ?? now,
-    }));
-  } catch {
-    return []; // corrupt or blocked storage: start clean rather than crash
-  }
-}
-
-/** Drops finished job records older than the retention window (Settings ›
-    Advanced › Analysis history; 0 = keep forever). In-flight jobs are never
-    pruned — they are live work in this session. Analyzed documents are
-    server-side data and are never touched here. */
-function pruneByRetention(list: UploadJob[], retentionDays: number): UploadJob[] {
-  if (retentionDays <= 0) return list;
-  const cutoff = Date.now() - retentionDays * 86400000;
-  // Missing createdAt (shouldn't happen — load stamps it) counts as exactly
-  // at the cutoff: kept.
-  return list.filter(j => j.status === 'processing' || (j.createdAt ?? cutoff) >= cutoff);
-}
 
 /* Lives above the router so contract-analysis uploads survive navigation:
    the modal only hands the file over, the provider runs the pipeline,
@@ -64,17 +24,12 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [toasts, setToasts] = useState<UploadToast[]>([]);
   const listenersRef = useRef<Set<(job: UploadJob) => void>>(new Set());
   const toastIdRef = useRef(0);
-  /** File handles of in-session jobs — retryJob re-runs the pipeline with
-      these. Never persisted (a File cannot survive a reload); dropped when
-      the job succeeds or is cleared. */
   const fileRefs = useRef<Map<string, { file: File; useOCR: boolean }>>(new Map());
 
+  const { addJob, updateJob } = useJobStatus();
+
   useEffect(() => {
-    try {
-      window.localStorage.setItem(JOBS_STORAGE_KEY, JSON.stringify(jobs.slice(-MAX_JOBS)));
-    } catch {
-      // storage full or blocked: the jobs panel still works in-session
-    }
+    persistJobs(jobs);
   }, [jobs]);
 
   // Retention changes apply immediately: the moment a window is picked in
@@ -150,6 +105,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         fileRefs.current.delete(id);
         setJobs(prev => prev.map(j => (j.id === id ? { ...j, ...doneJob } : j)));
         pushToast('success', `Analisis "${filename}" selesai — dokumen ditambahkan ke Kontrak.`, 8000);
+        updateJob(id, 'completed');
         listenersRef.current.forEach(listener => listener(doneJob));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Terjadi kesalahan sistem.';
@@ -159,6 +115,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         // Spread preserves createdAt for retention aging.
         setJobs(prev => prev.map(j => (j.id === id ? { ...j, ...errJob } : j)));
         pushToast('error', `Analisis "${filename}" gagal: ${message}`, 12000);
+        updateJob(id, 'failed');
         listenersRef.current.forEach(listener => listener(errJob));
       }
     })();
@@ -170,6 +127,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     fileRefs.current.set(id, { file, useOCR });
     setJobs(prev => [...prev, { id, filename, status: 'processing' as const, createdAt: Date.now() }].slice(-MAX_JOBS));
     pushToast('info', `Analisis "${filename}" berjalan di latar belakang.`, 5000);
+    addJob(id, 'uploading', filename, 'contract');
     runJob(id, filename, file, useOCR);
   };
 
@@ -184,6 +142,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Spread preserves createdAt; error: undefined clears the failure message.
     setJobs(prev => prev.map(j => (j.id === id ? { ...j, status: 'processing' as const, error: undefined } : j)));
     pushToast('info', `Analisis "${job.filename}" dicoba ulang di latar belakang.`, 5000);
+    addJob(id, 'uploading', job.filename, 'contract');
     runJob(id, job.filename, ref.file, ref.useOCR);
   };
 

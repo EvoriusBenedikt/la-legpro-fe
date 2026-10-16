@@ -55,11 +55,11 @@ export interface SettingsState {
   dateFormat: DateFormat;
   /** Long-form line spacing (data-reading-spacing). */
   readingSpacing: ReadingSpacing;
-  /** bot-avatars shape slug for the Sage identity; BotIdentity renders it
+  /** bot-avatars shape slug for the gemma identity; BotIdentity renders it
       everywhere (hero, message rows, pending row, picker toggle).
       Render-time only: no <html> attribute, no pre-paint mirror. */
   botAvatar: BotAvatarType;
-  /** Body colour of the Sage mascot: '' follows the active theme's
+  /** Body colour of the gemma mascot: '' follows the active theme's
       accent (the default); otherwise one of the BOT_AVATAR_COLORS
       hexes, chosen in Settings › Conversation. Render-time only,
       like botAvatar. */
@@ -71,7 +71,7 @@ export interface SettingsState {
   jobRetentionDays: number;
 }
 
-/** Curated body colours offered for the Sage mascot (Settings ›
+/** Curated body colours offered for the gemma mascot (Settings ›
     Conversation swatch row). '' — the theme accent — is the default and
     gets its own split chip in the dialog instead of a list entry. */
 export const BOT_AVATAR_COLORS: { slug: string; hex: string }[] = [

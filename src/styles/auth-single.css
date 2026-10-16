@@ -54,7 +54,8 @@
    EN/ID text button on this page only — legacy keeps
    .auth-language-toggle and its text. Emoji flags are unusable (Windows
    renders regional indicators as letter pairs), so the flags are inline
-   SVGs. The active side rides a raised chip; the inactive flag dims.
+   SVGs. The active side rides a raised chip ringed in accent (critique
+   polish 2026-10-13); the inactive flag dims.
    Pill height 44px (38px segments + 2px padding + 2px border) keeps the
    mandated hit-area rule; the universal reduce-motion gate in
    components.css already covers the transitions below. */
@@ -86,7 +87,12 @@
 
 .auths-lang-btn.is-active {
   background: var(--bg-base);
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+  /* Critique polish (2026-10-13): the bare chip face read 1.04:1 against
+     the pill well in light (1.14:1 dark) — the active side was carried by
+     flag opacity alone. The accent hairline ring makes the state
+     self-evident in both themes; box-shadow leaves the frozen segment
+     geometry (40×38, pill 88×44) untouched. */
+  box-shadow: 0 0 0 1.5px var(--accent-color), 0 1px 4px rgba(15, 23, 42, 0.18);
 }
 
 /* .lang-flag base geometry moved to components.css (2026-10-12, shared
@@ -131,6 +137,28 @@
   font-size: 1.6rem;
   color: var(--text-primary);
   margin: 0;
+}
+
+/* Trust line + register role note (critique clarify 2026-10-13): quiet
+   secondary lines under the h1, mirroring the legacy .auth-trust-note
+   treatment (0.8rem, gap 6px, icon inherits the text color — a green
+   tint would be decorative Verdict-Triad use). Left-aligned on mobile;
+   the desktop block centers the trust row with the h1. */
+.auths-trust {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.auths-trust svg { flex-shrink: 0; }
+
+.auths-role-note {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
 }
 
 /* Floating-label field. The input carries placeholder=" " (one space,
@@ -193,8 +221,9 @@
 }
 
 /* Focus + error recipes mirror the legacy .auth-input rules
-   (components.css); the global :focus-visible floor (index.css) still
-   paints the keyboard ring above them. An error field's ring is danger,
+   (components.css); the global :focus-visible floor (index.css) is
+   exempted for these inputs below — border+glow IS their ring, in both
+   pointer and keyboard interaction. An error field's ring is danger,
    never accent. */
 .float-field input:focus {
   outline: none;
@@ -222,6 +251,21 @@
   color: var(--danger-text);
 }
 
+/* Critique P2 (audit 2026-10-13): the global floor (index.css — owner-
+   frozen) paints `outline: 2px solid var(--accent-color) !important` on
+   every :focus-visible. On these inputs that stacked a third ring over
+   the border+glow recipe (text fields match :focus-visible even on plain
+   clicks) and painted it ACCENT on danger-highlighted error fields,
+   contradicting the doctrine above. Same rationale as the floor's own
+   .chat-input exception — the field's own focus treatment covers mouse
+   AND keyboard — but index.css stays untouched, so the exemption is a
+   counter-important at higher specificity: (0,3,1) beats the floor's
+   (0,3,0) regardless of sheet order. Buttons, links and the flag pill on
+   this page keep the global outline; they have no competing ring. */
+.auth-single .float-field input:focus-visible {
+  outline: none !important;
+}
+
 /* Reduced motion — both gates, codebase convention (app setting + OS
    media query): the label float becomes instant. */
 [data-reduce-motion="true"] .float-field label {
@@ -234,9 +278,10 @@
   }
 }
 
-/* Passkey rollout stub (plan decision 2): an outlined secondary,
-   deliberately quieter than the filled accent CTA — one job first,
-   alternatives below. */
+/* Passkey rollout stub (plan decision 2), quieted (critique polish
+   2026-10-13): divider + plain status line — the disabled button was an
+   unselectable option (control chrome at 0.6 opacity, 2.87:1 text) and
+   the stub must read as information, not as a denied action. */
 .auths-passkey {
   margin-top: 20px;
   display: flex;
@@ -259,29 +304,12 @@
   border-top: 1px solid var(--border-color);
 }
 
-.auths-passkey-btn {
-  width: 100%;
-  min-height: 48px;
+.auths-passkey-hint {
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-
-.auths-passkey-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.auths-passkey-hint {
-  margin: 0;
-  text-align: center;
+  gap: 6px;
   font-size: 0.75rem;
   color: var(--text-secondary);
 }
@@ -426,6 +454,12 @@
 
   .auths-head h1 {
     font-size: 2rem;
+  }
+
+  /* Trust row centers with the h1 (flex needs justify-content; the plain
+     role-note <p> inherits text-align from .auths-head). */
+  .auths-trust {
+    justify-content: center;
   }
 
   .auths-mode-row {

@@ -11,25 +11,18 @@ import './SystemMonitoring.css';
 import api from '../services/api';
 import { useDateFormatters } from '../format';
 import LoadingOrb from './LoadingOrb';
+import DocumentDrawer from './DocumentDrawer';
+import ProcessingQueue, { type QueueData, type QueueTask } from './ProcessingQueue';
 
 interface HealthData {
   cpu: number;
   memory: { total: number; used: number; percent: number };
-  disk: { total: number; used: number; percent: number };
+  disk: { total: number; used: number; percent: number; path?: string };
   database: { metadata_db_mb: number; users_db_mb: number };
   uptime_seconds: number;
-}
-
-interface TaskData {
-  user: string;
-  action: string;
-  resource: string;
-  timestamp: string;
-  status: string;
-  // Queue-task shape returned by /api/engineer/queue (optional fields)
-  name?: string;
-  start_time?: string;
-  end_time?: string;
+  /* Where the CPU/RAM numbers are measured from: inside a container they are
+     the container runtime's (Docker Desktop VM on dev), not the host's. */
+  runtime_scope?: 'container' | 'host';
 }
 
 interface BackupData {
@@ -72,13 +65,6 @@ interface BackupConfigData {
   frequency: string;
   time: string;
   retention_count: number;
-}
-
-interface ActiveTaskData {
-  status: string;
-  name?: string;
-  action?: string;
-  start_time: string;
 }
 
 interface UserStatData {
@@ -139,6 +125,27 @@ const getOrSkipHttpError = (url: string) =>
     return null;
   });
 
+/* Server hardware inventory (GET /api/engineer/hardware). The backend returns
+   locale-free data — byte counts and nullable strings — and the Indonesian
+   fallbacks live here. Provenance: on a Linux deployment the container shares
+   the host kernel, so these values ARE the server's real hardware (CPU model,
+   RAM totals, GPU if any); on Docker Desktop dev they describe the desktop VM,
+   which is why runtime_scope is displayed alongside them. */
+interface ServerHardware {
+  hostname: string;
+  runtime_scope: 'container' | 'host';
+  os: string | null;
+  kernel: string | null;
+  cpu: {
+    model: string | null;
+    logical_cores: number | null;
+    physical_cores: number | null;
+    arch: string | null;
+  };
+  memory: { total: number; used: number; available: number };
+  gpus: string[];
+}
+
 /* Polling cadence (critique 2026-10-08, P1 "5-second firehose"): live vitals every
    10 s, cumulative/historical endpoints every 60 s, and the analytics trio only while
    its section is open. Was 11 endpoints every 5 s (~132 req/min); now ~26 req/min
@@ -146,6 +153,14 @@ const getOrSkipHttpError = (url: string) =>
 const FAST_POLL_MS = 10_000;
 const SLOW_POLL_MS = 60_000;
 const AUDIT_DEBOUNCE_MS = 350;
+/* The processing queue is the one time-sensitive panel: while anything is
+   queued, running or awaiting an auto-retry it polls fast; idle, it rides the
+   normal fast cadence. */
+const QUEUE_LIVE_POLL_MS = 3_000;
+const EMPTY_QUEUE: QueueData = {
+  tasks: [],
+  counts: { QUEUED: 0, RUNNING: 0, COMPLETED: 0, FAILED: 0, CANCELLED: 0 },
+};
 
 type ChipTone = 'success' | 'warn' | 'danger' | 'info' | 'neutral';
 
@@ -280,8 +295,7 @@ export default function SystemMonitoring() {
   /* Polled state — every slice sits behind the JSON-diff guard (useStableState)
      so an unchanged poll commits nothing and re-renders nothing. */
   const [health, setHealth] = useStableState<HealthData | null>(null);
-  const [tasks, setTasks] = useStableState<TaskData[]>([]);
-  const [activeTasks, setActiveTasks] = useStableState<ActiveTaskData[]>([]);
+  const [queue, setQueue] = useStableState<QueueData>(EMPTY_QUEUE);
   const [sessions, setSessions] = useStableState<SessionData[]>([]);
   const [apiStats, setApiStats] = useStableState<ApiStatData[]>([]);
   const [errorRates, setErrorRates] = useStableState<ErrorRateData[]>([]);
@@ -315,6 +329,12 @@ export default function SystemMonitoring() {
   /* Analitik section: collapsed by default; its three endpoints fetch only
      while it is open (distill + optimize). */
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
+
+  /* Server hardware inventory — fetched once per session and on manual reload
+     (inventory is static per boot; the memory split is live server-side).
+     Plain useState: never polled, so no JSON-diff guard needed. */
+  const [hardware, setHardware] = useState<ServerHardware | null>(null);
+  const [hardwareError, setHardwareError] = useState(false);
 
   /* Audit viewer — user-driven fetches, never polled; the search input debounces
      into auditQuery, the value that actually drives requests. */
@@ -350,13 +370,11 @@ export default function SystemMonitoring() {
   const fetchFast = useCallback(async () => {
     if (!token) return;
     try {
-      const [healthRes, queueRes, sessionRes] = await Promise.all([
+      const [healthRes, sessionRes] = await Promise.all([
         getOrSkipHttpError('/api/engineer/health'),
-        getOrSkipHttpError('/api/engineer/queue'),
         getOrSkipHttpError('/api/engineer/active-sessions'),
       ]);
       if (healthRes) setHealth(healthRes.data);
-      if (queueRes) { const d = queueRes.data; setTasks(d.recent_history); setActiveTasks(d.active_tasks || []); }
       if (sessionRes) setSessions(sessionRes.data.active_sessions);
       setFeedError(false);
       const t = Date.now();
@@ -367,7 +385,61 @@ export default function SystemMonitoring() {
     } finally {
       setLoading(false);
     }
-  }, [token, setHealth, setTasks, setActiveTasks, setSessions]);
+  }, [token, setHealth, setSessions]);
+
+  /* Processing queue. Failure notification: every (task, attempt) failure is
+     toasted exactly once. The first fetch only seeds the set, so opening the
+     page never replays old failures. */
+  const notifiedFailures = useRef<Set<string>>(new Set());
+  const queueSeeded = useRef(false);
+  const fetchQueue = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await getOrSkipHttpError('/api/engineer/queue');
+      if (!res) return;
+      const d = res.data as QueueData;
+      const fresh: QueueTask[] = [];
+      for (const t of d.tasks) {
+        if (t.status !== 'FAILED') continue;
+        const key = `${t.id}:${t.attempts}`;
+        if (notifiedFailures.current.has(key)) continue;
+        notifiedFailures.current.add(key);
+        if (queueSeeded.current) fresh.push(t);
+      }
+      queueSeeded.current = true;
+      if (fresh.length > 3) {
+        pushToast('error', `${fresh.length} tugas pemrosesan gagal. Lihat Antrean Pemrosesan.`, 12000);
+      } else {
+        for (const t of fresh) {
+          const reason = t.error ? ` — ${t.error.length > 90 ? `${t.error.slice(0, 90)}…` : t.error}` : '';
+          pushToast('error', `Pemrosesan gagal: ${t.filename || t.name}${reason}${t.next_retry_at ? ' (dicoba ulang otomatis)' : ''}`, 12000);
+        }
+      }
+      setQueue(d);
+      setNow(Date.now());
+    } catch {
+      setFeedError(true);
+    }
+  }, [token, setQueue, pushToast]);
+
+  /* "Buka dokumen" from a queue row: resolve the record through the same
+     role-aware GET /api/repository the other pages use, then open the shared
+     drawer. Documents still scanning or awaiting confirmation are not in that
+     list, so the miss gets its own explanation. */
+  const [drawerDoc, setDrawerDoc] = useState<{ id: string; nomor: string; judul: string; jenis: string; sektor: string; status?: string; filename?: string } | null>(null);
+  const openDocument = useCallback(async (docId: string) => {
+    try {
+      const res = await api.get('/api/repository');
+      const doc = (res.data?.documents ?? []).find((d: { id: string | number }) => String(d.id) === String(docId));
+      if (!doc) {
+        pushToast('info', 'Dokumen belum ada di repositori (masih diproses, menunggu konfirmasi, atau gagal), atau tidak dapat diakses dengan akun Anda.');
+        return;
+      }
+      setDrawerDoc({ ...doc, status: doc.status ?? undefined, filename: doc.filename ?? undefined });
+    } catch {
+      pushToast('error', 'Gagal memuat dokumen. Periksa koneksi Anda lalu coba lagi.');
+    }
+  }, [pushToast]);
 
   const fetchSlow = useCallback(async () => {
     if (!token) return;
@@ -428,6 +500,19 @@ export default function SystemMonitoring() {
     }
   }, [token, auditQuery, auditAction, auditPage]);
 
+  /* Hardware inventory: an informational card — failure degrades to its own
+     error state, never to a broken page feed. */
+  const fetchHardware = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await getOrSkipHttpError('/api/engineer/hardware');
+      if (res) { setHardware(res.data); setHardwareError(false); }
+      else setHardwareError(true);
+    } catch {
+      setHardwareError(true);
+    }
+  }, [token]);
+
   /* Poll loops. Pausing tears the intervals down; unpausing refetches at once
      and resumes the cadence. Awaited-IIFE form keeps the effect body free of
      direct setState calls (react-hooks/set-state-in-effect). */
@@ -452,6 +537,23 @@ export default function SystemMonitoring() {
     return () => window.clearInterval(interval);
   }, [token, paused, analyticsOpen, fetchAnalytics]);
 
+  const queueLive = queue.tasks.some(t =>
+    t.status === 'QUEUED' || t.status === 'RUNNING' || (t.status === 'FAILED' && !!t.next_retry_at));
+  const queueIntervalMs = queueLive ? QUEUE_LIVE_POLL_MS : FAST_POLL_MS;
+  useEffect(() => {
+    if (!token || paused) return;
+    (async () => { await fetchQueue(); })();
+    const interval = window.setInterval(fetchQueue, queueIntervalMs);
+    return () => window.clearInterval(interval);
+  }, [token, paused, fetchQueue, queueIntervalMs]);
+
+  /* The hardware inventory is static per boot: one fetch per session, no
+     polling; "Muat ulang" re-reads it. Awaited-IIFE form keeps
+     set-state-in-effect clean. */
+  useEffect(() => {
+    (async () => { await fetchHardware(); })();
+  }, [fetchHardware]);
+
   /* Debounced audit search: the query commits 350 ms after typing settles
      instead of one request per keystroke (critique P1). */
   useEffect(() => {
@@ -472,7 +574,9 @@ export default function SystemMonitoring() {
     setRefreshing(true);
     try {
       await fetchFast();
+      await fetchQueue();
       await fetchSlow();
+      await fetchHardware();
       if (analyticsOpen) await fetchAnalytics();
     } finally {
       setRefreshing(false);
@@ -606,8 +710,8 @@ export default function SystemMonitoring() {
   else if (memLevel === 'warn') issues.push({ level: 'warn', text: `Penggunaan RAM melebihi 75% (${health.memory.percent}%).` });
   if (diskLevel === 'critical') issues.push({ level: 'critical', text: `Penyimpanan disk hampir penuh (${health.disk.percent}%). Docker dan aplikasi bisa crash.` });
   else if (diskLevel === 'warn') issues.push({ level: 'warn', text: `Penggunaan disk melebihi 80% (${health.disk.percent}%).` });
-  const failedTasks = tasks.filter(t => t.status?.toUpperCase() === 'FAILED').length;
-  if (failedTasks > 0) issues.push({ level: 'warn', text: `${failedTasks} tugas pemrosesan terakhir gagal — periksa antrean di bawah.` });
+  const failedTasks = queue.counts.FAILED;
+  if (failedTasks > 0) issues.push({ level: 'warn', text: `${failedTasks} tugas pemrosesan gagal — periksa antrean di bawah.` });
 
   const verdictLevel: 'ok' | 'warn' | 'critical' =
     issues.some(i => i.level === 'critical') ? 'critical' : issues.length > 0 ? 'warn' : 'ok';
@@ -666,7 +770,7 @@ export default function SystemMonitoring() {
             </ul>
           )}
         </div>
-        <span className="verdict-meta">Waktu aktif sistem: {formatUptime(health.uptime_seconds)}</span>
+        <span className="verdict-meta">Waktu aktif runtime: {formatUptime(health.uptime_seconds)}</span>
       </section>
 
       {/* ── KESEHATAN ─────────────────────────────────────────────── */}
@@ -732,6 +836,66 @@ export default function SystemMonitoring() {
           </div>
         </div>
 
+        {/* Provenance footnote: names where the numbers come from so the
+            container-runtime CPU/RAM are never read as host hardware, and the
+            disk card names the volume it actually measures (bug 2026-10-12). */}
+        <p className="kpi-provenance">
+          CPU &amp; RAM diukur dari runtime backend ({health.runtime_scope === 'container' ? 'kontainer Docker' : 'host server'}); disk diukur dari volume data backend{health.disk.path ? ` (${health.disk.path})` : ''}.
+        </p>
+
+        {/* Server hardware card — full inspection of the machine the backend
+            runs on: CPU model, cores, the memory split, GPU probe chain,
+            kernel, runtime OS. On a Linux deployment these ARE the server's
+            real hardware (shared kernel); runtime_scope names the Docker
+            Desktop VM case so the numbers are never misattributed. */}
+        <div className="module-card">
+          <div className="module-header">
+            <h3 className="module-title"><Server size={18} aria-hidden="true" /> Spesifikasi Server</h3>
+            {hardware && <span className="module-badge" title="Nama host runtime backend">{hardware.hostname}</span>}
+          </div>
+          {hardwareError ? (
+            <div className="empty-state"><Server size={24} aria-hidden="true" /><span>Spesifikasi server tidak dapat dibaca.</span></div>
+          ) : hardware ? (
+            <div className="spec-tiles">
+              <div className="stat-tile" title="Model CPU yang terlihat oleh runtime backend">
+                <span className="stat-tile-label">CPU</span>
+                <span className="spec-tile-value">{hardware.cpu.model || 'Tidak dilaporkan'}</span>
+              </div>
+              <div className="stat-tile" title={`Arsitektur: ${hardware.cpu.arch || 'tidak dilaporkan'}`}>
+                <span className="stat-tile-label">Core CPU</span>
+                <span className="spec-tile-value">
+                  {hardware.cpu.logical_cores != null
+                    ? `${hardware.cpu.logical_cores} logis${hardware.cpu.physical_cores != null ? ` · ${hardware.cpu.physical_cores} fisik` : ''}`
+                    : 'Tidak dilaporkan'}
+                </span>
+              </div>
+              <div className="stat-tile" title={`Tersedia: ${formatBytes(hardware.memory.available)}`}>
+                <span className="stat-tile-label">RAM (terpakai / total)</span>
+                <span className="spec-tile-value">{formatBytes(hardware.memory.used)} / {formatBytes(hardware.memory.total)}</span>
+              </div>
+              <div className="stat-tile" title="Diperiksa lewat nvidia-smi, lspci, lalu sysfs DRM — server atau VM headless biasanya memang tanpa GPU">
+                <span className="stat-tile-label">GPU</span>
+                <span className="spec-tile-value">{hardware.gpus.length > 0 ? hardware.gpus.join(', ') : 'Tidak terdeteksi'}</span>
+              </div>
+              <div className="stat-tile" title="Kernel yang dipakai runtime — di deployment Linux ini kernel host sesungguhnya">
+                <span className="stat-tile-label">Kernel</span>
+                <span className="spec-tile-value">{hardware.kernel || 'Tidak dilaporkan'}</span>
+              </div>
+              <div className="stat-tile" title="Sistem operasi userspace runtime backend (image kontainer pada deployment Docker)">
+                <span className="stat-tile-label">OS Runtime</span>
+                <span className="spec-tile-value">{hardware.os || 'Tidak dilaporkan'}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state"><Server size={24} aria-hidden="true" /><span>Membaca spesifikasi server…</span></div>
+          )}
+          <p className="table-footnote">
+            {hardware?.runtime_scope === 'container'
+              ? 'Dibaca dari dalam kontainer Docker: di deployment Linux angka ini adalah hardware server sesungguhnya (kontainer berbagi kernel host); di dev Docker Desktop angka ini milik VM Docker — bukan RAM perangkat Anda.'
+              : 'Dibaca langsung dari host server.'}
+          </p>
+        </div>
+
         <div className="modules-grid">
           <div className="module-card">
             <div className="module-header">
@@ -758,47 +922,15 @@ export default function SystemMonitoring() {
         <h2 className="section-title">Aktivitas</h2>
 
         <div className="modules-grid">
-          <div className="module-card">
-            <div className="module-header">
-              <h3 className="module-title"><Play size={18} aria-hidden="true" /> Antrean Pemrosesan</h3>
-              {activeTasks.length > 0 && <span className="module-badge">{activeTasks.length} berjalan</span>}
-            </div>
-            <div className="module-content" tabIndex={0}>
-              {activeTasks.length === 0 && tasks.length === 0 ? (
-                <div className="empty-state"><Play size={24} aria-hidden="true" /><span>Tidak ada tugas dalam antrean.</span></div>
-              ) : (
-                <table className="monitoring-table">
-                  <thead><tr><th scope="col">Status</th><th scope="col">Tugas</th><th scope="col">Waktu</th></tr></thead>
-                  <tbody>
-                    {activeTasks.map((t, idx) => {
-                      const vocab = statusVocab(t.status || 'RUNNING');
-                      return (
-                        <tr key={`aktif-${idx}-${t.name || t.action}-${t.start_time}`}>
-                          <td><span className={`status-pill ${vocab.tone}`}><Clock size={12} aria-hidden="true" /> {vocab.label}</span></td>
-                          <td className="cell-task">{t.name || t.action || '—'}</td>
-                          <td><span className="time-cell"><Clock size={12} aria-hidden="true" /> {formatTime(t.start_time)}</span></td>
-                        </tr>
-                      );
-                    })}
-                    {tasks.map((t, idx) => {
-                      const vocab = statusVocab(t.status);
-                      return (
-                        <tr key={`riwayat-${idx}-${t.name || t.action}-${t.timestamp}`}>
-                          <td>
-                            <span className={`status-pill ${vocab.tone}`}>
-                              {vocab.tone === 'danger' ? <AlertTriangle size={12} aria-hidden="true" /> : vocab.tone === 'success' ? <CheckCircle size={12} aria-hidden="true" /> : <Clock size={12} aria-hidden="true" />} {vocab.label}
-                            </span>
-                          </td>
-                          <td className="cell-task">{t.name || t.action || '—'}</td>
-                          <td><span className="time-cell"><Clock size={12} aria-hidden="true" /> {formatTime(t.end_time || t.start_time || t.timestamp)}</span></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
+          <ProcessingQueue
+            data={queue}
+            now={now}
+            paused={paused}
+            intervalMs={queueIntervalMs}
+            onOpenDocument={openDocument}
+            onChanged={fetchQueue}
+            pushToast={pushToast}
+          />
 
           <div className="module-card">
             <div className="module-header">
@@ -1141,6 +1273,8 @@ export default function SystemMonitoring() {
           </div>
         )}
       </section>
+
+      <DocumentDrawer doc={drawerDoc} onClose={() => setDrawerDoc(null)} />
 
       {/* Local toast strip — reuses the UploadProvider's .upload-toast grammar
           (components.css); the house pattern for pages without the upload

@@ -382,6 +382,10 @@ h1, h2, h3, h4, h5, h6 {
 
 .conversation-new-btn:hover {
   border-color: var(--accent-color);
+  /* Canonical rest→hover wash (2026-10-12 critique, polish): the border
+     tint alone skipped the background step every quiet control takes; the
+     card fill swaps to the element wash, same as .attach-btn below. */
+  background: var(--bg-element);
 }
 
 .conv-search-actions {
@@ -1442,7 +1446,10 @@ h1, h2, h3, h4, h5, h6 {
 }
 .internal-badge {
   background: var(--info-bg);
-  color: var(--accent-color);
+  /* AA text sibling of --info (same pattern as the verdict -text trio):
+     --accent-color measured 3.7:1 on the composited tint in dark
+     (critique 2026-10-12); --info-text keeps >=4.5:1 in both themes. */
+  color: var(--info-text);
 }
 
 /* Analyze Button */
@@ -3696,6 +3703,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .settings-row-title {
+  /* Promoted from div to h3 (2026-10-13, critique P2·4 — pane(h2) →
+     rows(h3) outline): font-family/margin resets keep the promotion
+     visually a no-op (the global heading reset forces Outfit and the UA
+     default adds margin-bottom). */
+  font-family: inherit;
+  margin: 0;
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-primary);
@@ -3713,7 +3726,7 @@ h1, h2, h3, h4, h5, h6 {
   flex-shrink: 0;
 }
 
-/* Sage-avatar picker control (moved from the Legal Opinion
+/* gemma-avatar picker control (moved from the Legal Opinion
    conversation-panel footer 2026-10-01, user review): radiogroup grid
    of paused BotIdentity stills, one per bot-avatars shape. Item grammar
    follows the old picker — hairline border stepping to accent on hover,
@@ -3725,6 +3738,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .settings-avatar-item {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3745,7 +3759,7 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--info-bg);
 }
 
-/* Sage avatar body-colour swatches (2026-10-01 review): same radiogroup
+/* gemma avatar body-colour swatches (2026-10-01 review): same radiogroup
    grammar as the shape picker above — hairline border stepping to accent
    on hover; selected adds an accent outline ring (the chip fill IS the
    swatch colour, so the avatar item's --info-bg tint can't apply). */
@@ -3756,6 +3770,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .settings-swatch-item {
+  position: relative;
   width: 34px;
   height: 34px;
   padding: 0;
@@ -3770,6 +3785,26 @@ h1, h2, h3, h4, h5, h6 {
 
 .settings-swatch-item.selected {
   border-color: var(--accent-color);
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* Both pickers rebuilt as labels over visually-hidden native radios
+   (2026-10-13, critique P1·2): the .settings-segment contract — arrow
+   keys and "N of M" announcements come free, only the checked radio is
+   a tab stop, and the :has(input:focus-visible) ring carries keyboard
+   focus. The inputs are absolutely positioned against the items'
+   position:relative above. */
+.settings-avatar-item input,
+.settings-swatch-item input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.settings-avatar-item:has(input:focus-visible),
+.settings-swatch-item:has(input:focus-visible) {
   outline: 2px solid var(--accent-color);
   outline-offset: 2px;
 }
@@ -3974,6 +4009,15 @@ h1, h2, h3, h4, h5, h6 {
   margin-top: 10px;
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+/* Retention feedback variants (2026-10-13, critique P1·1 + P2·3): the
+   same line slot reports the pruned-entry count (role="status") or, in
+   the danger colour, names the valid range when a custom-days draft is
+   rejected (role="alert"). */
+.settings-status--error {
+  color: var(--danger-text);
+  font-weight: 500;
 }
 
 /* Language toggle button on auth card (top‑right) */
@@ -5210,6 +5254,13 @@ select::placeholder {
   transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* ── Klasifikasi pie chart ─────────────────────────────────────────────── */
+.admin-pie-wrap {
+  /* Let Highcharts size itself; a small negative margin bleeds to panel edge */
+  margin: 0 -4px;
+}
+/* Highcharts renders its own SVG tooltip — no custom tooltip markup needed */
+
 /* KG-exclusion form + inline feedback */
 .admin-exclusion-form {
   display: flex;
@@ -5367,26 +5418,11 @@ select::placeholder {
   font-size: 0.8rem;
 }
 
-.admin-feedback-dismiss {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.admin-feedback-dismiss:hover { background: var(--bg-element); }
-.admin-feedback-dismiss:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
-
-/* Truncated-cell hint host: the OUTER span carries data-hint and stays
-   overflow-visible so the tooltip escapes; the INNER span does the
-   ellipsis (a ::after inside an overflow:hidden box would be clipped). */
+/* Truncated-cell hint host: the OUTER span stays overflow-visible and the
+   INNER span does the ellipsis. The tooltip itself moved to a body-level
+   portal (.admin-hint-pop, 2026-10-13 critique P2·4) — the old ::after
+   painted inside the overflow-y:auto table wrap, so lower-row hints
+   clipped or spawned stray scrollbars. */
 .admin-hint-cell {
   position: relative;
   display: inline-block;
@@ -5400,15 +5436,21 @@ select::placeholder {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.admin-hint-cell[data-hint]:hover::after,
-.admin-hint-cell[data-hint]:focus-visible::after {
-  content: attr(data-hint);
-  position: absolute;
-  top: calc(100% + 8px);
-  right: -8px;
-  z-index: 40;
+.admin-hint-cell:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+
+/* ── 2026-10-13 critique remediation (P1·2, P2·4, P2·5): portal tooltip,
+      audit-refetch veil, bulk-selection bar, sortable column headers,
+      checkbox cells, page-jump input. The toast strip reuses the
+      .upload-toast grammar above. ── */
+
+/* Portal tooltip — same visual spec as the ::after hint it replaces;
+   fixed-positioned so no ancestor scroller can clip it, flipped/clamped
+   against the viewport by HintTooltip in AdminDashboard.tsx. */
+.admin-hint-pop {
+  position: fixed;
+  z-index: 500;
   width: max-content;
-  max-width: 280px;
+  max-width: min(280px, calc(100vw - 16px));
   padding: 8px 10px;
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -5417,14 +5459,101 @@ select::placeholder {
   box-shadow: 0 12px 28px -8px rgba(15, 23, 42, 0.45);
   font-size: 0.75rem;
   font-weight: 500;
-  letter-spacing: normal;
   line-height: 1.45;
-  text-transform: none;
-  white-space: normal;
   text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
   pointer-events: none;
 }
-.admin-hint-cell:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+
+/* Stale audit rows dim and go inert during a refetch — the visible busy
+   state aria-busy alone couldn't provide (critique P1·2). */
+.admin-audit-tbody { transition: opacity 0.15s ease; }
+.admin-audit-tbody--busy { opacity: 0.45; pointer-events: none; }
+
+/* Bulk-selection bar: accent-glow wash + accent hairline — a "selection
+   is active" semantic state, not decoration. */
+.admin-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--accent-color);
+  border-radius: var(--radius-sm);
+  background: var(--accent-glow);
+}
+.admin-bulk-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  margin-right: auto;
+}
+.admin-bulk-bar .btn { padding: 6px 12px; font-size: 0.82rem; }
+.admin-bulk-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.admin-bulk-clear:hover { background: var(--bg-element); color: var(--text-primary); }
+.admin-bulk-clear:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+
+/* Sortable column headers — the button inherits th typography; the caret
+   is the only added visual (unsorted columns show a muted double-arrow). */
+.admin-th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.admin-th-sort:hover { color: var(--text-primary); }
+.admin-th-sort:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+.admin-th-sort svg { opacity: 0.55; flex-shrink: 0; }
+
+/* Checkbox column: width:1% + nowrap collapses the column to its content. */
+.admin-th-check,
+.admin-cell-check { width: 1%; white-space: nowrap; }
+.admin-th-check input[type='checkbox'],
+.admin-cell-check input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-color);
+  cursor: pointer;
+  vertical-align: middle;
+}
+.admin-th-check input:focus-visible,
+.admin-cell-check input:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+
+/* Page-jump input — overrides .admin-input's flex:1 so it stays a compact
+   fixed-width field in the pagination row; spinners off (the placeholder
+   already shows current/total). */
+.admin-pagination .admin-page-jump {
+  flex: 0 0 auto;
+  width: 72px;
+  padding: 6px 8px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+.admin-page-jump::-webkit-outer-spin-button,
+.admin-page-jump::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.admin-page-jump:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ConfirmDialog pending/error states — the dialog now stays open until the
    mutation settles (critique P2 feedback-transience fix). */
@@ -5443,7 +5572,202 @@ select::placeholder {
 @media (prefers-reduced-motion: reduce) {
   .admin-bar-fill,
   .admin-status-fill { transition: none; }
+  .admin-audit-tbody { transition: none; }
   .admin-spin { animation: none; }
+}
+
+/* ── User management enhancements (2026-10-13) ────────────────────────────
+   New columns (last_login, email_verified), per-row action menu, user
+   detail drawer, temp-password modal, username-as-link, null value style.
+   All colours use the existing --sb-* / --text-* / --bg-* token set.     */
+
+/* Username button — looks like text, opens the detail drawer */
+.admin-user-name-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 500;
+  color: var(--accent-color);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+}
+.admin-user-name-btn:hover { text-decoration: underline; }
+.admin-user-name-btn:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; border-radius: 2px; }
+
+/* Null/never value (e.g. "Belum pernah" for last_login = null) */
+.admin-null-val {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 0.82rem;
+}
+
+/* Email-verified icon column — centred, minimal width */
+.admin-cell-verify { text-align: center; white-space: nowrap; }
+.admin-verify-ok  { color: var(--success-text); display: inline-block; }
+.admin-verify-no  { color: var(--text-secondary); display: inline-block; }
+
+/* Row actions cluster (activate/deactivate + ⋯ menu trigger) */
+.admin-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+/* Per-row dropdown menu — portaled, fixed position */
+.admin-row-menu {
+  position: fixed;
+  z-index: 600;
+  min-width: 180px;
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.18);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.admin-row-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.84rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.admin-row-menu-item:hover { background: var(--bg-element); }
+.admin-row-menu-item:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+.admin-row-menu-item--danger { color: var(--danger-text); }
+.admin-row-menu-item--danger:hover { background: var(--danger-bg); }
+
+/* ── User detail drawer ── */
+.admin-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-veil);
+  z-index: 700;
+  display: flex;
+  justify-content: flex-end;
+}
+.admin-drawer {
+  width: min(400px, 92vw);
+  height: 100%;
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  border-left: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: -8px 0 32px rgba(15, 23, 42, 0.14);
+  animation: drawer-slide-in 0.22s ease;
+}
+@keyframes drawer-slide-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+.admin-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+.admin-drawer-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.admin-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20px 24px;
+}
+.admin-drawer-section {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+.admin-drawer-section:last-child { border-bottom: none; }
+.admin-drawer-section-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.admin-drawer-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  align-items: baseline;
+}
+.admin-drawer-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.admin-drawer-value {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+.admin-drawer-verify {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+.admin-drawer-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.admin-drawer-actions .btn {
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+/* ── Temp-password modal ── */
+.admin-tmpwd-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-element);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 12px 0 0;
+}
+.admin-tmpwd-code {
+  flex: 1;
+  font-family: var(--font-mono, monospace);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-drawer { animation: none; }
+}
+@media (max-width: 767px) {
+  .admin-drawer { width: 100vw; }
 }
 
 /* ── Loading orb (thinking-orbs, 2026-09-30) — app-wide indeterminate
@@ -5547,6 +5871,12 @@ select::placeholder {
   font-size: 0.9rem;
   border-radius: var(--radius-sm);
 }
+/* Inline editor row (2026-10-12 clarify, critique Issue 4): the input and
+   its ✓/✕ tiles share one flex line — the tiles are the visible save/cancel
+   contract. The input shrinks gracefully (min-width: 0) so the tiles never
+   get pushed out of the cell. */
+.tax-edit-box { display: flex; align-items: center; gap: 2px; }
+.tax-edit-box .tax-input--inline { flex: 1; min-width: 0; }
 /* Character counter for the 100-char cap (critique §8.3): maxLength alone
    truncates pasted text invisibly; the counter states the budget and turns
    danger at the cap. Tabular numerals keep the width stable while typing. */
@@ -5559,6 +5889,11 @@ select::placeholder {
   font-variant-numeric: tabular-nums;
 }
 .tax-charcount--max { color: var(--danger-text); }
+/* Live name-check messages (2026-10-12 harden, critique Issue 5): the twin
+   warning uses warning tones (non-blocking advice); the exact duplicate uses
+   danger tones and blocks — it mirrors the BE 400 copy verbatim. */
+.tax-conflict { margin: 6px 0 0; font-size: 0.78rem; color: var(--warning-text); }
+.tax-conflict--exact { color: var(--danger-text); }
 
 .tax-error {
   display: flex;
@@ -5586,6 +5921,24 @@ select::placeholder {
   margin-bottom: 24px;
   font-size: 0.9rem;
 }
+/* Undo-on-delete (2026-10-12, critique Issue 2): the delete notice persists
+   until dismissed and carries "Urungkan" — pushed to the right edge exactly
+   like the error banner's .tax-retry, with a quiet close ✕ after it. The
+   notice's flex+gap grammar is reused untouched; tokens only. */
+.tax-undo { margin-left: auto; }
+.tax-notice-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tax-notice-close:hover { color: var(--text-primary); }
 
 /* Four columns need less runway than the 920px compliance table, but keep
    the wrap's horizontal-scroll + sticky-first-column behavior. Bumped from
@@ -5619,6 +5972,10 @@ select::placeholder {
    Status/Digunakan/Aksi (critique §8.9) — long tokens break inside the cell. */
 .tax-name { font-weight: 500; overflow-wrap: anywhere; }
 .tax-row-inactive .tax-name { color: var(--text-secondary); }
+/* Counterparty-row highlight of a live name conflict (2026-10-12 harden,
+   critique Issue 5) — the existing type the draft clashes against. */
+.tax-table tr.tax-row-conflict th, .tax-table tr.tax-row-conflict td { background: var(--warning-bg); }
+.tax-table tr.tax-row-conflict--exact th, .tax-table tr.tax-row-conflict--exact td { background: var(--danger-bg); }
 /* Usage count is evidence (2026-10-08 shape pass, critique Issue 5): the
    count links into the Legal Repository filtered by this jenis, for the
    roles that hold that route. The underline carries the affordance — no
@@ -5644,12 +6001,20 @@ button.status-chip.tax-chip {
   transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
     border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-button.status-chip.tax-chip:hover:not(:disabled) { border-color: var(--border-highlight); }
+button.status-chip.tax-chip:hover:not(:disabled):not([aria-disabled="true"]) { border-color: var(--border-highlight); }
 /* House disabled grammar is cursor: not-allowed everywhere (.btn, .tax-icon-btn,
    .btn-modal-secondary, ...); the chip was the lone `wait` heretic — and every
    control disables during ANY mutation, so "wait" on controls that aren't the
    one in flight was misleading anyway (critique §8.10). */
 button.status-chip.tax-chip:disabled { opacity: 0.6; cursor: not-allowed; }
+/* Transient in-flight locks moved from native `disabled` to `aria-disabled`
+   + handler guard (2026-10-12 audit, critique Issue 3): native disabled on
+   the clicked control drops focus to <body> and punches a hole in the dialog
+   Tab trap. Same visual grammar (0.6 / not-allowed). `.admin-view` is shared
+   with AdminDashboard (whose confirm-modals render outside the page root and
+   keep native-disabled grammar); it currently renders no aria-disabled
+   buttons, so the rule is taxonomy-only in effect. */
+.admin-view button[aria-disabled="true"] { opacity: 0.6; cursor: not-allowed; }
 
 .tax-icon-btn {
   display: inline-flex;
@@ -5666,9 +6031,9 @@ button.status-chip.tax-chip:disabled { opacity: 0.6; cursor: not-allowed; }
   transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
     color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.tax-icon-btn:hover:not(:disabled) { background: var(--bg-element); color: var(--text-primary); }
+.tax-icon-btn:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--bg-element); color: var(--text-primary); }
 .tax-icon-btn--danger { color: var(--danger-text); }
-.tax-icon-btn--danger:hover:not(:disabled) { background: var(--danger-bg); color: var(--danger-text); }
+.tax-icon-btn--danger:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--danger-bg); color: var(--danger-text); }
 .tax-icon-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* Hardening/polish additions (2026-10-06, second pass): keyboard focus rings
@@ -5718,6 +6083,9 @@ button.status-chip.tax-chip:focus-visible {
   background: var(--danger-bg);
   border-color: var(--danger-border);
   color: var(--danger-text);
+  /* Name + inline reason + X need more room than the 260px default
+     (2026-10-12 critique, harden P1-1). */
+  max-width: 320px;
 }
 .attach-chip-icon {
   flex-shrink: 0;
@@ -5735,6 +6103,12 @@ button.status-chip.tax-chip:focus-visible {
 .attach-chip-status {
   flex-shrink: 0;
   color: var(--text-secondary);
+}
+/* The inline failure reason is chip body copy, not a metadata footnote —
+   it keeps the danger voice instead of the neutral grey (2026-10-12
+   critique, harden P1-1). */
+.attach-chip--failed .attach-chip-status {
+  color: var(--danger-text);
 }
 .attach-chip-x {
   display: inline-flex;
@@ -5803,6 +6177,20 @@ button.status-chip.tax-chip:focus-visible {
 .attach-thumb:hover {
   border-color: var(--accent-color);
 }
+/* Blob-loading placeholder: the thumb's exact 64px footprint with a
+   spinner in the well, so the row never jumps when the image lands
+   (2026-10-12 critique, polish). Not interactive — no hover accent. */
+.attach-thumb-loading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-element);
+  color: var(--text-secondary);
+}
 .attach-chip--clickable {
   cursor: pointer;
   font-family: inherit;
@@ -5822,14 +6210,15 @@ button.status-chip.tax-chip:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(15, 23, 42, 0.72);
+  background: var(--overlay-veil-deep);
   backdrop-filter: blur(2px);
 }
 .attach-lightbox img {
   max-width: 90vw;
   max-height: 90vh;
   border-radius: var(--radius-sm);
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
+  /* Ink-navy retint (house shadow rule — pure-black shadows are drift). */
+  box-shadow: 0 12px 48px rgba(15, 23, 42, 0.4);
 }
 .attach-lightbox-x {
   position: absolute;
@@ -5845,4 +6234,8 @@ button.status-chip.tax-chip:focus-visible {
 }
 .attach-lightbox-x:hover {
   background: rgba(255, 255, 255, 0.24);
+}
+.attach-lightbox-x:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }

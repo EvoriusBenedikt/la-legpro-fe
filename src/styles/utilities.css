@@ -132,6 +132,21 @@
      removed the TSX inline double-definition), so the 44px touch floor
      overrides it by specificity — no !important needed. */
   .legal-opinion-view .send-button { width: 44px; height: 44px; }
+  /* Attachment layer joins the same 44px touch floor (2026-10-12 critique
+     P1-4): the paperclip, the message actions, and the chip X shipped as
+     28px/16px mouse targets. The chip body grows to fit its X and trims
+     padding to compensate; the lightbox close is portaled to <body>, so it
+     needs the unscoped selector. */
+  .legal-opinion-view .attach-btn { width: 44px; height: 44px; }
+  .legal-opinion-view .msg-action-btn { width: 44px; height: 44px; }
+  .legal-opinion-view .attach-chip { min-height: 44px; padding: 0 4px 0 10px; }
+  .legal-opinion-view .attach-chip-x {
+    width: 44px;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+  }
+  .attach-lightbox-x { width: 44px; height: 44px; align-items: center; justify-content: center; }
 
   /* TopBar — drawer + backdrop sit above it (z-90 matches the backdrop;
      DOM order puts the topbar first so the backdrop paints over it) */

@@ -82,6 +82,7 @@ export function buildNav(role: string): NavModel {
     ? {
         parent: repository,
         children: [
+          { id: 'repo-docs', to: '/repository', labelKey: 'sbChildDocs' as StringKey, tabExclude: ['pending', 'history'] },
           ...(level >= 5
             ? [{
                 id: 'repo-pending', to: '/repository', tab: 'pending',

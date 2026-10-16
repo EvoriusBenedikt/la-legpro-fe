@@ -45,9 +45,23 @@ export function useDialogA11y(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
         ),
       ).filter(el => !el.hasAttribute('disabled') && el.getClientRects().length > 0);
-      if (focusables.length === 0) return;
+      if (focusables.length === 0) {
+        // Zero focusables (e.g. every button disabled mid-action): hold Tab on
+        // the panel instead of letting it roam the background page (2026-10-12,
+        // taxonomy critique Issue 3 — house-wide defense).
+        e.preventDefault();
+        panel.focus();
+        return;
+      }
       const first = focusables[0];
       const last = focusables[focusables.length - 1];
+      if (!panel.contains(document.activeElement)) {
+        // Focus fell outside the panel (its element was disabled/unmounted):
+        // pull it back into the trap.
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+        return;
+      }
       if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
         last.focus();

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, useId } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Send, ChevronDown, ChevronLeft, ChevronRight, User, Search, Plus, Trash2, MoreHorizontal, Pencil, FileText, Link2, MessagesSquare, Copy, Check, RotateCw, Square, AlertCircle, ListChecks, CheckSquare, ArrowUpDown, Pin, Eraser, Paperclip } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -10,6 +11,8 @@ import type { PendingAttachment } from './ChatAttachments';
 import { getSettings } from '../settings';
 import { useStrings, getLocale, fill, STRINGS, GREETING_POOLS } from '../i18n';
 import { useAuth } from '../hooks/useAuth';
+import { useJobStatus } from '../context/JobStatusContext';
+import { useContractUpload } from '../hooks/useContractUpload';
 import DocumentDrawer from './DocumentDrawer';
 import LoadingOrb from './LoadingOrb';
 import BotIdentity from './BotIdentity';
@@ -125,7 +128,7 @@ const REL_MED = 1.5;
 
 /* Time-of-day greeting for the empty-conversation hero: morning
    05:00–11:59, afternoon 12:00–17:59, night otherwise; the offer line
-   names the assistant (Sage). Emitted as a markdown H2 so the hero
+   names the assistant (gemma). Emitted as a markdown H2 so the hero
    reads as a true heading; the former scope paragraph was deleted in
    the 2026-10-01 review. Since the same day's "let it be the user"
    review the greeting is an empty-state only — rendered live while a
@@ -204,10 +207,73 @@ function linkifyCitations(text: string, sourceCount: number): string {
   });
 }
 
+/* Sidebar preview text (2026-10-12 critique, polish): stored messages are
+   raw markdown — bold markers, [n] citations, heading hashes, and table
+   pipes all leaked into the one-line conversation preview. Strip the
+   grammar, keep the words; the full render stays inside the chat. */
+function stripMarkdown(src: string): string {
+  return src
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[\d{1,2}\]/g, ' ')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/^\s*[-*_]{3,}\s*$/gm, ' ')
+    .replace(/\|/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/* Roving arrow keys for the role="menu" dropdowns (2026-10-12 critique,
+   polish): menu semantics promise arrow navigation — without it a keyboard
+   user has to Tab through the whole panel. Wraps at both ends; Home/End
+   jump. Shared by the sort menu and the portaled row menu, which focus
+   their first item on open so the arrows are discoverable. */
+function handleMenuKeys(e: ReactKeyboardEvent<HTMLElement>) {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
+  const items = Array.from(
+    e.currentTarget.querySelectorAll<HTMLElement>(
+      'button[role="menuitem"], button[role="menuitemradio"]'
+    )
+  );
+  if (items.length === 0) return;
+  const idx = items.indexOf(document.activeElement as HTMLElement);
+  const next =
+    e.key === 'Home'
+      ? 0
+      : e.key === 'End'
+        ? items.length - 1
+        : e.key === 'ArrowDown'
+          ? (idx + 1) % items.length
+          : (idx - 1 + items.length) % items.length;
+  e.preventDefault();
+  items[next].focus();
+}
+
 /* Per-message attachment cap (spec §10). FE-side contract — each POST
    carries exactly one file, so the server can only enforce the
    per-conversation cap (20); the composer refuses picks beyond 4 chips. */
 const ATTACH_MAX_PER_MESSAGE = 4;
+
+/* Module-level in-flight registry (background-generation fix, 2026-10-14):
+   survives component unmount/remount cycles caused by React Router's route
+   switching. Maps conversationId → { controller, jobId, startedAt }.
+   On mount the component checks this map: if its active conversation is
+   in-flight it restores isLoading immediately so the spinner returns and
+   the stop button works. On generation end the entry is deleted.
+   Module-scope is safe: there is exactly one LegalOpinion mounted at any
+   time (route-based rendering). */
+interface InFlightEntry {
+  controller: AbortController;
+  jobId: string | undefined;
+  startedAt: number;
+}
+const inFlightGenerations = new Map<string, InFlightEntry>();
 
 function createConversation(title?: string): Conversation {
   const now = Date.now();
@@ -223,6 +289,8 @@ function createConversation(title?: string): Conversation {
 export default function LegalOpinion() {
   const t = useStrings();
   const { user } = useAuth();
+  const { addJob, updateJob, clearJob } = useJobStatus();
+  const { notify } = useContractUpload();
   const storageKeys = useMemo(() => storageKeysFor(user?.username), [user?.username]);
   const [conversations, setConversations] = useState<Conversation[]>(() => {
     // One-time migration: adopt the pre-fix origin-wide history for the
@@ -332,6 +400,59 @@ export default function LegalOpinion() {
   /* Live /api/chat request, abortable by the stop control and on unmount
      (2026-10-08 critique remediation P1-2). */
   const abortRef = useRef<AbortController | null>(null);
+  /* Background-generation support: track mount state so runGeneration can
+     fall back to a direct localStorage write when the component is gone.
+     storageKeysRef keeps the current key accessible inside async callbacks
+     that outlive the render cycle. */
+  const mountedRef = useRef(true);
+  const storageKeysRef = useRef(storageKeys);
+  useEffect(() => {
+    storageKeysRef.current = storageKeys;
+  }, [storageKeys]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  /* In-flight restore (2026-10-14): when React Router remounts this
+     component after a tab switch, check the module-level registry for a
+     generation that was running on the active conversation. If found,
+     restore isLoading and hook up the abort controller so the stop button
+     still works. The elapsed timer restarts from the original start time. */
+  useEffect(() => {
+    if (!activeConversationId) return;
+    const entry = inFlightGenerations.get(activeConversationId);
+    if (!entry) return;
+    setIsLoading(true);
+    abortRef.current = entry.controller;
+    // Restart the elapsed counter from when the generation actually began.
+    const already = Math.round((Date.now() - entry.startedAt) / 1000);
+    setElapsed(already);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversationId]); // intentionally runs only when the active id changes (mount + switch)
+
+  /* Storage event (2026-10-14): cross-tab sync. When the user has two
+     browser tabs open and the background generation in one tab writes to
+     localStorage, the other tab's mounted component picks it up here and
+     reloads state. Same-tab background writes (component unmounted then
+     remounted) are handled by the useState initializer (re-reads from
+     localStorage on every fresh mount) and by the in-flight restore effect
+     above (mountedRef becomes true, so the async callback uses the direct
+     setConversations path once the generation lands). */
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== storageKeys.list || !e.newValue) return;
+      try {
+        const parsed = JSON.parse(e.newValue) as Conversation[];
+        if (!Array.isArray(parsed)) return;
+        setConversations(parsed);
+      } catch {
+        // malformed — ignore
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [storageKeys.list]);
 
   const resizeTextarea = () => {
     const el = textareaRef.current;
@@ -565,8 +686,10 @@ export default function LegalOpinion() {
     }, 1_000);
     return () => window.clearInterval(iv);
   }, [isLoading]);
-  /* Unmount safety: never leave a chat request in flight behind. */
-  useEffect(() => () => { abortRef.current?.abort(); }, []);
+  /* The stop button aborts the in-flight request; navigating away does NOT
+     abort it — the generation continues in the background and the result
+     lands in localStorage when it finishes so it's there when the user
+     returns. */
   const botState: 'default' | 'working' | 'sleeping' = isLoading
     ? 'working'
     : botPhase === 'sleeping'
@@ -658,22 +781,68 @@ export default function LegalOpinion() {
   }, [messages]);
 
   const updateConversation = (conversationId: string, updater: (c: Conversation) => Conversation) => {
-    setConversations(prev => prev.map(c => (c.id === conversationId ? updater(c) : c)));
+    setConversations(prev => {
+      const next = prev.map(c => (c.id === conversationId ? updater(c) : c));
+      // Write through to localStorage immediately so the data survives even
+      // if the component unmounts before React flushes the persistence effect.
+      try {
+        localStorage.setItem(storageKeysRef.current.list, JSON.stringify(next));
+      } catch { /* quota / unavailable — the effect is the fallback */ }
+      return next;
+    });
   };
 
-  /* Shared generation flow (2026-10-08 critique remediation P1-2/P1-3):
-     send, retry-an-answer and retry-after-error all run through here, so
-     abort, timeout and error handling exist exactly once. prefix is the
-     history the answer should follow; kind:'error' rows are filtered out
-     of the LLM context — a stored apology replayed as if the assistant
-     had really answered was the poisoning vector. Failures land as
-     first-class error rows with their own retry action; the copy is
-     frozen at creation time from the locale active then. */
-  const runGeneration = async (conversationId: string, prefix: Message[]) => {
+  /* Shared generation flow (2026-10-08 critique remediation P1-2/P1-3,
+     background fix 2026-10-14): send, retry-an-answer and retry-after-error
+     all run through here, so abort, timeout and error handling exist exactly
+     once. prefix is the history the answer should follow; kind:'error' rows
+     are filtered out of the LLM context — a stored apology replayed as if
+     the assistant had really answered was the poisoning vector. Failures land
+     as first-class error rows with their own retry action; the copy is
+     frozen at creation time from the locale active then.
+
+     Background run: the entry is registered in the module-level
+     inFlightGenerations map before the await, so if the user switches tabs
+     and comes back the new component instance restores isLoading and the
+     abort controller immediately on mount. Toast notifications land whether
+     or not the component is mounted (notify comes from UploadProvider, which
+     lives above the router). */
+  const runGeneration = async (conversationId: string, prefix: Message[], jobId?: string) => {
     setIsLoading(true);
     setElapsed(0);
     const controller = new AbortController();
     abortRef.current = controller;
+
+    // Register in the module-level map BEFORE the await so a concurrent
+    // mount can find the entry immediately.
+    inFlightGenerations.set(conversationId, { controller, jobId, startedAt: Date.now() });
+
+    /* persistConversationUpdate: applies an updater to the conversation
+       whether or not the component is still mounted.
+       - Mounted: goes through setConversations which now writes through to
+         localStorage synchronously inside the setState updater.
+       - Unmounted: setConversations is a no-op, so we read + write
+         localStorage directly from storageKeysRef. Both paths are safe. */
+    const persistConversationUpdate = (updater: (c: Conversation) => Conversation) => {
+      if (mountedRef.current) {
+        // Normal path: write-through updateConversation (persists + updates UI).
+        updateConversation(conversationId, updater);
+      } else {
+        // Background path: component is gone, write directly to localStorage.
+        // The storage event listener in the new component instance (or on
+        // other tabs) picks this up and reloads state automatically.
+        try {
+          const key = storageKeysRef.current.list;
+          const raw = localStorage.getItem(key);
+          const stored: Conversation[] = raw ? JSON.parse(raw) : [];
+          const next = stored.map(c => c.id === conversationId ? updater(c) : c);
+          localStorage.setItem(key, JSON.stringify(next));
+        } catch {
+          // localStorage unavailable or quota — nothing we can do.
+        }
+      }
+    };
+
     try {
       const apiMessages = prefix
         .filter((msg) => msg.kind !== 'error')
@@ -689,19 +858,42 @@ export default function LegalOpinion() {
         signal: controller.signal
       });
       const data = response.data;
-      updateConversation(conversationId, (c) => ({
-        ...c,
-        updatedAt: Date.now(),
-        messages: [
-          ...c.messages,
-          {
-            id: Date.now() + 1,
-            role: 'ai',
-            content: data.answer,
-            sources: data.sources
-          }
-        ]
-      }));
+      /* Apply the LLM-generated title when the backend supplies one (first
+         message only). Fall back to slicing the user text when it's absent
+         (e.g. title-gen failed silently) — keeps the old behaviour intact. */
+      const userText = prefix.filter(m => m.role === 'user').slice(-1)[0]?.content ?? '';
+      persistConversationUpdate((c) => {
+        const shouldSetTitle =
+          c.title.startsWith('Percakapan') ||
+          c.title.startsWith('Conversation') ||
+          c.title === 'New conversation' ||
+          c.title === 'Percakapan Baru';
+        const newTitle = shouldSetTitle
+          ? (data.suggested_title ?? (userText.slice(0, 42) || c.title))
+          : c.title;
+        return {
+          ...c,
+          title: newTitle,
+          updatedAt: Date.now(),
+          messages: [
+            ...c.messages,
+            {
+              id: Date.now() + 1,
+              role: 'ai',
+              content: data.answer,
+              sources: data.sources
+            }
+          ]
+        };
+      });
+      if (jobId) updateJob(jobId, 'completed');
+      /* Background-completion toast: only fires when the user navigated away
+         while the request was running. The toast lands in the same tab via
+         UploadProvider (which lives above the router and is always mounted),
+         so the user gets a visible nudge to come back and read the answer. */
+      if (!mountedRef.current) {
+        notify('success', 'Jawaban opini legal siap — kembali ke halaman untuk membaca.', 8000);
+      }
     } catch (error) {
       console.error(error);
       const s = STRINGS[getLocale()];
@@ -713,7 +905,7 @@ export default function LegalOpinion() {
       } else if (isNetworkError(error)) {
         content = s.opErrorNetwork;
       }
-      updateConversation(conversationId, (c) => ({
+      persistConversationUpdate((c) => ({
         ...c,
         updatedAt: Date.now(),
         messages: [
@@ -726,9 +918,19 @@ export default function LegalOpinion() {
           }
         ]
       }));
+      // Don't notify on intentional abort — only real failures.
+      // On abort, remove the in-flight job entirely (user cancelled it).
+      if (jobId) {
+        if (isAbortError(error)) clearJob(jobId);
+        else updateJob(jobId, 'failed');
+      }
+      if (!mountedRef.current && !isAbortError(error)) {
+        notify('error', 'Opini legal gagal diproses — buka halaman untuk melihat detailnya.', 12000);
+      }
     } finally {
+      inFlightGenerations.delete(conversationId);
       abortRef.current = null;
-      setIsLoading(false);
+      if (mountedRef.current) setIsLoading(false);
     }
   };
 
@@ -846,10 +1048,20 @@ export default function LegalOpinion() {
   const handleDeleteSelected = () => {
     if (selectedIds.size === 0) return;
     if (selectedIds.size >= conversations.length) {
+      // Deleting ALL conversations — confirm then auto-create a fresh one
       setDialog({
-        kind: 'alert',
-        title: t.opDeleteLastTitle,
-        body: t.opDeleteLastBody,
+        kind: 'confirm',
+        title: t.opDeleteAllTitle,
+        body: fill(t.opDeleteAllBody, { n: selectedIds.size }),
+        confirmLabel: t.opDeleteConfirm,
+        danger: true,
+        onConfirm: () => {
+          const fresh = createConversation();
+          selectedIds.forEach((id) => deleteConversationAttachments(id).catch(console.warn));
+          setConversations([fresh]);
+          setActiveConversationId(fresh.id);
+          exitSelectMode();
+        },
       });
       return;
     }
@@ -878,11 +1090,24 @@ export default function LegalOpinion() {
     updateConversation(conversationId, (c) => ({ ...c, pinned: !c.pinned }));
   };
 
+  /* Transient over-cap notice (2026-10-12 critique, clarify P1-3): shares
+     the hint slot's grammar, self-clears after 5s, and stacks under the
+     send-gate hint when a truncated pick is still processing. */
+  const [attachNotice, setAttachNotice] = useState('');
+  const attachNoticeTimer = useRef<number | undefined>(undefined);
+  const flashAttachNotice = (msg: string) => {
+    window.clearTimeout(attachNoticeTimer.current);
+    setAttachNotice(msg);
+    attachNoticeTimer.current = window.setTimeout(() => setAttachNotice(''), 5000);
+  };
+  useEffect(() => () => window.clearTimeout(attachNoticeTimer.current), []);
+
   /* Paperclip pick (2026-10-12): ensure a conversation id first — a fresh
      chat mints one exactly like handleCreateConversation (minus clearing
      the input: an attach must not eat a drafted question) so the upload
      and the first message land in the SAME conversation — then POST each
-     file. Picks beyond the per-message cap (4) are ignored; the
+     file. Picks beyond the per-message cap (4) are counted and announced
+     in the hint slot (2026-10-12 critique, clarify P1-3); the
      per-conversation cap (20) is server-enforced (422 'limit' → failed
      chip). */
   const handleFilesPicked = (files: FileList | null) => {
@@ -898,8 +1123,16 @@ export default function LegalOpinion() {
        setPending callbacks below. */
     const cid = convId;
     const capacity = ATTACH_MAX_PER_MESSAGE - visiblePending.length;
-    if (capacity <= 0) return;
-    for (const file of Array.from(files).slice(0, capacity)) {
+    /* Clarify P1-3 (2026-10-12 critique): over-cap picks used to vanish
+       without a word — count the drops and announce them in the hint slot
+       instead of failing silently. */
+    const accepted = Array.from(files).slice(0, Math.max(0, capacity));
+    const dropped = files.length - accepted.length;
+    if (dropped > 0) {
+      flashAttachNotice(fill(t.opAttachTruncated, { max: ATTACH_MAX_PER_MESSAGE, n: dropped }));
+    }
+    if (accepted.length === 0) return;
+    for (const file of accepted) {
       const key = `att_${nowMs()}_${Math.random().toString(36).slice(2, 7)}`;
       setPending((prev) => [...prev, { key, convId: cid, file, status: 'uploading' }]);
       uploadAttachment(cid, file)
@@ -956,12 +1189,12 @@ export default function LegalOpinion() {
     };
 
     const existingMessages = activeConversation.messages;
-    const shouldSetTitle = activeConversation.title.startsWith('Percakapan');
-    const newTitle = shouldSetTitle ? userContent.slice(0, 42) || activeConversation.title : activeConversation.title;
+    /* Title is now set by the backend on the first message (suggested_title
+       in ChatResponse). We still pass the user text as a fallback inside
+       runGeneration in case the LLM title call fails. */
 
     updateConversation(activeConversation.id, (c) => ({
       ...c,
-      title: newTitle,
       updatedAt: now,
       messages: [...c.messages, userMessage],
     }));
@@ -977,7 +1210,9 @@ export default function LegalOpinion() {
       .then((metas) => setAttachState({ convId: activeConversation.id, metas }))
       .catch(() => undefined);
 
-    await runGeneration(activeConversation.id, [...existingMessages, userMessage]);
+    const opJobId = `opinion-${now}`;
+    addJob(opJobId, 'uploading', userContent.slice(0, 48) || 'Opini Legal', 'opinion');
+    await runGeneration(activeConversation.id, [...existingMessages, userMessage], opJobId);
   };
 
   /* Claude-style message actions (2026-10-01 review). Copy writes the raw
@@ -1105,12 +1340,13 @@ export default function LegalOpinion() {
                   <ArrowUpDown size={15} />
                 </button>
                 {sortMenuOpen && (
-                  <div className="sort-menu" role="menu">
-                    {([['activity', t.opSortActivity], ['created', t.opSortCreated], ['name', t.opSortName]] as const).map(([mode, label]) => (
+                  <div className="sort-menu" role="menu" onKeyDown={handleMenuKeys}>
+                    {([['activity', t.opSortActivity], ['created', t.opSortCreated], ['name', t.opSortName]] as const).map(([mode, label], i) => (
                       <button
                         key={mode}
                         role="menuitemradio"
                         aria-checked={sortMode === mode}
+                        autoFocus={i === 0}
                         onClick={() => {
                           setSortMode(mode);
                           setSortMenuOpen(false);
@@ -1167,7 +1403,8 @@ export default function LegalOpinion() {
                   <span className="conv-text">
                     <div className="conversation-title">{conv.title}</div>
                     <div className="conversation-preview">
-                      {conv.messages[conv.messages.length - 1]?.content || t.opNoPreview}
+                      {stripMarkdown(conv.messages[conv.messages.length - 1]?.content ?? '') ||
+                        t.opNoPreview}
                     </div>
                   </span>
                 </button>
@@ -1334,6 +1571,8 @@ export default function LegalOpinion() {
                     </div>
                   )}
 
+                  {/* Only show sources when the answer actually references the knowledge base.
+                      Hide for general questions, greetings, or responses that don't need citations. */}
                   {msg.sources && msg.sources.length > 0 && (
                     <div className="sources-container">
                       <div className="sources-label">{t.opSources}</div>
@@ -1481,6 +1720,11 @@ export default function LegalOpinion() {
                 {t.opAttachSendHint}
               </div>
             )}
+            {attachNotice && (
+              <div className="composer-attach-hint" role="status">
+                {attachNotice}
+              </div>
+            )}
             <div className="composer-disclaimer">{t.opDisclaimer}</div>
           </div>
         </div>
@@ -1492,8 +1736,16 @@ export default function LegalOpinion() {
           viewport bottom via the layout effect. */}
       {menuState &&
         createPortal(
-          <div className="conversation-menu" ref={menuRef} style={{ top: menuState.top, left: menuState.left }}>
+          <div
+            className="conversation-menu"
+            role="menu"
+            onKeyDown={handleMenuKeys}
+            ref={menuRef}
+            style={{ top: menuState.top, left: menuState.left }}
+          >
             <button
+              role="menuitem"
+              autoFocus
               onClick={() => {
                 handleTogglePin(menuState.convId);
                 setMenuState(null);
@@ -1502,6 +1754,7 @@ export default function LegalOpinion() {
               <Pin size={14} /> {conversations.find((c) => c.id === menuState.convId)?.pinned ? t.opUnpin : t.opPin}
             </button>
             <button
+              role="menuitem"
               onClick={() => {
                 handleClearConversation(menuState.convId);
                 setMenuState(null);
@@ -1510,6 +1763,7 @@ export default function LegalOpinion() {
               <Eraser size={14} /> {t.opClearMessages}
             </button>
             <button
+              role="menuitem"
               onClick={() => {
                 handleRenameConversation(menuState.convId);
                 setMenuState(null);
@@ -1518,6 +1772,7 @@ export default function LegalOpinion() {
               <Pencil size={14} /> {t.opRename}
             </button>
             <button
+              role="menuitem"
               className="danger"
               onClick={() => {
                 handleDeleteConversation(menuState.convId);

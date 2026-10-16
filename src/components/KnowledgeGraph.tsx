@@ -443,6 +443,11 @@ export default function KnowledgeGraph() {
      remount builds a fresh ref and fetches normally. */
   const mountFetchDoneRef = useRef(false);
   const centerOnViewRef = useRef(false);
+  // Mirrors selectedNode for fetchGraph's stable closure (the state can't go
+  // in its deps without re-creating the callback): the refetch
+  // selection-clear disclosure reads it at success time (critique
+  // 2026-10-12 minor #10).
+  const selectedNodeRef = useRef<SelectedNode | null>(null);
   const typeDebounceRef = useRef<number | null>(null);
   const fetchGraphRef = useRef<((s?: string, t?: string) => Promise<void>) | null>(null);
 
@@ -510,6 +515,13 @@ export default function KnowledgeGraph() {
   // loading status so the selection never vanishes without a trace (critique
   // 2026-10-07 minor).
   const [scenarioClearedSelection, setScenarioClearedSelection] = useState(false);
+  // The scenario whose analysis FAILED (engine unreachable, invalid IDs, or
+  // an exception) — drives the notice's error grammar and the inline "Coba
+  // lagi" retry (critique 2026-10-12 P2·4). Null for ordinary outcomes: a
+  // deterministic zero-match is an answer, not a failure, and re-running it
+  // would just re-roll the same dice.
+  const [failedScenario, setFailedScenario] = useState<string | null>(null);
+  useEffect(() => { selectedNodeRef.current = selectedNode; }, [selectedNode]);
 
   const NDA_KEYWORDS = ['rahasia', 'data pribadi', 'pdp', 'ite', 'informasi', 'perlindungan', 'sandi'];
   const PKS_KEYWORDS = ['perjanjian', 'kerja sama', 'kontrak', 'kemitraan', 'kewajiban', 'hak', 'penyedia', 'vendor'];
@@ -696,6 +708,7 @@ export default function KnowledgeGraph() {
       setActiveScenario(null);
       setScenarioNodes([]);
       setScenarioNotice(null);
+      setFailedScenario(null);
       setSelectedNode(null);
       setScenarioClearedSelection(false);
       clearScenarioHighlight(kgData);
@@ -710,6 +723,7 @@ export default function KnowledgeGraph() {
     setIsScenarioLoading(scenario);
     setScenarioNodes([]);
     setScenarioNotice(null);
+    setFailedScenario(null);
 
     const reqId = ++scenarioReqIdRef.current;
     const controller = new AbortController();
@@ -742,7 +756,16 @@ export default function KnowledgeGraph() {
           ? 'Analisis AI tidak tersedia — node dicocokkan dengan kata kunci.'
           : 'Analisis AI tidak menemukan kecocokan — node dicocokkan dengan kata kunci.';
         if (matchedNodeIds.size === 0) {
-          notice = 'Tidak ada node yang cocok untuk skenario ini. Coba skenario lainnya, atau gunakan pencarian untuk menemukan node secara langsung.';
+          // Zero-match after the fallback. If the AI was DOWN (res===null)
+          // the outcome is transient — classify it as a failure so the
+          // notice gets error grammar + the inline retry (critique
+          // 2026-10-12 P2·4). If the AI ran and keywords are exhausted it
+          // is a deterministic answer: keep the outcome copy; the unlatched
+          // chip below is the retry.
+          notice = res === null
+            ? 'Analisis AI tidak tersedia dan tidak ada node yang cocok dengan kata kunci. Coba lagi, atau gunakan pencarian untuk menemukan node secara langsung.'
+            : 'Tidak ada node yang cocok untuk skenario ini. Coba skenario lainnya, atau gunakan pencarian untuk menemukan node secara langsung.';
+          if (res === null) setFailedScenario(scenario);
         }
       }
       // Render side bar with strictly matched AI nodes (core concepts)
@@ -753,7 +776,11 @@ export default function KnowledgeGraph() {
       // full-strength canvas with zero explanation (observed live during
       // GREEN verification: pressed=true, no panel, no notice).
       if (coreNodes.length === 0 && notice === null) {
-        notice = 'Tidak ada node yang cocok untuk skenario ini. Coba skenario lainnya, atau gunakan pencarian untuk menemukan node secara langsung.';
+        // The AI returned only IDs that don't exist in this graph — an
+        // engine failure, not an answer, and the LLM is nondeterministic:
+        // classify as failure (error grammar + retry).
+        notice = 'Analisis skenario tidak mengembalikan node yang cocok di graf. Coba lagi, atau gunakan pencarian untuk menemukan node secara langsung.';
+        setFailedScenario(scenario);
       }
       setScenarioNotice(notice);
       setScenarioNodes(coreNodes);
@@ -761,7 +788,12 @@ export default function KnowledgeGraph() {
       if (coreNodes.length === 0) {
         // Zero matches: restore full strength and let the notice explain —
         // the old behavior dimmed the whole canvas to 0.05 opacity with a
-        // latched button and no message (critique 2026-10-06 P1).
+        // latched button and no message (critique 2026-10-06 P1). Unlatch
+        // the chip too (critique 2026-10-12 P2·4): a pressed button over a
+        // full-strength canvas claimed an active analysis that produced
+        // nothing, and clicking it again only toggled OFF. Unlatched, the
+        // chip itself becomes the retry.
+        setActiveScenario(null);
         clearScenarioHighlight(kgData);
         return;
       }
@@ -803,6 +835,10 @@ export default function KnowledgeGraph() {
       if (reqId !== scenarioReqIdRef.current) return;
       console.error("Failed to fetch scenario from LLM", e);
       setScenarioNotice('Analisis skenario gagal — coba lagi.');
+      // Unlatch and remember which scenario failed so the notice can offer
+      // a real inline retry (critique 2026-10-12 P2·4).
+      setActiveScenario(null);
+      setFailedScenario(scenario);
     } finally {
       // Only the newest request may clear the latch — a canceled or
       // superseded call's finally must not kill its successor's spinner.
@@ -1108,6 +1144,13 @@ export default function KnowledgeGraph() {
       setActiveScenario(null);
       setScenarioNodes([]);
       setScenarioNotice(null);
+      setFailedScenario(null);
+      // Disclosure parity with scenario-start (critique 2026-10-12 minor
+      // #10): the rebuild silently dropped a selected node — say so through
+      // the toast strip (always-mounted aria-live, so it is announced too).
+      if (selectedNodeRef.current) {
+        pushToast('info', 'Pilihan node sebelumnya dibersihkan karena data graf dimuat ulang.');
+      }
       setSelectedNode(null);
       setScenarioClearedSelection(false);
       highlightRef.current = null;
@@ -1123,7 +1166,9 @@ export default function KnowledgeGraph() {
     } finally {
       setLoading(false);
     }
-  }, []);
+    /* pushToast's own dep chain is stable ([]-rooted), so fetchGraph's
+       identity stays stable for the mount effect — see the note there. */
+  }, [pushToast]);
 
   useEffect(() => {
     // First load honors a deep-linked ?q=/?type= — fetchGraph's defaults read
@@ -1261,6 +1306,9 @@ export default function KnowledgeGraph() {
       link.download = `knowledge-graph-${exportStamp()}.png`;
       link.href = dataUrl;
       link.click();
+      // Success toast closes the loop (critique 2026-10-12 minor #5): the
+      // browser's download chrome is easy to miss and only errors toasted.
+      pushToast('success', 'Gambar graf berhasil diunduh.');
     } catch (err) {
       console.error('Failed to export graph', err);
       pushToast('error', 'Gagal mengekspor gambar graf.');
@@ -1285,6 +1333,9 @@ export default function KnowledgeGraph() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      pushToast('success', format === 'json'
+        ? 'Data JSON berhasil diunduh.'
+        : 'Data CSV (ZIP) berhasil diunduh.');
     } catch (err) {
       console.error('Export error', err);
       // Toast instead of the native alert() — DESIGN.md bans the browser
@@ -1325,27 +1376,38 @@ export default function KnowledgeGraph() {
     );
   }, [kgData, search, filterType]);
 
-  /* Dirty cue (v5 P1): in graph mode the text input is submit-gated (a
-     server round-trip) while the list filters as you type — the difference
-     is now VISIBLE through the Cari→Terapkan label swap instead of being
-     working memory. The type select self-applies, so it can only be dirty
-     inside its 300ms debounce window. */
-  const filtersDirty = viewMode === 'graph' &&
-    (search !== appliedParams.search || filterType !== appliedParams.type);
+  /* Dirty cue (v5 P1): the text input is submit-gated (a server round-trip)
+     while the list also filters as you type — the difference is VISIBLE
+     through the Cari→Terapkan label swap instead of being working memory.
+     The cue is mode-independent now (critique 2026-10-12 P2·2): the old
+     graph-only guard left list mode with a silently diverged draft — the
+     list filtered the loaded window as you typed, looked like a
+     corpus-wide answer, and the button kept saying "Cari" as if nothing
+     was pending (the subset illusion, confirmed live). The type select
+     self-applies, so it can only be dirty inside its 300ms debounce
+     window. */
+  const filtersDirty =
+    search !== appliedParams.search || filterType !== appliedParams.type;
 
   /* One spoken status line for the PERSISTENT live region at the bottom of
      the component (v5, Sam's flag): a live region only announces a change if
      the region existed before it — the old role="status" paragraphs mounted
      with their text already inside and were routinely swallowed. Precedence:
-     load failure > analysis in flight > analysis outcome > selection. */
+     load failure > graph fetch in flight > analysis in flight > analysis
+     outcome > selection. The loading branch (critique 2026-10-12 P2·3)
+     fires on mount and on every refetch — the initial load used to be
+     silent, so the first thing a screen-reader user ever heard was the
+     finished state. */
   const srStatus = loadError
     ? `Gagal memuat graf pengetahuan. ${loadError}`
-    : isScenarioLoading
-      ? `Menganalisis skenario ${isScenarioLoading}. Dapat memakan waktu hingga satu menit.`
-      : scenarioNotice
-        ?? (selectedNode
-          ? `Node ${selectedNode.label} dipilih. ${selectedNode.connectedCount} relasi terhubung.`
-          : '');
+    : loading
+      ? 'Memuat graf pengetahuan...'
+      : isScenarioLoading
+        ? `Menganalisis skenario ${isScenarioLoading}. Dapat memakan waktu hingga satu menit.`
+        : scenarioNotice
+          ?? (selectedNode
+            ? `Node ${selectedNode.label} dipilih. ${selectedNode.connectedCount} relasi terhubung.`
+            : '');
 
   return (
     /* view-container no-scroll: same fill-the-scroller pattern as LegalOpinion.
@@ -1370,7 +1432,7 @@ export default function KnowledgeGraph() {
               exactly this use (tokens.css). */}
           <div style={{
             background: 'var(--accent-glow)',
-            borderRadius: '10px', padding: '8px',
+            borderRadius: '8px', padding: '8px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <GitFork size={18} color="var(--accent-color)" />
@@ -1401,9 +1463,13 @@ export default function KnowledgeGraph() {
               Vertical padding lives on the INPUT (not the wrapper) so the
               mobile 44px floor (utilities.css) makes the whole box a real
               touch target — desktop rendering is pixel-identical. */}
-          <div className="kg-search-box" style={{
+          {/* Plain div now: .kg-search-box had no rule anywhere in src — a
+              dead contract hook (critique 2026-10-12 minor #1). The inline
+              styles are the source of truth; the radius joins the 8px scale
+              the export trigger already set (minor #2). */}
+          <div style={{
             display: 'flex', alignItems: 'center', gap: '8px',
-            background: 'var(--bg-element)', borderRadius: '10px',
+            background: 'var(--bg-element)', borderRadius: '8px',
             padding: '0 14px',
             border: `1px solid ${searchFocused ? 'var(--border-highlight)' : 'var(--border-color)'}`,
             boxShadow: searchFocused ? '0 0 0 3px var(--accent-glow)' : 'none',
@@ -1433,7 +1499,7 @@ export default function KnowledgeGraph() {
             onChange={(e) => handleFilterTypeChange(e.target.value)}
             style={{
               background: 'var(--bg-element)', border: '1px solid var(--border-color)',
-              borderRadius: '10px', padding: '8px 12px',
+              borderRadius: '8px', padding: '8px 12px',
               color: 'var(--text-primary)', fontSize: '0.85rem', cursor: 'pointer',
             }}
           >
@@ -1458,7 +1524,7 @@ export default function KnowledgeGraph() {
 
           <button type="button" onClick={handleReset} aria-label="Atur ulang pencarian dan filter" title="Atur ulang" style={{
             background: 'var(--bg-element)', border: '1px solid var(--border-color)',
-            borderRadius: '10px', padding: '8px', cursor: 'pointer', color: 'var(--text-secondary)',
+            borderRadius: '8px', padding: '8px', cursor: 'pointer', color: 'var(--text-secondary)',
             display: 'flex', alignItems: 'center',
           }}>
             <RefreshCw size={14} />
@@ -1474,6 +1540,7 @@ export default function KnowledgeGraph() {
               onClick={() => setExportMenuOpen(o => !o)}
               aria-expanded={exportMenuOpen}
               aria-haspopup="menu"
+              aria-controls={exportMenuOpen ? 'kg-export-menu' : undefined}
               style={{
                 padding: '6px 12px', fontSize: '0.85rem', fontWeight: 600,
                 display: 'flex', alignItems: 'center', gap: '6px',
@@ -1483,13 +1550,18 @@ export default function KnowledgeGraph() {
             >
               <Download size={14} /> Ekspor <ChevronDown size={12} />
             </button>
+            {/* Dropdown grammar, not toast grammar (critique 2026-10-12
+                minor #3): the 0 16px 40px/0.25 shadow and the documented
+                z-ladder rung (repo filter panel = 500; the old 50 was
+                off-ladder). id + aria-orientation pair with the trigger's
+                aria-controls (minor #8). */}
             {exportMenuOpen && (
-              <div role="menu" aria-label="Ekspor data graf" ref={exportMenuListRef} onKeyDown={handleExportMenuKeyDown} style={{
-                position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 50,
+              <div role="menu" id="kg-export-menu" aria-label="Ekspor data graf" aria-orientation="vertical" ref={exportMenuListRef} onKeyDown={handleExportMenuKeyDown} style={{
+                position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 500,
                 minWidth: '200px', padding: '6px',
                 background: 'var(--bg-card)', backdropFilter: 'blur(12px)',
                 border: '1px solid var(--border-color)', borderRadius: '12px',
-                boxShadow: '0 12px 32px rgba(15, 23, 42, 0.18)',
+                boxShadow: '0 16px 40px rgba(15, 23, 42, 0.25)',
                 display: 'flex', flexDirection: 'column', gap: '2px',
               }}>
                 <button
@@ -1553,15 +1625,24 @@ export default function KnowledgeGraph() {
               </button>
             </div>
           )}
-          {!loading && !loadError && kgData?.nodes.length === 0 && (
-            (search.trim() !== '' || filterType !== '') ? (
-              /* Zero-match state: with an active search/filter the old copy
+          {/* GRAPH-MODE ONLY (critique 2026-10-12 P1·1): this absolute
+              inset:0 overlay is transparent, so ungated it also painted
+              over the list view — a zero-match search showed the same
+              sentence twice (overlay copy stacked over the list's own
+              inline copy, confirmed live). The list now owns its empty
+              states; the overlay is the canvas's. The zero-match vs
+              corpus-empty branch reads appliedParams, not the draft:
+              kgData is the APPLIED fetch's result, and a draft cleared
+              after a zero-match fetch used to flip the diagnosis to
+              "Belum ada data graf" over a corpus of 1826 nodes. */}
+          {viewMode === 'graph' && !loading && !loadError && kgData?.nodes.length === 0 && (
+            (appliedParams.search !== '' || appliedParams.type !== '') ? (
+              /* Zero-match state: with an applied search/filter the old copy
                  misdiagnosed the situation as an empty corpus ("Belum ada
                  data graf... Unggah dokumen") while the list view beside it
                  correctly said nothing matched — two views contradicting
                  each other (critique 2026-10-07 P1, reproduced live with
-                 search "qqqzzz999"). Same predicate grammar as visibleNodes
-                 so they can't drift apart again; the CTA resets both. */
+                 search "qqqzzz999"). The CTA resets both. */
               <div style={{
                 position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
                 alignItems: 'center', justifyContent: 'center', gap: '16px',
@@ -1622,10 +1703,40 @@ export default function KnowledgeGraph() {
                     onNavigate={handleRelationClick}
                   />
                 ))}
+                {/* The list owns its empty states (critique 2026-10-12
+                    P1·1 — the ungated graph overlay used to double-paint
+                    these). The corpus-empty branch reads appliedParams,
+                    same predicate grammar as the overlay: "Belum ada data"
+                    is only truthful when an UNFILTERED fetch came back
+                    empty, so the two views can't contradict each other. */}
                 {visibleNodes.length === 0 && !loading && !loadError && (
-                  <p style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '20px', fontSize: '0.85rem', margin: 0 }}>
-                    Tidak ada node yang cocok dengan pencarian atau filter saat ini.
-                  </p>
+                  kgData?.nodes.length === 0 && appliedParams.search === '' && appliedParams.type === '' ? (
+                    <div style={{ textAlign: 'center', padding: '20px' }}>
+                      <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.95rem' }}>
+                        Belum ada data graf.
+                      </p>
+                      <p style={{ color: 'var(--text-secondary)', margin: '8px 0 0', fontSize: '0.85rem', opacity: 0.7 }}>
+                        Unggah dokumen baru melalui Repositori, atau hubungi administrator untuk membangun ulang graf.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', padding: '20px' }}>
+                      <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.85rem' }}>
+                        Tidak ada node yang cocok dengan pencarian atau filter saat ini.
+                      </p>
+                      {/* Subset-illusion breaker (critique 2026-10-12 P2·2):
+                          while the draft is unapplied this list only
+                          filters the loaded window — say so, and name the
+                          button that makes it corpus-wide. */}
+                      {filtersDirty && (
+                        <p style={{ color: 'var(--text-secondary)', margin: '10px 0 0', fontSize: '0.8rem', lineHeight: 1.5 }}>
+                          Daftar hanya menyaring jendela node yang dimuat — tekan{' '}
+                          <strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Terapkan</strong>{' '}
+                          untuk mencari di seluruh korpus.
+                        </p>
+                      )}
+                    </div>
+                  )
                 )}
                 {visibleNodes.length > 100 && (
                   <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '20px', fontSize: '0.85rem' }}>
@@ -1639,14 +1750,18 @@ export default function KnowledgeGraph() {
 
         {/* Right Side Panel: Scenarios + Legend + Selected Node Info. On
             phones it stacks below the canvas (max 45% height, own scroll)
-            instead of eating 260px of a 375px viewport. */}
+            instead of eating 260px of a 375px viewport. Surface grammar
+            (critique 2026-10-12 minor #6): the column is --bg-card and its
+            insets (scenario chips, Node Terkait tray, Koneksi well) are
+            --bg-element — the old element-on-element painted same-on-same;
+            the tokens say element = inset ON card. */}
         <div className="kg-side" style={isNarrow ? {
           width: '100%', minWidth: 0, maxHeight: '45%',
-          background: 'var(--bg-element)', borderTop: '1px solid var(--border-color)',
+          background: 'var(--bg-card)', borderTop: '1px solid var(--border-color)',
           display: 'flex', flexDirection: 'column', overflowY: 'auto',
         } : {
           width: '260px', minWidth: '260px',
-          background: 'var(--bg-element)', borderLeft: '1px solid var(--border-color)',
+          background: 'var(--bg-card)', borderLeft: '1px solid var(--border-color)',
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
           {/* Contract scenarios — the kicker drops "PROTOTIPE" (it undercut
@@ -1669,7 +1784,7 @@ export default function KnowledgeGraph() {
                   flex: 1, padding: '8px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600,
                   cursor: isScenarioLoading === 'NDA' ? 'not-allowed' : 'pointer',
                   opacity: isScenarioLoading === 'NDA' ? 0.5 : 1,
-                  background: activeScenario === 'PKS' ? 'var(--accent-glow)' : 'var(--bg-card)',
+                  background: activeScenario === 'PKS' ? 'var(--accent-glow)' : 'var(--bg-element)',
                   color: activeScenario === 'PKS' ? 'var(--accent-hover)' : 'var(--text-secondary)',
                   border: `1px solid ${activeScenario === 'PKS' ? 'var(--accent-color)' : 'var(--border-color)'}`,
                   transition: 'background 0.2s ease, color 0.2s ease, border-color 0.2s ease',
@@ -1686,7 +1801,7 @@ export default function KnowledgeGraph() {
                   flex: 1, padding: '8px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600,
                   cursor: isScenarioLoading === 'PKS' ? 'not-allowed' : 'pointer',
                   opacity: isScenarioLoading === 'PKS' ? 0.5 : 1,
-                  background: activeScenario === 'NDA' ? 'var(--accent-glow)' : 'var(--bg-card)',
+                  background: activeScenario === 'NDA' ? 'var(--accent-glow)' : 'var(--bg-element)',
                   color: activeScenario === 'NDA' ? 'var(--accent-hover)' : 'var(--text-secondary)',
                   border: `1px solid ${activeScenario === 'NDA' ? 'var(--accent-color)' : 'var(--border-color)'}`,
                   transition: 'background 0.2s ease, color 0.2s ease, border-color 0.2s ease',
@@ -1708,7 +1823,7 @@ export default function KnowledgeGraph() {
                   <Loader2 size={12} className="animate-spin" /> Menganalisis skenario {isScenarioLoading}... dapat memakan waktu hingga ±1 menit.
                 </p>
                 {scenarioClearedSelection && (
-                  <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.5, opacity: 0.85 }}>
+                  <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, opacity: 0.85 }}>
                     Pilihan node sebelumnya dibersihkan agar sorotan skenario terlihat penuh.
                   </p>
                 )}
@@ -1717,10 +1832,23 @@ export default function KnowledgeGraph() {
                 </button>
               </div>
             )}
+            {/* Outcome notices stay secondary-gray; FAILURE notices (engine
+                down, invalid IDs, exception — failedScenario) get the error
+                grammar (--danger-text) plus a real inline retry instead of
+                a "coba lagi" that was only ever copy (critique 2026-10-12
+                P2·4). The retry works because the chip unlatched on
+                failure: handleScenarioClick starts a fresh analysis. */}
             {!isScenarioLoading && scenarioNotice && (
-              <p style={{ margin: '12px 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                {scenarioNotice}
-              </p>
+              <div style={{ margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
+                <p style={{ margin: 0, fontSize: '0.75rem', lineHeight: 1.5, color: failedScenario ? 'var(--danger-text)' : 'var(--text-secondary)' }}>
+                  {scenarioNotice}
+                </p>
+                {failedScenario && (
+                  <button type="button" className="secondary-action-btn" onClick={() => { setFailedScenario(null); void handleScenarioClick(failedScenario); }}>
+                    <RefreshCw size={14} /> Coba lagi
+                  </button>
+                )}
+              </div>
             )}
 
             {activeScenario && scenarioNodes.length > 0 && (
@@ -1728,8 +1856,8 @@ export default function KnowledgeGraph() {
                 <div style={{ ...STAMP_STYLE, color: 'var(--text-secondary)', marginBottom: '8px' }}>Node Terkait ({activeScenario})</div>
                 {/* Explains the dimming semantics — "faded" used to be
                     undefined from the user's side (critique 2026-10-07 P1·2
-                    companion). Legend-footnote grammar (0.7rem / 0.85). */}
-                <p style={{ margin: '0 0 8px', fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.5, opacity: 0.85 }}>
+                    companion). Legend-footnote grammar (0.75rem / 0.85). */}
+                <p style={{ margin: '0 0 8px', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, opacity: 0.85 }}>
                   Node yang diredupkan di kanvas berjarak lebih dari 2 lompatan relasi dari node-node ini.
                 </p>
                 <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'block', paddingRight: '4px' }}>
@@ -1779,7 +1907,12 @@ export default function KnowledgeGraph() {
               <div style={{ marginTop: '14px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span aria-hidden="true" style={{ width: '16px', height: '11px', border: '2px solid var(--text-secondary)', borderRadius: '3px', flexShrink: 0 }} />
+                    {/* Miniature of the real canvas hub (critique 2026-10-12
+                        minor #7): hubs render as vivid solid BOX nodes with a
+                        white border (renderGraph's isCenter branch) — the old
+                        gray outline was an abstraction. Hub fills cycle the
+                        neon cluster palette; --dv-sky stands in. */}
+                    <span aria-hidden="true" style={{ width: '16px', height: '11px', background: 'var(--dv-sky)', border: '2px solid #ffffff', borderRadius: '3px', flexShrink: 0 }} />
                     <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.4 }}>Hub (simpul pusat) — lebih dari 10 relasi</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1810,7 +1943,7 @@ export default function KnowledgeGraph() {
                     <span aria-hidden="true" style={{ width: '11px', height: '11px', borderRadius: '50%', border: '2px dashed var(--text-secondary)', flexShrink: 0, marginLeft: '2.5px', marginRight: '2.5px' }} />
                     <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.4 }}>Cincin putus-putus — status bukan "Berlaku" penuh</span>
                   </div>
-                  <p style={{ margin: '8px 0 0', fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.5, opacity: 0.85 }}>
+                  <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, opacity: 0.85 }}>
                     Hanya node regulasi yang berstatus hukum: cincin solid berarti "Berlaku", cincin putus-putus berarti status lain (mis. "Tidak Berlaku", "Berlaku (Dicabut Sebagian)"). Status lengkap tampil di panel node dan daftar. Entitas dan topik tidak berstatus.
                   </p>
                 </div>
@@ -1823,7 +1956,7 @@ export default function KnowledgeGraph() {
                     </div>
                   ))}
                 </div>
-                <p style={{ margin: '14px 0 0', borderTop: '1px solid var(--border-color)', paddingTop: '12px', fontSize: '0.7rem', color: 'var(--text-secondary)', lineHeight: 1.5, opacity: 0.85 }}>
+                <p style={{ margin: '14px 0 0', borderTop: '1px solid var(--border-color)', paddingTop: '12px', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, opacity: 0.85 }}>
                   Di dalam klaster, node dan garis mewarisi warna hub — warna tipe dan relasi hanya berlaku di luar klaster.
                 </p>
               </div>
@@ -1848,7 +1981,11 @@ export default function KnowledgeGraph() {
                       background: NODE_COLORS_DEEP[selectedNode.type] ?? 'var(--text-secondary)',
                     }} />
                     <span style={{ ...STAMP_STYLE, color: NODE_COLORS_DEEP[selectedNode.type] ?? 'var(--text-secondary)' }}>
-                      {TYPE_LABELS[selectedNode.type]}
+                      {/* relationsFor can synthesize type:'unknown' when an
+                          edge references a node missing from the array —
+                          honest fallback instead of an empty badge
+                          (critique 2026-10-12 minor #9). */}
+                      {TYPE_LABELS[selectedNode.type] ?? 'Tidak diketahui'}
                     </span>
                   </div>
                   <button type="button" onClick={() => setSelectedNode(null)} aria-label="Tutup detail node" style={{
@@ -1884,7 +2021,7 @@ export default function KnowledgeGraph() {
                 {/* The trailing "relasi terhubung" line is gone (v5
                     distill): kicker + big number already say it once. */}
                 <div style={{
-                  background: 'var(--bg-element)', borderRadius: '10px', padding: '12px',
+                  background: 'var(--bg-element)', borderRadius: '8px', padding: '12px',
                   marginBottom: '16px',
                 }}>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Koneksi</div>
@@ -1920,7 +2057,12 @@ export default function KnowledgeGraph() {
                           }}
                         >
                           <div style={{ fontSize: '0.7rem', color: RELATION_COLORS_DEEP[rel.relation] ?? 'var(--text-secondary)', fontWeight: 600, marginBottom: '4px' }}>
-                            {rel.direction === 'out' ? '→ ' : '← '} {relationLabel(rel.relation)}
+                            {/* Raw arrows made screen readers announce
+                                "right arrow" noise — glyph hidden, semantics
+                                spoken (critique 2026-10-12, Sam). */}
+                            <span aria-hidden="true">{rel.direction === 'out' ? '→' : '←'}</span>{' '}
+                            <span className="visually-hidden">{rel.direction === 'out' ? 'Relasi keluar: ' : 'Relasi masuk: '}</span>
+                            {relationLabel(rel.relation)}
                           </div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-primary)', lineHeight: 1.3 }}>
                             {rel.label}
@@ -1936,14 +2078,20 @@ export default function KnowledgeGraph() {
                     DocumentDrawer. The old CTA called App's () => {} no-op
                     and only appeared for regulasi nodes — any node with a
                     source document gets the honest path now (critique P1). */}
+                {/* aria-disabled, not disabled (critique 2026-10-12 P3·5 —
+                    the doctrine Auth/TaxonomyManager already follow): a
+                    truly disabled button drops out of the tab order, so
+                    keyboard users lost the affordance entirely while the
+                    doc was loading. Guarded click + the existing
+                    wait-cursor/dim keep the visual grammar. */}
                 {selectedNode.doc_id && (
                   <button
                     type="button"
-                    onClick={() => openDocument(selectedNode.doc_id!)}
-                    disabled={docLoading}
+                    onClick={() => { if (docLoading) return; void openDocument(selectedNode.doc_id!); }}
+                    aria-disabled={docLoading || undefined}
                     style={{
                       width: '100%', background: 'var(--accent-glow)',
-                      border: '1px solid var(--border-highlight)', borderRadius: '10px',
+                      border: '1px solid var(--border-highlight)', borderRadius: '8px',
                       padding: '10px', cursor: docLoading ? 'wait' : 'pointer', color: 'var(--accent-hover)',
                       fontSize: '0.85rem', fontWeight: 600, fontFamily: 'inherit',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',

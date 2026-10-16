@@ -1,11 +1,11 @@
-import { useRef, useState, useSyncExternalStore, type ReactNode, type ComponentType } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type ComponentType } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Settings, X, ChevronRight, Palette, SunMoon, SlidersHorizontal,
   MessagesSquare, Sun, Moon, Monitor, Type, Languages,
   CalendarDays, Settings2, Database, Download, Upload, RotateCcw, History,
 } from 'lucide-react';
-import { botAvatarTypes } from 'bot-avatars';
+import { botAvatarTypes, type BotAvatarType } from 'bot-avatars';
 import { FlagId, FlagUs } from './LangFlags';
 import {
   getSettingsSnapshot, getSettings, setSetting, subscribeSettings,
@@ -15,6 +15,7 @@ import {
   type SettingsState, type ThemePref, type Locale,
   type DateFormat, type ReadingSpacing,
 } from '../settings';
+import { countPrunableJobs } from '../uploadJobs';
 import { formatDateTimeWith } from '../format';
 import { useStrings, fill, type StringKey } from '../i18n';
 import { useDialogA11y } from '../hooks/useDialogA11y';
@@ -34,8 +35,11 @@ import BotIdentity from './BotIdentity';
  * A11y: aria-modal dialog via useDialogA11y (Esc closes, focus moves in
  * and restores to the gear, Tab trapped). Switches are role="switch"
  * buttons wired to the row title/description via aria-labelledby/
- * aria-describedby; the theme picker is a native radiogroup so arrow
- * keys work for free.
+ * aria-describedby; segmented controls and the avatar/swatch pickers are
+ * native radiogroups so arrow keys work for free. The content pane is a
+ * labelled region with an sr-only h2 (rows are h3) that receives focus on
+ * section switches; Close is the last tab stop (2026-10-13, critique
+ * P1·2 / P2·4 / P2·5).
  */
 
 type Icon = typeof Sun;
@@ -58,7 +62,7 @@ function Row({
   return (
     <div className="settings-row">
       <div className="settings-row-text">
-        <div className="settings-row-title" id={`${id}-title`}>{title}</div>
+        <h3 className="settings-row-title" id={`${id}-title`}>{title}</h3>
         <div className="settings-row-desc" id={`${id}-desc`}>{desc}</div>
       </div>
       <div className="settings-row-control">
@@ -297,6 +301,42 @@ function GeneralSection() {
   );
 }
 
+/** Shape slug → display-name i18n key (critique P1·2: the raw library
+    slugs like "droid" were the pickers' accessible names). Typed as
+    Record<BotAvatarType, StringKey> so a new library shape without a
+    name fails compilation. */
+const AVATAR_NAME_KEYS: Record<BotAvatarType, StringKey> = {
+  clover: 'avatarNameClover',
+  flower: 'avatarNameFlower',
+  triangle: 'avatarNameTriangle',
+  square: 'avatarNameSquare',
+  blob: 'avatarNameBlob',
+  ghost: 'avatarNameGhost',
+  circle: 'avatarNameCircle',
+  drop: 'avatarNameDrop',
+  star: 'avatarNameStar',
+  droid: 'avatarNameDroid',
+  mech: 'avatarNameMech',
+  alien: 'avatarNameAlien',
+  hexagon: 'avatarNameHexagon',
+  cat: 'avatarNameCat',
+  cloud: 'avatarNameCloud',
+  pill: 'avatarNamePill',
+  pebble: 'avatarNamePebble',
+  puddle: 'avatarNamePuddle',
+};
+
+/** Swatch slug → display-name i18n key. BOT_AVATAR_COLORS slugs are
+    plain strings, so an unmapped slug falls back to the slug text. */
+const COLOR_NAME_KEYS: Record<string, StringKey> = {
+  violet: 'avatarColorViolet',
+  rose: 'avatarColorRose',
+  emerald: 'avatarColorEmerald',
+  amber: 'avatarColorAmber',
+  teal: 'avatarColorTeal',
+  slate: 'avatarColorSlate',
+};
+
 function ChatGeneralSection() {
   const s = useSettingsState();
   const t = useStrings();
@@ -315,7 +355,7 @@ function ChatGeneralSection() {
           />
         )}
       </Row>
-      {/* Sage avatar picker (moved here 2026-10-01 from the Legal Opinion
+      {/* gemma avatar picker (moved here 2026-10-01 from the Legal Opinion
           conversation-panel footer, user review): a radiogroup grid of
           paused still previews, one per bot-avatars shape; the choice is
           the botAvatar setting and every BotIdentity instance follows it
@@ -333,23 +373,29 @@ function ChatGeneralSection() {
             aria-describedby={ids.describedBy}
           >
             {botAvatarTypes.map((type) => (
-              <button
+              <label
                 key={type}
-                type="button"
-                role="radio"
-                aria-checked={type === s.botAvatar}
-                aria-label={type}
-                title={type}
                 className={`settings-avatar-item${type === s.botAvatar ? ' selected' : ''}`}
-                onClick={() => setSetting('botAvatar', type)}
+                title={t[AVATAR_NAME_KEYS[type]]}
               >
+                {/* Visually-hidden native radio (the Segmented idiom):
+                    arrow keys, "5 of 18" position announcements and one
+                    tab stop per group come for free (critique P1·2). */}
+                <input
+                  type="radio"
+                  name="settings-bot-avatar-shape"
+                  value={type}
+                  checked={type === s.botAvatar}
+                  aria-label={t[AVATAR_NAME_KEYS[type]]}
+                  onChange={() => setSetting('botAvatar', type)}
+                />
                 <BotIdentity shape={type} size={28} paused />
-              </button>
+              </label>
             ))}
           </div>
         )}
       </Row>
-      {/* Sage avatar body colour (2026-10-01 review): swatch radiogroup
+      {/* gemma avatar body colour (2026-10-01 review): swatch radiogroup
           beside the shape picker; the first chip is '' = the theme
           accent (default, split light/dark), the rest are the curated
           BOT_AVATAR_COLORS hexes. Every BotIdentity follows through
@@ -366,29 +412,42 @@ function ChatGeneralSection() {
             aria-labelledby={ids.labelledBy}
             aria-describedby={ids.describedBy}
           >
-            <button
-              type="button"
-              role="radio"
-              aria-checked={s.botAvatarColor === ''}
-              aria-label={t.avatarColorAccent}
-              title={t.avatarColorAccent}
+            <label
               className={`settings-swatch-item${s.botAvatarColor === '' ? ' selected' : ''}`}
               style={{ background: 'linear-gradient(135deg, #2563eb 0 50%, #3b82f6 50% 100%)' }}
-              onClick={() => setSetting('botAvatarColor', '')}
-            />
-            {BOT_AVATAR_COLORS.map((c) => (
-              <button
-                key={c.slug}
-                type="button"
-                role="radio"
-                aria-checked={s.botAvatarColor === c.hex}
-                aria-label={c.slug}
-                title={c.slug}
-                className={`settings-swatch-item${s.botAvatarColor === c.hex ? ' selected' : ''}`}
-                style={{ background: c.hex }}
-                onClick={() => setSetting('botAvatarColor', c.hex)}
+              title={t.avatarColorAccent}
+            >
+              <input
+                type="radio"
+                name="settings-bot-avatar-color"
+                value=""
+                checked={s.botAvatarColor === ''}
+                aria-label={t.avatarColorAccent}
+                onChange={() => setSetting('botAvatarColor', '')}
               />
-            ))}
+            </label>
+            {BOT_AVATAR_COLORS.map((c) => {
+              // Display name instead of the slug (critique P1·2); an
+              // unmapped slug falls back to its own text.
+              const name = COLOR_NAME_KEYS[c.slug] ? t[COLOR_NAME_KEYS[c.slug]] : c.slug;
+              return (
+                <label
+                  key={c.slug}
+                  className={`settings-swatch-item${s.botAvatarColor === c.hex ? ' selected' : ''}`}
+                  style={{ background: c.hex }}
+                  title={name}
+                >
+                  <input
+                    type="radio"
+                    name="settings-bot-avatar-color"
+                    value={c.slug}
+                    checked={s.botAvatarColor === c.hex}
+                    aria-label={name}
+                    onChange={() => setSetting('botAvatarColor', c.hex)}
+                  />
+                </label>
+              );
+            })}
           </div>
         )}
       </Row>
@@ -566,8 +625,10 @@ const RETENTION_LABEL_KEYS: Record<number, StringKey> = {
     finished job records are pruned from localStorage after N days;
     0 = off (keep until "Bersihkan"). Analyzed documents are server-side
     data and are never touched here. The select carries presets + custom;
-    choosing custom reveals a days input (committed on blur/Enter, snaps
-    back when out of range so the stored value is always valid). */
+    choosing custom reveals a days input (committed on blur/Enter).
+    Every application reports how many old entries it deleted, and a
+    rejected draft snaps back with the valid range spoken (2026-10-13,
+    critique P1·1 + P2·3). */
 function JobsDataSection() {
   const s = useSettingsState();
   const t = useStrings();
@@ -575,6 +636,10 @@ function JobsDataSection() {
   const isPreset = days === 0 || JOB_RETENTION_PRESETS.includes(days);
   const [customMode, setCustomMode] = useState(!isPreset);
   const [draft, setDraft] = useState(!isPreset ? String(days) : '');
+  /** Line under the row (critique P1·1 + P2·3): 'status' reports how many
+      old entries the new window just deleted; 'error' names the valid
+      range when a draft is rejected. null = quiet. */
+  const [feedback, setFeedback] = useState<{ kind: 'error' | 'status'; text: string } | null>(null);
 
   const current =
     days === 0
@@ -583,12 +648,41 @@ function JobsDataSection() {
         ? t[RETENTION_LABEL_KEYS[days]]
         : `${days} ${t.jobsRetDaysUnit}`;
 
+  /** Applies the window and reports its impact. The count is read before
+      setSetting: the provider's subscriber prunes synchronously right
+      after, but its persistence effect writes localStorage later, so
+      storage still holds the pre-prune list. countPrunableJobs shares
+      the prune code, so the figure cannot drift from what is dropped. */
+  const applyRetention = (n: number) => {
+    const pruned = countPrunableJobs(n);
+    setSetting('jobRetentionDays', n);
+    setFeedback(
+      pruned > 0
+        ? {
+            kind: 'status',
+            text:
+              pruned === 1
+                ? fill(t.jobsRetPrunedOne, { n: pruned })
+                : fill(t.jobsRetPrunedMany, { n: pruned }),
+          }
+        : null,
+    );
+  };
+
   const commitDraft = () => {
     const n = Math.floor(Number(draft));
     if (draft.trim() !== '' && Number.isFinite(n) && n >= 1 && n <= JOB_RETENTION_MAX_DAYS) {
-      setSetting('jobRetentionDays', n);
+      applyRetention(n);
     } else {
-      setDraft(isPreset ? '' : String(days)); // invalid: snap back to stored
+      // Rejections speak (critique P2·3): snap back to the stored value
+      // and name the range in the reason. Enter keeps focus on the input
+      // naturally; blur has already moved it away, so it is not dragged
+      // back on the way out.
+      setDraft(isPreset ? '' : String(days));
+      setFeedback({
+        kind: 'error',
+        text: fill(t.jobsRetDaysInvalid, { min: 1, max: JOB_RETENTION_MAX_DAYS }),
+      });
     }
   };
 
@@ -607,10 +701,11 @@ function JobsDataSection() {
                 if (v === 'custom') {
                   setCustomMode(true);
                   setDraft(days > 0 ? String(days) : '30');
+                  setFeedback(null);
                 } else {
                   setCustomMode(false);
                   setDraft('');
-                  setSetting('jobRetentionDays', Number(v));
+                  applyRetention(Number(v));
                 }
               }}
             >
@@ -629,7 +724,11 @@ function JobsDataSection() {
                 value={draft}
                 placeholder="30"
                 aria-label={t.jobsRetDaysAria}
-                onChange={(e) => setDraft(e.target.value)}
+                aria-describedby={`${ids.describedBy} set-job-retention-days-line`}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  if (feedback?.kind === 'error') setFeedback(null);
+                }}
                 onBlur={commitDraft}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') commitDraft();
@@ -639,6 +738,28 @@ function JobsDataSection() {
           </div>
         )}
       </Row>
+      {feedback?.kind === 'status' && (
+        <div className="settings-status" role="status">
+          {feedback.text}
+        </div>
+      )}
+      {customMode &&
+        (feedback?.kind === 'error' ? (
+          /* The error replaces the range hint in the same slot and keeps
+             its id, so the input's aria-describedby never dangles; the
+             message itself names the valid range. */
+          <div
+            className="settings-status settings-status--error"
+            id="set-job-retention-days-line"
+            role="alert"
+          >
+            {feedback.text}
+          </div>
+        ) : (
+          <div className="settings-status" id="set-job-retention-days-line">
+            {fill(t.jobsRetDaysHint, { min: 1, max: JOB_RETENTION_MAX_DAYS })}
+          </div>
+        ))}
     </div>
   );
 }
@@ -720,10 +841,28 @@ export default function SettingsDialog({
   const [catId, setCatId] = useState('appearance');
   const [sectionId, setSectionId] = useState('theme');
   const panelRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const t = useStrings();
   const CATEGORIES = buildCategories(t);
 
   useDialogA11y(open, () => setOpen(false), panelRef);
+
+  /* Section switches announce themselves (critique P2·4): the pane is a
+     labelled region, and navigating moves focus into it so a screen
+     reader reads the new section instead of swapping content silently.
+     The first run is skipped — useDialogA11y focuses the dialog itself
+     on open. */
+  const firstSectionRender = useRef(true);
+  useEffect(() => {
+    if (firstSectionRender.current) {
+      firstSectionRender.current = false;
+      return;
+    }
+    const pane = contentRef.current;
+    if (!pane) return; // dialog closed: the pane is unmounted
+    pane.scrollTop = 0; // a new section starts at the top
+    pane.focus();
+  }, [sectionId]);
 
   const cat = CATEGORIES.find((c) => c.id === catId) ?? CATEGORIES[0];
   const section = cat.sections.find((s) => s.id === sectionId) ?? cat.sections[0];
@@ -769,14 +908,6 @@ export default function SettingsDialog({
               aria-label={t.settings}
               tabIndex={-1}
             >
-              <button
-                className="settings-close"
-                onClick={() => setOpen(false)}
-                aria-label={t.closeSettings}
-              >
-                <X size={18} />
-              </button>
-
               <nav className="settings-nav" aria-label={t.catNav}>
                 {CATEGORIES.map((c) => {
                   const expanded = c.id === catId;
@@ -822,7 +953,19 @@ export default function SettingsDialog({
                 })}
               </nav>
 
-              <div className="settings-content">
+              <div
+                className="settings-content"
+                ref={contentRef}
+                role="region"
+                aria-labelledby="settings-pane-heading"
+                tabIndex={-1}
+              >
+                {/* The pane heading is screen-reader-only — the visible
+                    title lives in the breadcrumb — and names the region
+                    plus gives the pane(h2) → rows(h3) outline its h2. */}
+                <h2 id="settings-pane-heading" className="visually-hidden">
+                  {section.label}
+                </h2>
                 <nav className="settings-breadcrumb" aria-label={t.crumbNav}>
                   <span>{t.settings}</span>
                   <ChevronRight size={14} />
@@ -834,6 +977,17 @@ export default function SettingsDialog({
                 </nav>
                 <SectionComp />
               </div>
+
+              {/* Close is the last DOM/tab stop (critique P2·5): nav →
+                  settings → close. Absolute positioning keeps it
+                  visually top-right. */}
+              <button
+                className="settings-close"
+                onClick={() => setOpen(false)}
+                aria-label={t.closeSettings}
+              >
+                <X size={18} />
+              </button>
             </div>
           </div>,
           // Portal to <body>: the topbar's backdrop-filter makes it the

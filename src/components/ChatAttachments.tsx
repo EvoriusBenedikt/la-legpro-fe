@@ -37,6 +37,13 @@ function truncateName(name: string, max = 24): string {
   return name.length > max ? `${name.slice(0, max - 1)}…` : name;
 }
 
+/* Chip size text (2026-10-12 critique, clarify): KB below 1 MB, one-decimal
+   MB above — "10138 KB" made users do mental arithmetic on every PDF. */
+function formatSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function PendingChipRow({
   chips,
   onRemove,
@@ -47,7 +54,7 @@ export function PendingChipRow({
   const t = useStrings();
   if (chips.length === 0) return null;
   return (
-    <div className="attach-chip-row" role="list" aria-label={t.opAttach}>
+    <div className="attach-chip-row" role="list" aria-label={t.opAttachPendingList}>
       {chips.map((c) => {
         const busy = c.status === 'uploading' || c.status === 'processing';
         const failed = c.status === 'failed';
@@ -59,7 +66,6 @@ export function PendingChipRow({
             key={c.key}
             role="listitem"
             className={failed ? 'attach-chip attach-chip--failed' : 'attach-chip'}
-            title={failed ? failedText : undefined}
           >
             {busy ? (
               <Loader2 size={14} className="animate-spin attach-chip-icon" aria-hidden="true" />
@@ -71,7 +77,14 @@ export function PendingChipRow({
               <FileText size={14} className="attach-chip-icon" aria-hidden="true" />
             )}
             <span className="attach-chip-name">{truncateName(c.file.name)}</span>
-            <span className="attach-chip-size">{Math.max(1, Math.round(c.file.size / 1024))} KB</span>
+            {failed ? (
+              /* Hardening P1-1 (2026-10-12 critique): the reason rides in the
+                 chip body — the title-only explanation never reached touch
+                 users, and the chip row is the failure's only surface. */
+              <span className="attach-chip-status attach-chip-reason">{failedText}</span>
+            ) : (
+              <span className="attach-chip-size">{formatSize(c.file.size)}</span>
+            )}
             {busy && <span className="attach-chip-status">{t.opAttachProcessing}</span>}
             <button
               type="button"
@@ -124,10 +137,11 @@ function ImageChip({
     };
   }, [meta.id]);
   if (!url) {
+    /* Same 64px footprint as the loaded thumb so the chip row never jumps
+       when the blob lands (2026-10-12 critique, polish). */
     return (
-      <span className="attach-chip">
-        <Loader2 size={14} className="animate-spin attach-chip-icon" aria-hidden="true" />
-        <span className="attach-chip-name">{truncateName(meta.filename)}</span>
+      <span className="attach-thumb-loading" title={meta.filename}>
+        <Loader2 size={16} className="animate-spin" aria-hidden="true" />
       </span>
     );
   }
@@ -182,6 +196,18 @@ export function ImageLightbox({
   onClose: () => void;
 }) {
   const t = useStrings();
+  const closeRef = useRef<HTMLButtonElement>(null);
+  /* Hardening P1-2 (2026-10-12 critique): an aria-modal dialog must own
+     focus — move it to the close button on mount and hand it back to the
+     opening thumb on unmount, so Tab and screen readers stop working the
+     page behind the veil (house pattern: AppDialog). */
+  useEffect(() => {
+    const opener = document.activeElement;
+    closeRef.current?.focus();
+    return () => {
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -199,6 +225,7 @@ export function ImageLightbox({
     >
       <img src={url} alt={filename} onClick={(e) => e.stopPropagation()} />
       <button
+        ref={closeRef}
         type="button"
         className="attach-lightbox-x"
         onClick={onClose}
