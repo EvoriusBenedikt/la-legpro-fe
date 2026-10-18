@@ -1071,7 +1071,7 @@ export default function SystemMonitoring() {
               ) : (
                 <>
                   <table className="monitoring-table">
-                    <thead><tr><th scope="col">Endpoint</th><th scope="col">{t.monApiColTotal}</th><th scope="col">{t.monApiColErrors}</th><th scope="col">{t.monApiColRate}</th><th scope="col">{t.monApiColLast}</th></tr></thead>
+                    <thead><tr><th scope="col">{t.monColEndpoint}</th><th scope="col">{t.monApiColTotal}</th><th scope="col">{t.monApiColErrors}</th><th scope="col">{t.monApiColRate}</th><th scope="col">{t.monApiColLast}</th></tr></thead>
                     <tbody>
                       {apiStats.map(s => {
                         const rateLevel = s.error_rate_pct >= 5 ? 'danger' : s.error_rate_pct >= 1 ? 'warn' : 'ok';
@@ -1233,7 +1233,7 @@ export default function SystemMonitoring() {
                   <div className="empty-state"><Cpu size={24} aria-hidden="true" /><span>{t.monLlmEmpty}</span></div>
                 ) : (
                   <table className="monitoring-table">
-                    <thead><tr><th scope="col">{t.monTime}</th><th scope="col">Endpoint</th><th scope="col">{t.monColLatency}</th><th scope="col">{t.monColTokens}</th></tr></thead>
+                    <thead><tr><th scope="col">{t.monTime}</th><th scope="col">{t.monColEndpoint}</th><th scope="col">{t.monColLatency}</th><th scope="col">{t.monColTokens}</th></tr></thead>
                     <tbody>
                       {(llmMetrics.recent || []).slice(0, 5).map((m, idx) => (
                         <tr key={`${m.timestamp}-${m.endpoint}-${idx}`}>
@@ -1258,7 +1258,7 @@ export default function SystemMonitoring() {
                   <div className="empty-state"><Database size={24} aria-hidden="true" /><span>{t.monKgEmpty}</span></div>
                 ) : (
                   <table className="monitoring-table">
-                    <thead><tr><th scope="col">{t.monColStart}</th><th scope="col">{t.monColDuration}</th><th scope="col">Status</th><th scope="col">{t.monColChanges}</th></tr></thead>
+                    <thead><tr><th scope="col">{t.monColStart}</th><th scope="col">{t.monColDuration}</th><th scope="col">{t.monColStatus}</th><th scope="col">{t.monColChanges}</th></tr></thead>
                     <tbody>
                       {kgHistory.map((h, idx) => {
                         const vocab = statusVocab(h.status);

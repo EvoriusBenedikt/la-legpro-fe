@@ -1,3 +1,6 @@
+/* This module intentionally exports the context hook alongside its provider.
+   Keep Fast Refresh checks scoped to component-only modules. */
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useCallback } from 'react';
 
 export type JobStatus = 'idle' | 'uploading' | 'completed' | 'failed';
@@ -41,7 +44,6 @@ export const JobStatusContext = createContext<JobStatusContextProps | undefined>
 
 export const JobStatusProvider: React.FC<{ children: React.ReactNode; userId: string }> = ({
   children,
-  userId: _userId,
 }) => {
   const [jobs, setJobs] = useState<JobEntry[]>([]);
 

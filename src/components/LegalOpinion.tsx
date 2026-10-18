@@ -446,12 +446,13 @@ export default function LegalOpinion() {
     if (!activeConversationId) return;
     const entry = inFlightGenerations.get(activeConversationId);
     if (!entry) return;
+    // The registry is an external async source; restore both state fields together.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
     abortRef.current = entry.controller;
     // Restart the elapsed counter from when the generation actually began.
     const already = Math.round((Date.now() - entry.startedAt) / 1000);
     setElapsed(already);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeConversationId]); // intentionally runs only when the active id changes (mount + switch)
 
   /* Storage event (2026-10-14): cross-tab sync. When the user has two
@@ -838,6 +839,8 @@ export default function LegalOpinion() {
 
     // Register in the module-level map BEFORE the await so a concurrent
     // mount can find the entry immediately.
+    // This timestamp belongs to the async request registry, not render output.
+    // eslint-disable-next-line react-hooks/purity
     inFlightGenerations.set(conversationId, { controller, jobId, startedAt: Date.now() });
 
     /* persistConversationUpdate: applies an updater to the conversation
