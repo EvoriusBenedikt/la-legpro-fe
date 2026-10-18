@@ -319,7 +319,7 @@ export default function AuthLegacy() {
               name itself (2026-09-30 convention). */}
           <div className="auth-credit">
             <div className="auth-credit-dot" />
-            Powered by LA Lintasarta Core
+            {t.authCredit}
           </div>
         </div>
       </div>

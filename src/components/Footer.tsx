@@ -116,14 +116,14 @@ export default function Footer() {
                 <div className="footer-contact-item">
                   <Printer size={18} />
                   <div>
-                    <strong>Fax</strong>
+                    <strong>{t.footFax}</strong>
                     <span>+6221 230 3567</span>
                   </div>
                 </div>
                 <div className="footer-contact-item">
                   <Mail size={18} />
                   <div>
-                    <strong>Email</strong>
+                    <strong>{t.footEmail}</strong>
                     <span>info@lintasarta.co.id</span>
                   </div>
                 </div>
@@ -132,9 +132,9 @@ export default function Footer() {
                   <div>
                     <strong>{t.footCustomer}</strong>
                     <span>14052 / +6221 80669499</span>
-                    <span>Email: support@lintasarta.co.id</span>
-                    <span>Whatsapp: 08561114052</span>
-                    <span>Customer Portal: Ultima by Lintasarta</span>
+                    <span>{t.footEmailPrefix} support@lintasarta.co.id</span>
+                    <span>{t.footWhatsappPrefix} 08561114052</span>
+                    <span>{t.footPortalPrefix} Ultima by Lintasarta</span>
                   </div>
                 </div>
               </div>

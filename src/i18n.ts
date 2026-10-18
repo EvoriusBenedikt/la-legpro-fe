@@ -196,6 +196,11 @@ const id = {
   footPhone: 'Telepon (Hunting)',
   footProductInfo: 'Informasi Produk',
   footCustomer: 'Layanan Pelanggan',
+  footFax: 'Faks',
+  footEmail: 'Email',
+  footEmailPrefix: 'Email:',
+  footWhatsappPrefix: 'WhatsApp:',
+  footPortalPrefix: 'Portal Pelanggan:',
   footPlaceholder: 'Tautan sementara',
 
   /* Legal Opinion */
@@ -1673,6 +1678,11 @@ const en: Record<StringKey, string> = {
   footPhone: 'Phone (Hunting)',
   footProductInfo: 'Product Information',
   footCustomer: 'Customer Service',
+  footFax: 'Fax',
+  footEmail: 'Email',
+  footEmailPrefix: 'Email:',
+  footWhatsappPrefix: 'WhatsApp:',
+  footPortalPrefix: 'Customer Portal:',
   footPlaceholder: 'Placeholder link',
 
   opTitle: 'Legal Opinion Chatbot',
