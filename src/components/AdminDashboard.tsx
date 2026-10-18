@@ -443,8 +443,9 @@ const KlasifikasiPieChart = ({ data, totalDocs }: KlasPieProps) => {
       itemHoverStyle: { color: textColor },
       symbolRadius: 4,
       // Each legend item shows "Name — N docs"
-      labelFormatter(this: Highcharts.Point) {
-        return `${this.name} — <b>${this.y}</b>`;
+      labelFormatter(this: Highcharts.Point | Highcharts.Series) {
+        const y = 'y' in this ? this.y : undefined;
+        return `${this.name} — <b>${y}</b>`;
       },
     },
     tooltip: {
