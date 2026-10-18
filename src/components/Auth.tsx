@@ -85,7 +85,7 @@ export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState<StringKey | ''>('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -136,7 +136,7 @@ export default function Auth() {
   // highlight on the offending fields + card shake. The timeout settles the
   // shake even when the animation is disabled (reduced motion never fires
   // animationend), so the next error retriggers.
-  const raiseError = (message: string, fields?: AuthField[]) => {
+  const raiseError = (message: StringKey, fields?: AuthField[]) => {
     setError(message);
     setErrorNonce((n) => n + 1);
     if (fields) markFields(fields);
@@ -191,19 +191,19 @@ export default function Auth() {
     // through the same banner + highlight + shake path as every other
     // failure.
     if (!username.trim()) {
-      raiseError(t.authErrUsernameRequired, ['username']);
+      raiseError('authErrUsernameRequired', ['username']);
       return;
     }
     if (!isLogin && !email.trim()) {
-      raiseError(t.authErrEmailRequired, ['email']);
+      raiseError('authErrEmailRequired', ['email']);
       return;
     }
     if (!password) {
-      raiseError(t.authErrPasswordRequired, ['password']);
+      raiseError('authErrPasswordRequired', ['password']);
       return;
     }
     if (!isLogin && !confirmPassword) {
-      raiseError(t.authErrConfirmRequired, ['confirmPassword']);
+      raiseError('authErrConfirmRequired', ['confirmPassword']);
       return;
     }
 
@@ -212,31 +212,31 @@ export default function Auth() {
       // the user retypes it. The format check replaces the native validation
       // the input no longer runs (see the comment on the email field JSX).
       if (/\s/.test(email)) {
-        raiseError(t.authErrEmailSpace, ['email']);
+        raiseError('authErrEmailSpace', ['email']);
         return;
       }
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        raiseError(t.authErrEmailFormat, ['email']);
+        raiseError('authErrEmailFormat', ['email']);
         return;
       }
     }
 
     if (!isLogin && password !== confirmPassword) {
-      raiseError(t.authErrMismatch, ['password', 'confirmPassword']);
+      raiseError('authErrMismatch', ['password', 'confirmPassword']);
       return;
     }
 
     if (!isLogin) {
       if (!ruleUpper) {
-        raiseError(t.authErrNeedUppercase, ['password']);
+        raiseError('authErrNeedUppercase', ['password']);
         return;
       }
       if (!ruleNumber) {
-        raiseError(t.authErrNeedNumber, ['password']);
+        raiseError('authErrNeedNumber', ['password']);
         return;
       }
       if (!ruleSymbol) {
-        raiseError(t.authErrNeedSymbol, ['password']);
+        raiseError('authErrNeedSymbol', ['password']);
         return;
       }
     }
@@ -266,7 +266,7 @@ export default function Auth() {
       // password that was never wrong and sent them to IT mid-outage.
       // Banner only: no field highlight, the fields are not the problem.
       if (isNetworkError(err)) {
-        raiseError(t.authErrNetwork);
+        raiseError('authErrNetwork');
         return;
       }
       const responseDetail = isHttpError(err) ? err.response.data?.detail : undefined;
@@ -294,7 +294,7 @@ export default function Auth() {
       // authErrFailed guidance. Network failures never reach this point —
       // the isNetworkError branch above gives them their own copy.
       const messageKey = errCode ? SERVER_MESSAGE_KEYS[errCode] : undefined;
-      raiseError(messageKey ? t[messageKey] : t.authErrFailed, fieldErrs);
+      raiseError(messageKey ?? 'authErrFailed', fieldErrs);
     } finally {
       setLoading(false);
     }
@@ -384,7 +384,7 @@ export default function Auth() {
 
         {error && (
           <div id="auth-error-msg" className="auth-error" role="alert" ref={errorBannerRef}>
-            {error}
+            {t[error]}
           </div>
         )}
 
