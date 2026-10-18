@@ -2,6 +2,7 @@ import { AlertCircle, CheckCircle, AlertTriangle, XCircle, ChevronDown } from 'l
 import { useState } from 'react';
 import { useDateFormatters } from '../format';
 import { getExpiryInfo } from '../expiry';
+import { useStrings, fill, statusLabel } from '../i18n';
 
 // Shared interfaces
 export interface SupportingRegulation {
@@ -44,13 +45,14 @@ interface ComplianceResultsViewerProps {
 
 export default function ComplianceResultsViewer({ filename, summary, results, headerActions }: ComplianceResultsViewerProps) {
   // Hook must run before the early return below (rules of hooks).
-  const { formatDate, dateFormat } = useDateFormatters();
+  const { formatDate, dateFormat, locale } = useDateFormatters();
+  const t = useStrings();
   if (!results) return null;
 
   // Expiry tag follows the real countdown status (shared logic with the
   // Contracts page) instead of a pinned red tint regardless of state —
   // a green document is not an alarm (critique P2 #5, Verdict Triad).
-  const expiryTag = summary ? getExpiryInfo(summary.tanggal_berakhir ?? null, dateFormat) : null;
+  const expiryTag = summary ? getExpiryInfo(summary.tanggal_berakhir ?? null, dateFormat, locale) : null;
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -73,7 +75,7 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
   return (
     <div className="results-section">
       <div className="results-header">
-        <h3>Hasil Analisis: {filename || 'Dokumen'}</h3>
+        <h3>{fill(t.crTitle, { filename: filename || t.crDocFallback })}</h3>
         {headerActions && (
           <div style={{ display: 'flex', gap: '12px' }}>
             {headerActions}
@@ -91,7 +93,7 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
           }}>
             <div className="compliance-score-inner">
               <span className="compliance-score-number">{summary.skor_kepatuhan}%</span>
-              <span className="compliance-score-label">Kepatuhan</span>
+              <span className="compliance-score-label">{t.crScore}</span>
             </div>
           </div>
           <div className="compliance-summary-info">
@@ -103,7 +105,9 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
                 color: expiryTag.badgeColor,
                 border: `1px solid ${expiryTag.badgeBorder}`,
               } : undefined}>
-                Kedaluwarsa: {summary.tanggal_berakhir ? formatDate(summary.tanggal_berakhir, 'short') : 'Tidak terdeteksi'}
+                {summary.tanggal_berakhir
+                  ? fill(t.crExpires, { date: formatDate(summary.tanggal_berakhir, 'short') })
+                  : fill(t.crExpires, { date: t.expNone })}
               </span>
             </div>
             <p className="compliance-summary-parties" style={{ fontSize: '1.1rem', marginTop: '8px' }}>
@@ -114,9 +118,9 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
               {summary.pokok_perjanjian}
             </p>
             <div className="compliance-tally">
-              <span className="tally-sesuai">✓ {summary.sesuai} Sesuai</span>
-              <span className="tally-beresiko">⚠ {summary.beresiko} Beresiko</span>
-              <span className="tally-fatal">✕ {summary.fatal} Fatal</span>
+              <span className="tally-sesuai">✓ {summary.sesuai} {t.stSesuai}</span>
+              <span className="tally-beresiko">⚠ {summary.beresiko} {t.stBeresiko}</span>
+              <span className="tally-fatal">✕ {summary.fatal} {t.stFatal}</span>
             </div>
           </div>
         </div>
@@ -126,8 +130,8 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
         <table className="compliance-table">
           <thead>
             <tr>
-              <th>Pasal</th>
-              <th>Analisis</th>
+              <th>{t.crColArticle}</th>
+              <th>{t.crColAnalysis}</th>
             </tr>
           </thead>
           <tbody>
@@ -140,7 +144,7 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
                     
                     {item.supporting_regulations && item.supporting_regulations.length > 0 && (
                       <div className="mt-6 flex flex-col gap-2">
-                        <div className="text-sm font-semibold text-slate-400 mb-2">Sumber Dokumen Yang Ditemukan:</div>
+                        <div className="text-sm font-semibold text-slate-400 mb-2">{t.crSources}</div>
                         {item.supporting_regulations.map((reg, rIdx) => (
                           <SupportingRegulationAccordion key={rIdx} reg={reg} />
                         ))}
@@ -151,7 +155,7 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
                 <td style={{ verticalAlign: 'top', width: '50%' }}>
                   <span className={['status-chip', getStatusChipClass(item.status)].join(' ')}
                         style={item.status === 'FATAL' ? { backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger-text)', borderColor: 'rgba(239, 68, 68, 0.2)' } : {}}>
-                    {getStatusIcon(item.status)} {item.status}
+                    {getStatusIcon(item.status)} {statusLabel(t, item.status)}
                   </span>
 
                   {item.pasal_regulasi_terkait && (
@@ -163,13 +167,13 @@ export default function ComplianceResultsViewer({ filename, summary, results, he
                   <p className="compliance-analysis-text mt-3">{item.penjelasan}</p>
                   
                   {item.rekomendasi && item.rekomendasi !== "-" && (
-                    <p className="compliance-recommendation mt-3"><strong>Saran:</strong> {item.rekomendasi}</p>
+                    <p className="compliance-recommendation mt-3"><strong>{t.crAdvice}</strong> {item.rekomendasi}</p>
                   )}
                   
                   {(item.status === 'BERESIKO' || item.status === 'FATAL') && item.ai_analysis && (
                     <div className="mt-3">
                       <strong className="text-slate-200 mb-1 flex items-center gap-1" style={{ fontSize: '0.85rem' }}>
-                        <AlertCircle size={14} className="text-slate-300" /> AI Analysis (Dampak Bisnis)
+                        <AlertCircle size={14} className="text-slate-300" /> {t.crAiImpact}
                       </strong>
                       <p className="compliance-recommendation mt-1" style={{ color: 'var(--text-secondary)' }}>
                         {item.ai_analysis}

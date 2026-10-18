@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle, RefreshCw, X } from 'lucide-react';
 import api, { isHttpError } from '../services/api';
 import { getSettings, subscribeSettings } from '../settings';
+import { useStrings, msg, LocalizedError, type Msg } from '../i18n';
+import { apiErrorMsg } from '../apiErrors';
 import { ContractUploadContext, type UploadJob } from '../hooks/useContractUpload';
 import { MAX_JOBS, loadPersistedJobs, persistJobs, pruneByRetention } from '../uploadJobs';
 import { useJobStatus } from './JobStatusContext';
@@ -9,10 +11,9 @@ import { useJobStatus } from './JobStatusContext';
 interface UploadToast {
   id: number;
   kind: 'info' | 'success' | 'error';
-  message: string;
+  /* A Msg, not text: toasts re-render in the active language. */
+  message: Msg;
 }
-
-const NETWORK_ERROR = 'Tidak dapat menghubungi server. Periksa koneksi Anda lalu coba lagi.';
 
 /* Lives above the router so contract-analysis uploads survive navigation:
    the modal only hands the file over, the provider runs the pipeline,
@@ -21,6 +22,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [jobs, setJobs] = useState<UploadJob[]>(() =>
     pruneByRetention(loadPersistedJobs(), getSettings().jobRetentionDays)
   );
+  const t = useStrings();
   const [toasts, setToasts] = useState<UploadToast[]>([]);
   const listenersRef = useRef<Set<(job: UploadJob) => void>>(new Set());
   const toastIdRef = useRef(0);
@@ -52,7 +54,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const pushToast = useCallback((kind: UploadToast['kind'], message: string, ttl: number) => {
+  const pushToast = useCallback((kind: UploadToast['kind'], message: Msg, ttl: number) => {
     const id = ++toastIdRef.current;
     setToasts(prev => [...prev, { id, kind, message }]);
     window.setTimeout(() => dismissToast(id), ttl);
@@ -60,7 +62,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   /** Shared toast entry point for pages (delete/save/load failures) so the
       whole app speaks through one notification system. */
-  const notify = useCallback((kind: UploadToast['kind'], message: string, ttl?: number) => {
+  const notify = useCallback((kind: UploadToast['kind'], message: Msg, ttl?: number) => {
     pushToast(kind, message, ttl ?? (kind === 'error' ? 12000 : 6000));
   }, [pushToast]);
 
@@ -80,8 +82,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         // axios sets the multipart boundary for FormData automatically
         const response = await api.post('/api/check-compliance', formData).catch((e) => {
-          if (isHttpError(e)) throw new Error(e.response.data?.detail || 'Gagal memproses dokumen.');
-          throw new Error(NETWORK_ERROR);
+          throw new LocalizedError(apiErrorMsg(e, 'errProcessDoc'));
         });
         const data = response.data;
         const results = data.report;
@@ -95,8 +96,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           expiration_date: summary?.tanggal_berakhir || null,
           results: { summary, results },
         }).catch((e) => {
-          if (isHttpError(e)) throw new Error('Analisis selesai, tetapi gagal menyimpan hasil analisis.');
-          throw new Error(NETWORK_ERROR);
+          throw new LocalizedError({ key: isHttpError(e) ? 'errSaveAnalysis' : 'errNetwork' });
         });
 
         // Spread onto the record so createdAt survives for retention aging;
@@ -104,17 +104,18 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const doneJob: UploadJob = { id, filename, status: 'done', error: undefined };
         fileRefs.current.delete(id);
         setJobs(prev => prev.map(j => (j.id === id ? { ...j, ...doneJob } : j)));
-        pushToast('success', `Analisis "${filename}" selesai — dokumen ditambahkan ke Kontrak.`, 8000);
+        pushToast('success', { key: 'ucDone', params: { filename } }, 8000);
         updateJob(id, 'completed');
         listenersRef.current.forEach(listener => listener(doneJob));
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Terjadi kesalahan sistem.';
-        const errJob: UploadJob = { id, filename, status: 'error', error: message };
+        // Persist the reason as a Msg so the failure re-renders in the active language.
+        const reason: Msg = err instanceof LocalizedError ? err.msg : { key: 'errSystem' };
+        const errJob: UploadJob = { id, filename, status: 'error', error: reason };
         // Keep the fileRef: the jobs panel offers "Coba lagi" for in-session
         // failures — a failed job is no longer a dead end (critique P1 #1).
         // Spread preserves createdAt for retention aging.
         setJobs(prev => prev.map(j => (j.id === id ? { ...j, ...errJob } : j)));
-        pushToast('error', `Analisis "${filename}" gagal: ${message}`, 12000);
+        pushToast('error', { key: 'ucFailed', params: { filename, reason } }, 12000);
         updateJob(id, 'failed');
         listenersRef.current.forEach(listener => listener(errJob));
       }
@@ -126,7 +127,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const filename = file.name;
     fileRefs.current.set(id, { file, useOCR });
     setJobs(prev => [...prev, { id, filename, status: 'processing' as const, createdAt: Date.now() }].slice(-MAX_JOBS));
-    pushToast('info', `Analisis "${filename}" berjalan di latar belakang.`, 5000);
+    pushToast('info', { key: 'ucRunning', params: { filename } }, 5000);
     addJob(id, 'uploading', filename, 'contract');
     runJob(id, filename, file, useOCR);
   };
@@ -136,12 +137,15 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const job = jobs.find(j => j.id === id);
     if (!ref || !job) {
       // Restored from storage after a reload — the File is gone for good.
-      pushToast('error', `Berkas "${job?.filename ?? 'dokumen'}" tidak lagi tersedia di sesi ini — unggah ulang dokumen untuk mencoba lagi.`, 12000);
+      pushToast('error', {
+        key: 'ucFileGone',
+        params: { filename: job?.filename ?? { key: 'ucFileGoneName' } },
+      }, 12000);
       return;
     }
     // Spread preserves createdAt; error: undefined clears the failure message.
     setJobs(prev => prev.map(j => (j.id === id ? { ...j, status: 'processing' as const, error: undefined } : j)));
-    pushToast('info', `Analisis "${job.filename}" dicoba ulang di latar belakang.`, 5000);
+    pushToast('info', { key: 'ucRetrying', params: { filename: job.filename } }, 5000);
     addJob(id, 'uploading', job.filename, 'contract');
     runJob(id, job.filename, ref.file, ref.useOCR);
   };
@@ -160,11 +164,11 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           role="alert"/"status" would nest a second live region and make
           every toast double-announce (critique minor, 2026-10-06). */}
       <div className="upload-toast-container" aria-live="polite">
-        {toasts.map(t => (
-          <div key={t.id} className={`upload-toast upload-toast--${t.kind}`}>
-            {t.kind === 'success' ? <CheckCircle size={16} /> : t.kind === 'error' ? <AlertTriangle size={16} /> : <RefreshCw size={16} className="animate-spin-slow" />}
-            <span>{t.message}</span>
-            <button type="button" className="upload-toast-close" onClick={() => dismissToast(t.id)} aria-label="Tutup notifikasi">
+        {toasts.map(toast => (
+          <div key={toast.id} className={`upload-toast upload-toast--${toast.kind}`}>
+            {toast.kind === 'success' ? <CheckCircle size={16} /> : toast.kind === 'error' ? <AlertTriangle size={16} /> : <RefreshCw size={16} className="animate-spin-slow" />}
+            <span>{msg(t, toast.message)}</span>
+            <button type="button" className="upload-toast-close" onClick={() => dismissToast(toast.id)} aria-label={t.notifClose}>
               <X size={14} />
             </button>
           </div>

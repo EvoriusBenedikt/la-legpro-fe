@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, CheckCircle2, XCircle, Loader2, X, Trash2 } from 'lucide-react';
 import { useJobStatus, type JobEntry, type JobType } from '../context/JobStatusContext';
-import { useStrings } from '../i18n';
+import { useStrings, fill, formatAgo, type Dict } from '../i18n';
 
 /* ── helpers ── */
-function typeLabel(type: JobType): string {
-  if (type === 'opinion') return 'Opini Legal';
-  if (type === 'contract') return 'Kontrak';
-  return 'Repositori';
+function typeLabel(t: Dict, type: JobType): string {
+  if (type === 'opinion') return t.notifTypeOpinion;
+  if (type === 'contract') return t.notifTypeContract;
+  return t.notifTypeRepository;
 }
 
 function statusIcon(status: JobEntry['status']) {
@@ -17,14 +17,9 @@ function statusIcon(status: JobEntry['status']) {
   return <Loader2 size={14} className="notif-icon notif-icon--spin" aria-hidden />;
 }
 
-function relativeTime(ts: number | undefined): string {
+function relativeTime(t: Dict, ts: number | undefined): string {
   if (!ts) return '';
-  const s = Math.floor((Date.now() - ts) / 1000);
-  if (s < 60)   return `${s}d lalu`;
-  const m = Math.floor(s / 60);
-  if (m < 60)   return `${m}m lalu`;
-  const h = Math.floor(m / 60);
-  return `${h}j lalu`;
+  return formatAgo(t, (Date.now() - ts) / 1000);
 }
 
 /* ── component ── */
@@ -102,8 +97,8 @@ export default function NotificationDock() {
               type="button"
               className="notif-clear-btn"
               onClick={() => clearFinished()}
-              title="Hapus yang selesai"
-              aria-label="Hapus notifikasi yang selesai"
+              title={t.notifClearFinished}
+              aria-label={t.notifClearFinishedAria}
             >
               <Trash2 size={13} />
             </button>
@@ -112,7 +107,7 @@ export default function NotificationDock() {
             type="button"
             className="notif-close-btn"
             onClick={() => setOpen(false)}
-            aria-label="Tutup notifikasi"
+            aria-label={t.notifClose}
           >
             <X size={14} />
           </button>
@@ -121,25 +116,25 @@ export default function NotificationDock() {
 
       {/* Empty state */}
       {jobs.length === 0 && (
-        <div className="notif-empty">Tidak ada aktivitas berjalan.</div>
+        <div className="notif-empty">{t.notifEmpty}</div>
       )}
 
       {/* In-progress */}
       {activeJobs.length > 0 && (
         <div className="notif-section">
-          <div className="notif-section-label">Berjalan</div>
+          <div className="notif-section-label">{t.notifRunning}</div>
           {activeJobs.map(job => (
             <div key={job.id} className="notif-row notif-row--active">
               {statusIcon(job.status)}
               <div className="notif-text">
                 <span className="notif-label">{job.label}</span>
-                <span className="notif-meta">{typeLabel(job.type)}</span>
+                <span className="notif-meta">{typeLabel(t, job.type)}</span>
               </div>
               <button
                 type="button"
                 className="notif-dismiss"
                 onClick={() => clearJob(job.id)}
-                aria-label="Hapus"
+                aria-label={t.notifRemove}
               ><X size={11} /></button>
             </div>
           ))}
@@ -149,7 +144,7 @@ export default function NotificationDock() {
       {/* Finished */}
       {hasFinished && (
         <div className="notif-section">
-          <div className="notif-section-label">Selesai</div>
+          <div className="notif-section-label">{t.notifFinished}</div>
           {finishedJobs.map(job => (
             <div
               key={job.id}
@@ -159,15 +154,15 @@ export default function NotificationDock() {
               <div className="notif-text">
                 <span className="notif-label">{job.label}</span>
                 <span className="notif-meta">
-                  {typeLabel(job.type)}
-                  {job.finishedAt ? ` · ${relativeTime(job.finishedAt)}` : ''}
+                  {typeLabel(t, job.type)}
+                  {job.finishedAt ? ` · ${relativeTime(t, job.finishedAt)}` : ''}
                 </span>
               </div>
               <button
                 type="button"
                 className="notif-dismiss"
                 onClick={() => clearJob(job.id)}
-                aria-label="Hapus"
+                aria-label={t.notifRemove}
               ><X size={11} /></button>
             </div>
           ))}
@@ -192,7 +187,7 @@ export default function NotificationDock() {
         <Bell size={20} className="sb-icon" aria-hidden />
         <span className="sb-label">{t.notifications}</span>
         {unreadCount > 0 && (
-          <span className="sb-badge notif-badge" aria-label={`${unreadCount} notifikasi baru`}>
+          <span className="sb-badge notif-badge" aria-label={fill(t.notifNewCount, { n: unreadCount })}>
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}

@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import type { Msg } from '../i18n';
 
 /* Context object, types and consumer hook split out of
    context/ContractUploadContext.tsx (2026-10-06):
@@ -18,7 +19,10 @@ export interface UploadJob {
       persist in localStorage, the File itself cannot — so an interrupted
       job is honest history, not a resumable transfer (critique P1 #1). */
   status: 'processing' | 'done' | 'error' | 'interrupted';
-  error?: string;
+  /** Failure reason. Stored as a Msg (key + params) so it re-renders in the
+      active language; records persisted before 2026-10-14 hold a plain
+      string, which msg() shows as-is. */
+  error?: Msg | string;
 }
 
 export interface ContractUploadContextType {
@@ -33,7 +37,7 @@ export interface ContractUploadContextType {
   clearJobs: () => void;
   /** Push a message onto the shared toast stack; ttl defaults per kind
       (errors stay longer). Lets pages reuse the one notification system. */
-  notify: (kind: 'info' | 'success' | 'error', message: string, ttl?: number) => void;
+  notify: (kind: 'info' | 'success' | 'error', message: Msg, ttl?: number) => void;
   /** Listen for finished jobs (done or error); returns an unsubscribe function */
   subscribe: (listener: (job: UploadJob) => void) => () => void;
 }

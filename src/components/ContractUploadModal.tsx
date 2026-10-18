@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { FileText, Upload, UploadCloud, X } from 'lucide-react';
 import { useContractUpload } from '../hooks/useContractUpload';
 import { useDialogA11y } from '../hooks/useDialogA11y';
+import { useStrings, msg, type Msg } from '../i18n';
 
 interface ContractUploadModalProps {
   /** Close the modal (close button, overlay click, Escape) */
@@ -23,10 +24,12 @@ const ALLOWED_EXT = /\.(pdf|docx|xlsx|pptx|jpe?g|png|txt)$/i;
    One consistent term: "Upload Dokumen". */
 export default function ContractUploadModal({ onClose }: ContractUploadModalProps) {
   const { startUpload } = useContractUpload();
+  const t = useStrings();
   const [file, setFile] = useState<File | null>(null);
   const [useOCR, setUseOCR] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [fileError, setFileError] = useState<string | null>(null);
+  // A Msg (key + params), not text, so the error follows a language switch.
+  const [fileError, setFileError] = useState<Msg | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -39,11 +42,11 @@ export default function ContractUploadModal({ onClose }: ContractUploadModalProp
 
   const acceptFile = (candidate: File) => {
     if (!ALLOWED_EXT.test(candidate.name)) {
-      setFileError('Format tidak didukung — gunakan PDF, Word, Excel, PPT, JPG, PNG, atau TXT.');
+      setFileError({ key: 'cuErrFormat' });
       return;
     }
     if (candidate.size > MAX_FILE_BYTES) {
-      setFileError(`Ukuran maksimum 50 MB — file ini ${Math.max(1, Math.round(candidate.size / (1024 * 1024)))} MB.`);
+      setFileError({ key: 'cuErrSize', params: { mb: Math.max(1, Math.round(candidate.size / (1024 * 1024))) } });
       return;
     }
     setFileError(null);
@@ -89,13 +92,13 @@ export default function ContractUploadModal({ onClose }: ContractUploadModalProp
         tabIndex={-1}
       >
         <div className="upload-modal-header">
-          <h3 id="contract-upload-modal-title">Upload Dokumen</h3>
-          <button className="upload-modal-close" onClick={onClose} aria-label="Tutup dialog upload">
+          <h3 id="contract-upload-modal-title">{t.cuTitle}</h3>
+          <button className="upload-modal-close" onClick={onClose} aria-label={t.cuClose}>
             <X size={18} />
           </button>
         </div>
         <p className="upload-modal-subtitle">
-          Cross-check klausul dokumen PKS dengan Database Regulasi OJK secara otomatis.
+          {t.cuSubtitle}
         </p>
 
         <input
@@ -115,8 +118,8 @@ export default function ContractUploadModal({ onClose }: ContractUploadModalProp
           onDrop={handleDrop}
         >
           <UploadCloud size={40} className="upload-icon-main" />
-          <span className="upload-box-title">Upload Dokumen PKS</span>
-          <span className="upload-box-hint">Format PDF, Word, Excel, PPT, JPG, PNG & TXT didukung · maksimal 50 MB.</span>
+          <span className="upload-box-title">{t.cuBoxTitle}</span>
+          <span className="upload-box-hint">{t.cuBoxHint}</span>
           {file && (
             <span className="selected-file">
               <FileText size={16} />
@@ -129,11 +132,11 @@ export default function ContractUploadModal({ onClose }: ContractUploadModalProp
         {file && (
           <div className="upload-file-clear-row">
             <button type="button" className="btn-modal-secondary upload-file-clear" onClick={clearFile}>
-              <X size={14} aria-hidden="true" /> Hapus file terpilih
+              <X size={14} aria-hidden="true" /> {t.cuClearFile}
             </button>
           </div>
         )}
-        {fileError && <p className="upload-file-error" role="alert">{fileError}</p>}
+        {fileError && <p className="upload-file-error" role="alert">{msg(t, fileError)}</p>}
 
         <label className="ocr-row">
           <input
@@ -141,19 +144,15 @@ export default function ContractUploadModal({ onClose }: ContractUploadModalProp
             checked={useOCR}
             onChange={(e) => setUseOCR(e.target.checked)}
           />
-          <span>Gunakan OCR Tradisional (untuk dokumen hasil pindaian)</span>
+          <span>{t.cuOcr}</span>
         </label>
 
         <div className="upload-modal-note">
-          <p>
-            Pipeline 4-tahap (ekstraksi teks → identifikasi klausul → validasi relevansi →
-            audit kepatuhan) berjalan di latar belakang ±2–4 menit. Anda bebas berpindah
-            halaman — notifikasi muncul saat selesai dan dokumen baru otomatis masuk ke daftar Kontrak.
-          </p>
+          <p>{t.cuNote}</p>
         </div>
 
         <div className="upload-modal-actions">
-          <button className="btn-modal-secondary" onClick={onClose}>Batal</button>
+          <button className="btn-modal-secondary" onClick={onClose}>{t.cuCancel}</button>
           {/* No inline colors: .upload-btn's ink-on-accent pairing is the
               documented AA-safe face in both themes (theme-dark.css). */}
           <button
@@ -162,7 +161,7 @@ export default function ContractUploadModal({ onClose }: ContractUploadModalProp
             disabled={!file}
           >
             <Upload size={18} />
-            Upload Dokumen
+            {t.cuTitle}
           </button>
         </div>
       </div>

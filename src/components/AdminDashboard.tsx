@@ -13,6 +13,7 @@ import 'highcharts/highcharts-3d';
 import { useSearchParams } from 'react-router-dom';
 import api, { isHttpError } from '../services/api';
 import { useDateFormatters } from '../format';
+import { useStrings, fill } from '../i18n';
 import { useAuth } from '../hooks/useAuth';
 import { useDialogA11y } from '../hooks/useDialogA11y';
 import LoadingOrb from './LoadingOrb';
@@ -496,6 +497,7 @@ const KlasifikasiPieChart = ({ data, totalDocs }: KlasPieProps) => {
 
 export default function AdminDashboard() {
   const { formatDateTime, formatTime } = useDateFormatters();
+  const tr = useStrings();
   const { user } = useAuth();
 
   const [data, setData] = useState<DashboardData | null>(null);
@@ -503,6 +505,9 @@ export default function AdminDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  // Time of the last successful fetch (button label), via the shared
+  // formatter: HH:mm with a colon, 24-hour for id-ID/iso, h:mm AM/PM for en-US.
+  const lastRefreshTime = lastRefresh ? formatTime(lastRefresh) : null;
 
   const [exclusions, setExclusions] = useState<Exclusion[]>([]);
   const [exclusionsError, setExclusionsError] = useState(false);
@@ -1211,9 +1216,14 @@ export default function AdminDashboard() {
             className="btn-hero"
             onClick={() => fetchAll(true)}
             disabled={loading || refreshing}
+            aria-label={lastRefreshTime ? fill(tr.adminRefreshAria, { time: lastRefreshTime }) : tr.adminRefresh}
+            title={lastRefreshTime ? fill(tr.adminLastUpdated, { time: lastRefreshTime }) : undefined}
+            style={{ maxWidth: '100%' }}
           >
-            <RefreshCw size={15} className={refreshing ? 'admin-spin' : undefined} aria-hidden="true" />
-            {lastRefresh ? `Refresh (${formatTime(lastRefresh)})` : 'Refresh'}
+            <RefreshCw size={15} className={refreshing ? 'admin-spin' : undefined} aria-hidden="true" style={{ flexShrink: 0 }} />
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {lastRefreshTime ? fill(tr.adminLastUpdated, { time: lastRefreshTime }) : tr.adminRefresh}
+            </span>
           </button>
         </div>
       </div>

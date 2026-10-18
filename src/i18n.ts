@@ -106,7 +106,7 @@ const id = {
   preview: 'Pratinjau',
   langTitle: 'Bahasa antarmuka',
   langDesc:
-    'Mengubah bahasa bilah sisi, bilah atas, Opini Legal, dan Pengaturan. Berlaku segera dan tersimpan di perangkat ini.',
+    'Mengubah bahasa seluruh aplikasi. Berlaku segera dan tersimpan di perangkat ini.',
   motionTitle: 'Kurangi animasi',
   motionDesc:
     'Memperpendek transisi dan animasi di seluruh antarmuka, termasuk guliran halus pada percakapan. Berguna bagi pengguna yang sensitif terhadap gerakan pada layar.',
@@ -452,6 +452,204 @@ const id = {
     'Tidak dapat menghubungi server. Periksa koneksi Anda lalu coba lagi; jika berlanjut, hubungi administrator sistem Anda.',
   authErrFailed:
     'Autentikasi gagal. Periksa kembali nama pengguna dan kata sandi Anda; jika berlanjut, hubungi administrator sistem Anda.',
+  /* Admin dashboard refresh button: {time} is a 24-hour HH:mm stamp. */
+  adminRefresh: 'Muat ulang',
+  adminLastUpdated: 'Terakhir diperbarui {time}',
+  adminRefreshAria: 'Muat ulang data. Terakhir diperbarui {time}',
+
+  /* ── Shared errors (2026-10-14 i18n pass): stored as Msg keys and resolved
+     at render, never as translated text. ── */
+  errNetwork: 'Tidak dapat menghubungi server. Periksa koneksi Anda lalu coba lagi.',
+  errUnexpected: 'Terjadi kesalahan tak terduga.',
+  errServer: 'Server mengembalikan kesalahan (kode {code}). Coba lagi beberapa saat.',
+  errSystem: 'Terjadi kesalahan sistem.',
+  errProcessDoc: 'Gagal memproses dokumen.',
+  errSaveAnalysis: 'Analisis selesai, tetapi gagal menyimpan hasil analisis.',
+  errFileFormat: 'Format file tidak didukung. Harap unggah PDF, DOCX, XLSX, PPTX, JPG, PNG, atau TXT.',
+  errFileTooLarge: 'Ukuran file terlalu besar (maksimal 50 MB).',
+  errDocUnreadable: 'Dokumen tidak dapat dibaca. Coba unggah ulang atau pastikan PDF tidak terenkripsi.',
+  errAccessDenied: 'Akses ditolak.',
+  errDocNotFound: 'Dokumen tidak ditemukan.',
+  errPdfNotFound: 'Berkas PDF tidak ditemukan.',
+  errDocBusy: 'Dokumen sedang diproses. Coba lagi beberapa saat.',
+  errPwCurrentWrong: 'Kata sandi saat ini salah.',
+  errPwSame: 'Kata sandi baru harus berbeda dari kata sandi saat ini.',
+  errTaxEmpty: 'Nama jenis dokumen tidak boleh kosong.',
+  errTaxMax: 'Nama jenis dokumen maksimal {n} karakter.',
+  errTaxExists: 'Jenis dokumen dengan nama tersebut sudah ada.',
+  errTaxInUse: 'Jenis ini masih digunakan oleh dokumen di repositori. Nonaktifkan sebagai gantinya, atau hubungi administrator untuk menghapus permanen.',
+  errTaxNotActive: 'Jenis dokumen tidak ada dalam taksonomi aktif.',
+  errRepoNoAuthority: 'Admin sistem tidak memiliki kewenangan untuk mengakses repositori dokumen.',
+  errGrantRoleOnly: 'Hanya Manajer, Direktur, atau Sekretaris Perusahaan yang dapat memberikan akses.',
+  errGrantRestricted: 'Manajer tidak dapat memberikan akses untuk dokumen Terbatas. Hanya Direktur atau Sekretaris Perusahaan yang berwenang.',
+  errGrantReason: 'Alasan wajib diisi (minimal 5 karakter).',
+  errGrantUserNotFound: 'Pengguna penerima akses tidak ditemukan.',
+  errGrantRevokeOnly: 'Hanya Sekretaris Perusahaan yang dapat mencabut pemberian akses.',
+  errGrantNotFound: 'Pemberian akses tidak ditemukan.',
+  errPendingNotFound: 'Dokumen pending tidak ditemukan.',
+  errAdmEntityRequired: 'Nama entitas wajib diisi.',
+  errAdmEntityExists: 'Entitas sudah ada dalam daftar pengecualian.',
+  errAdmUserNotFound: 'Pengguna tidak ditemukan.',
+  errAdmSelf: 'Anda tidak dapat mengubah akun Anda sendiri dari panel ini.',
+  errAdmLevel: 'Hanya akun dengan level di bawah level Anda yang dapat dikelola.',
+  errAdmUnknownRole: 'Peran tidak dikenal.',
+  errAdmRoleLevel: 'Peran baru harus berada di bawah level peran Anda.',
+  errAdmSameRole: 'Pengguna sudah memiliki peran ini.',
+  errAdmSameState: 'Akun sudah berada dalam status ini.',
+  errAdmDateFormat: 'Tanggal harus menggunakan format YYYY-MM-DD.',
+
+  /* Durations + relative time (formatDuration / formatAgo in this module). */
+  durDaysHours: '{d} hari {h} jam',
+  durHoursMinutes: '{h} jam {m} menit',
+  durMinutes: '{m} menit',
+  agoSec: '{n} dtk lalu',
+  agoMin: '{n} mnt lalu',
+  agoHour: '{n} jam lalu',
+  agoDay: '{n} hari lalu',
+
+  /* Backend status vocabulary (statusLabel). The raw Indonesian values are
+     stable DB enums and stay the filter keys; only the label is localized. */
+  stBerlaku: 'Berlaku',
+  stTidakBerlaku: 'Tidak Berlaku',
+  stMemproses: 'Memproses',
+  stMenunggu: 'Menunggu Konfirmasi',
+  stGagal: 'Gagal',
+  stDuplikat: 'Duplikat',
+  stTidakBerubah: 'Tidak Berubah',
+  stDiubah: 'Diubah',
+  stBaru: 'Baru',
+  stDicabut: 'Dicabut',
+  stPerubahan: 'Perubahan',
+  stRahasia: 'Rahasia',
+  stTerbatas: 'Terbatas',
+  stUmum: 'Umum',
+  stSesuai: 'Sesuai',
+  stBeresiko: 'Beresiko',
+  stFatal: 'Fatal',
+  stTidakDiatur: 'Tidak Diatur',
+  stQueued: 'Menunggu',
+  stRunning: 'Berjalan',
+  stCompleted: 'Selesai',
+  stCancelled: 'Dibatalkan',
+  stActive: 'Aktif',
+  stExpired: 'Kedaluwarsa',
+
+  /* Processing-queue stage names (api/services/task_queue.py STAGES). */
+  stageExtract: 'Ekstraksi teks',
+  stageClassify: 'Klasifikasi AI',
+  stageDedup: 'Deteksi duplikat',
+  stageContext: 'Ringkasan konteks',
+  stageEmbed: 'Chunking & embedding',
+  stageGraph: 'Graf pengetahuan',
+
+  /* Contract expiry (expiry.ts). One/Other pairs feed plural(). */
+  expNone: 'Tidak terdeteksi',
+  expExpiredAgoOne: 'Kedaluwarsa {n} hari lalu',
+  expExpiredAgoOther: 'Kedaluwarsa {n} hari lalu',
+  expDaysLeftOne: '{n} hari lagi',
+  expDaysLeftOther: '{n} hari lagi',
+  expExpiredSince: 'Dokumen telah kedaluwarsa sejak {date}',
+  expUnderWeek: 'Kurang dari 1 minggu — kedaluwarsa {date}',
+  expUnderMonth: 'Kurang dari 1 bulan — kedaluwarsa {date}',
+  expWordActive: 'Aktif',
+  expWordSoon: 'Segera Berakhir',
+  expWordExpired: 'Kedaluwarsa',
+
+  /* Legal Opinion: background toasts */
+  opNotifyReady: 'Jawaban opini legal siap — kembali ke halaman untuk membaca.',
+  opNotifyFailed: 'Opini legal gagal diproses — buka halaman untuk melihat detailnya.',
+  opDialogOk: 'OK',
+
+  /* App shell */
+  appLoading: 'Memuat…',
+
+  /* Notification dock */
+  notifTypeOpinion: 'Opini Legal',
+  notifTypeContract: 'Kontrak',
+  notifTypeRepository: 'Repositori',
+  notifClearFinished: 'Hapus yang selesai',
+  notifClearFinishedAria: 'Hapus notifikasi yang selesai',
+  notifClose: 'Tutup notifikasi',
+  notifEmpty: 'Tidak ada aktivitas berjalan.',
+  notifRunning: 'Berjalan',
+  notifFinished: 'Selesai',
+  notifRemove: 'Hapus',
+  notifNewCount: '{n} notifikasi baru',
+
+  /* Contract upload jobs + toasts (ContractUploadContext) */
+  ucRunning: 'Analisis "{filename}" berjalan di latar belakang.',
+  ucRetrying: 'Analisis "{filename}" dicoba ulang di latar belakang.',
+  ucDone: 'Analisis "{filename}" selesai — dokumen ditambahkan ke Kontrak.',
+  ucFailed: 'Analisis "{filename}" gagal: {reason}',
+  ucFileGone: 'Berkas "{filename}" tidak lagi tersedia di sesi ini — unggah ulang dokumen untuk mencoba lagi.',
+  ucFileGoneName: 'dokumen',
+
+  /* Contract upload modal */
+  cuTitle: 'Upload Dokumen',
+  cuClose: 'Tutup dialog upload',
+  cuSubtitle: 'Cross-check klausul dokumen PKS dengan Database Regulasi OJK secara otomatis.',
+  cuBoxTitle: 'Upload Dokumen PKS',
+  cuBoxHint: 'Format PDF, Word, Excel, PPT, JPG, PNG & TXT didukung · maksimal 50 MB.',
+  cuClearFile: 'Hapus file terpilih',
+  cuOcr: 'Gunakan OCR Tradisional (untuk dokumen hasil pindaian)',
+  cuNote: 'Pipeline 4-tahap (ekstraksi teks → identifikasi klausul → validasi relevansi → audit kepatuhan) berjalan di latar belakang ±2–4 menit. Anda bebas berpindah halaman — notifikasi muncul saat selesai dan dokumen baru otomatis masuk ke daftar Kontrak.',
+  cuCancel: 'Batal',
+  cuErrFormat: 'Format tidak didukung — gunakan PDF, Word, Excel, PPT, JPG, PNG, atau TXT.',
+  cuErrSize: 'Ukuran maksimum 50 MB — file ini {mb} MB.',
+
+  /* Compliance results viewer */
+  crTitle: 'Hasil Analisis: {filename}',
+  crDocFallback: 'Dokumen',
+  crScore: 'Kepatuhan',
+  crExpires: 'Kedaluwarsa: {date}',
+  crColArticle: 'Pasal',
+  crColAnalysis: 'Analisis',
+  crSources: 'Sumber Dokumen Yang Ditemukan:',
+  crAdvice: 'Saran:',
+  crAiImpact: 'AI Analysis (Dampak Bisnis)',
+
+  /* Account page */
+  acctTitle: 'Pengaturan Akun',
+  acctIntro: 'Kelola informasi pribadi, preferensi keamanan, dan pengaturan identitas inti Anda dari satu tempat.',
+  acctUserFallback: 'Pengguna',
+  acctIdLine: 'ID: {id}',
+  acctIdUnknown: 'Tidak diketahui',
+  acctSignOut: 'Keluar',
+  acctTabGeneral: 'Informasi Umum',
+  acctTabSecurity: 'Pengaturan Keamanan',
+  acctProfile: 'Detail Profil',
+  acctUsername: 'Nama pengguna',
+  acctUniqueId: 'ID unik',
+  acctAuthority: 'Level otoritas',
+  acctEmail: 'Email',
+  acctNotConfigured: 'Belum diatur',
+  acctMemberSince: 'Anggota sejak',
+  acctToday: 'Hari ini',
+  acctChangePw: 'Ubah Kata Sandi',
+  acctPwRule: 'Kata sandi harus memuat setidaknya satu angka dan satu simbol.',
+  acctCurrentPw: 'Kata sandi saat ini',
+  acctNewPw: 'Kata sandi baru',
+  acctConfirmPw: 'Konfirmasi kata sandi baru',
+  acctPhCurrent: 'Masukkan kata sandi saat ini',
+  acctPhNew: 'Masukkan kata sandi baru',
+  acctPhConfirm: 'Konfirmasi kata sandi baru',
+  acctUpdating: 'Memperbarui…',
+  acctUpdate: 'Perbarui Kata Sandi',
+  acctErrMismatch: 'Kata sandi baru tidak cocok.',
+  acctErrUpper: 'Kata sandi harus memuat setidaknya satu huruf besar.',
+  acctErrNumber: 'Kata sandi harus memuat setidaknya satu angka.',
+  acctErrSymbol: 'Kata sandi harus memuat setidaknya satu simbol.',
+  acctPwUpdated: 'Kata sandi berhasil diperbarui.',
+  acctErrChange: 'Gagal mengubah kata sandi.',
+
+  /* Activity feed */
+  actTitle: 'Aktivitas terbaru',
+  actToday: 'Hari ini',
+  actWeek: 'Minggu ini',
+  actEmpty: 'Belum ada aktivitas terbaru.',
+  actYou: 'Anda',
+  actChat: 'memulai obrolan analisis hukum baru',
+  actCompliance: 'mengunggah dokumen untuk pemeriksaan kepatuhan',
 } as const;
 
 export type StringKey = keyof typeof id;
@@ -528,7 +726,7 @@ const en: Record<StringKey, string> = {
   preview: 'Preview',
   langTitle: 'Interface language',
   langDesc:
-    'Switches the language of the sidebar, top bar, Legal Opinion, and Settings. Applies immediately and is saved on this device.',
+    'Changes the language of the whole application. Applies immediately and is saved on this device.',
   motionTitle: 'Reduce motion',
   motionDesc:
     'Shorten transitions and animations across the interface, including smooth chat scrolling. Useful if you are sensitive to on-screen motion.',
@@ -832,6 +1030,188 @@ const en: Record<StringKey, string> = {
     'Cannot reach the server. Check your connection and try again; if this persists, contact your system administrator.',
   authErrFailed:
     'Authentication failed. Check your username and password; if this persists, contact your system administrator.',
+  adminRefresh: 'Refresh',
+  adminLastUpdated: 'Last updated at {time}',
+  adminRefreshAria: 'Refresh data. Last updated at {time}',
+
+  errNetwork: 'Cannot reach the server. Check your connection and try again.',
+  errUnexpected: 'An unexpected error occurred.',
+  errServer: 'The server returned an error (code {code}). Please try again in a moment.',
+  errSystem: 'A system error occurred.',
+  errProcessDoc: 'Failed to process the document.',
+  errSaveAnalysis: 'The analysis finished, but saving the result failed.',
+  errFileFormat: 'Unsupported file format. Please upload a PDF, DOCX, XLSX, PPTX, JPG, PNG, or TXT file.',
+  errFileTooLarge: 'The file is too large (maximum 50 MB).',
+  errDocUnreadable: 'The document could not be read. Try uploading it again, or make sure the PDF is not encrypted.',
+  errAccessDenied: 'Access denied.',
+  errDocNotFound: 'Document not found.',
+  errPdfNotFound: 'PDF file not found.',
+  errDocBusy: 'The document is still being processed. Try again in a moment.',
+  errPwCurrentWrong: 'The current password is incorrect.',
+  errPwSame: 'The new password must be different from the current password.',
+  errTaxEmpty: 'The document type name cannot be empty.',
+  errTaxMax: 'The document type name can be at most {n} characters.',
+  errTaxExists: 'A document type with that name already exists.',
+  errTaxInUse: 'This type is still used by documents in the repository. Deactivate it instead, or contact an administrator to delete it permanently.',
+  errTaxNotActive: 'The document type is not in the active taxonomy.',
+  errRepoNoAuthority: 'System admins are not authorized to access the document repository.',
+  errGrantRoleOnly: 'Only Managers, Directors, or the Corporate Secretary can grant access.',
+  errGrantRestricted: 'Managers cannot grant access to Restricted documents. Only the Director or Corporate Secretary is authorized.',
+  errGrantReason: 'A reason is required (at least 5 characters).',
+  errGrantUserNotFound: 'The user receiving access was not found.',
+  errGrantRevokeOnly: 'Only the Corporate Secretary can revoke an access grant.',
+  errGrantNotFound: 'Access grant not found.',
+  errPendingNotFound: 'Pending document not found.',
+  errAdmEntityRequired: 'Entity name is required.',
+  errAdmEntityExists: 'The entity is already in the exclusion list.',
+  errAdmUserNotFound: 'User not found.',
+  errAdmSelf: 'You cannot modify your own account from this panel.',
+  errAdmLevel: 'Only accounts below your own role level can be managed.',
+  errAdmUnknownRole: 'Unknown role.',
+  errAdmRoleLevel: 'The new role must be below your own role level.',
+  errAdmSameRole: 'The user already has this role.',
+  errAdmSameState: 'The account is already in this state.',
+  errAdmDateFormat: 'Dates must use the YYYY-MM-DD format.',
+
+  durDaysHours: '{d}d {h}h',
+  durHoursMinutes: '{h}h {m}m',
+  durMinutes: '{m} min',
+  agoSec: '{n}s ago',
+  agoMin: '{n}m ago',
+  agoHour: '{n}h ago',
+  agoDay: '{n}d ago',
+
+  stBerlaku: 'In force',
+  stTidakBerlaku: 'Not in force',
+  stMemproses: 'Processing',
+  stMenunggu: 'Awaiting confirmation',
+  stGagal: 'Failed',
+  stDuplikat: 'Duplicate',
+  stTidakBerubah: 'Unchanged',
+  stDiubah: 'Amended',
+  stBaru: 'New',
+  stDicabut: 'Revoked',
+  stPerubahan: 'Amendment',
+  stRahasia: 'Confidential',
+  stTerbatas: 'Restricted',
+  stUmum: 'Public',
+  stSesuai: 'Compliant',
+  stBeresiko: 'At risk',
+  stFatal: 'Fatal',
+  stTidakDiatur: 'Not regulated',
+  stQueued: 'Waiting',
+  stRunning: 'Running',
+  stCompleted: 'Completed',
+  stCancelled: 'Cancelled',
+  stActive: 'Active',
+  stExpired: 'Expired',
+
+  stageExtract: 'Text extraction',
+  stageClassify: 'AI classification',
+  stageDedup: 'Duplicate detection',
+  stageContext: 'Context summary',
+  stageEmbed: 'Chunking & embedding',
+  stageGraph: 'Knowledge graph',
+
+  expNone: 'Not detected',
+  expExpiredAgoOne: 'Expired {n} day ago',
+  expExpiredAgoOther: 'Expired {n} days ago',
+  expDaysLeftOne: '{n} day left',
+  expDaysLeftOther: '{n} days left',
+  expExpiredSince: 'This document expired on {date}',
+  expUnderWeek: 'Less than 1 week left: expires {date}',
+  expUnderMonth: 'Less than 1 month left: expires {date}',
+  expWordActive: 'Active',
+  expWordSoon: 'Expiring Soon',
+  expWordExpired: 'Expired',
+
+  opNotifyReady: 'Your legal opinion answer is ready. Return to the page to read it.',
+  opNotifyFailed: 'The legal opinion could not be processed. Open the page to see the details.',
+  opDialogOk: 'OK',
+
+  appLoading: 'Loading…',
+
+  notifTypeOpinion: 'Legal Opinion',
+  notifTypeContract: 'Contracts',
+  notifTypeRepository: 'Repository',
+  notifClearFinished: 'Clear finished',
+  notifClearFinishedAria: 'Clear finished notifications',
+  notifClose: 'Close notifications',
+  notifEmpty: 'No activity in progress.',
+  notifRunning: 'In progress',
+  notifFinished: 'Finished',
+  notifRemove: 'Remove',
+  notifNewCount: '{n} new notifications',
+
+  ucRunning: 'Analysis of "{filename}" is running in the background.',
+  ucRetrying: 'Analysis of "{filename}" is being retried in the background.',
+  ucDone: 'Analysis of "{filename}" finished. The document was added to Contracts.',
+  ucFailed: 'Analysis of "{filename}" failed: {reason}',
+  ucFileGone: 'The file "{filename}" is no longer available in this session. Upload the document again to retry.',
+  ucFileGoneName: 'document',
+
+  cuTitle: 'Upload Document',
+  cuClose: 'Close upload dialog',
+  cuSubtitle: 'Automatically cross-check the clauses of PKS documents against the OJK Regulation Database.',
+  cuBoxTitle: 'Upload PKS Document',
+  cuBoxHint: 'PDF, Word, Excel, PPT, JPG, PNG & TXT formats supported · maximum 50 MB.',
+  cuClearFile: 'Remove selected file',
+  cuOcr: 'Use traditional OCR (for scanned documents)',
+  cuNote: 'A 4-stage pipeline (text extraction → clause identification → relevance validation → compliance audit) runs in the background for about 2–4 minutes. You are free to navigate away. A notification appears when it finishes and the new document is added to the Contracts list automatically.',
+  cuCancel: 'Cancel',
+  cuErrFormat: 'Unsupported format. Use PDF, Word, Excel, PPT, JPG, PNG, or TXT.',
+  cuErrSize: 'Maximum size is 50 MB. This file is {mb} MB.',
+
+  crTitle: 'Analysis Result: {filename}',
+  crDocFallback: 'Document',
+  crScore: 'Compliance',
+  crExpires: 'Expires: {date}',
+  crColArticle: 'Article',
+  crColAnalysis: 'Analysis',
+  crSources: 'Sources found:',
+  crAdvice: 'Recommendation:',
+  crAiImpact: 'AI Analysis (Business Impact)',
+
+  acctTitle: 'Account Settings',
+  acctIntro: 'Manage your personal information, security preferences, and core identity settings from one central hub.',
+  acctUserFallback: 'User',
+  acctIdLine: 'ID: {id}',
+  acctIdUnknown: 'Unknown',
+  acctSignOut: 'Sign Out',
+  acctTabGeneral: 'General Information',
+  acctTabSecurity: 'Security Settings',
+  acctProfile: 'Profile Details',
+  acctUsername: 'Username',
+  acctUniqueId: 'Unique ID',
+  acctAuthority: 'Authority Level',
+  acctEmail: 'Email',
+  acctNotConfigured: 'Not configured',
+  acctMemberSince: 'Member Since',
+  acctToday: 'Today',
+  acctChangePw: 'Change Password',
+  acctPwRule: 'Password must contain at least one number and one symbol.',
+  acctCurrentPw: 'Current Password',
+  acctNewPw: 'New Password',
+  acctConfirmPw: 'Confirm New Password',
+  acctPhCurrent: 'Enter current password',
+  acctPhNew: 'Enter new password',
+  acctPhConfirm: 'Confirm new password',
+  acctUpdating: 'Updating…',
+  acctUpdate: 'Update Password',
+  acctErrMismatch: 'New passwords do not match.',
+  acctErrUpper: 'Password must contain at least one uppercase letter.',
+  acctErrNumber: 'Password must contain at least one number.',
+  acctErrSymbol: 'Password must contain at least one symbol.',
+  acctPwUpdated: 'Password updated successfully.',
+  acctErrChange: 'Failed to change the password.',
+
+  actTitle: 'Latest activities',
+  actToday: 'Today',
+  actWeek: 'This week',
+  actEmpty: 'No recent activity.',
+  actYou: 'You',
+  actChat: 'started a new legal analysis chat',
+  actCompliance: 'uploaded a document for compliance check',
 };
 
 export const STRINGS: Record<Locale, Record<StringKey, string>> = { id, en };
@@ -896,6 +1276,150 @@ export function useLocale(): Locale {
 /** Reactive dictionary for components. */
 export function useStrings(): Record<StringKey, string> {
   return STRINGS[useLocale()];
+}
+
+/* ── Locale-safe message plumbing (2026-10-14) ───────────────────────────
+   Rule: never store translated TEXT in state, localStorage or Error.message.
+   Store a Msg (a key + params, or a `{ text }` passthrough for dynamic
+   server/DB content) and resolve it with msg(t, m) while rendering, so a
+   language switch re-renders the same message in the new language. */
+
+export type Dict = Record<StringKey, string>;
+export type MsgParams = Record<string, string | number | Msg>;
+export type Msg = { key: StringKey; params?: MsgParams } | { text: string };
+
+/** Resolve a Msg to display text. A plain string (legacy persisted data) is
+    shown as-is; a key that no longer exists degrades to the generic error. */
+export function msg(t: Dict, m: Msg | string): string {
+  if (typeof m === 'string') return m;
+  if ('text' in m) return m.text;
+  const template = t[m.key];
+  if (typeof template !== 'string') return t.errUnexpected;
+  if (!m.params) return template;
+  const vars: Record<string, string | number> = {};
+  for (const [k, v] of Object.entries(m.params)) {
+    vars[k] = typeof v === 'object' ? msg(t, v) : v;
+  }
+  return fill(template, vars);
+}
+
+/** Error that carries a Msg instead of text: `throw new LocalizedError({ key })`
+    in async code, then `e instanceof LocalizedError ? e.msg : { key: 'errUnexpected' }`
+    in the catch and resolve at render. `message` is the key, for logs only. */
+export class LocalizedError extends Error {
+  readonly msg: Msg;
+  constructor(m: Msg) {
+    super('text' in m ? m.text : m.key);
+    this.name = 'LocalizedError';
+    this.msg = m;
+  }
+}
+
+/** Keys that exist as a `${base}One` / `${base}Other` pair. */
+type PluralBase = {
+  [K in StringKey]: K extends `${infer B}One` ? (`${B}Other` extends StringKey ? B : never) : never;
+}[StringKey];
+
+/** Pick the One/Other variant for n (n === 1 is singular) and fill it; `{n}`
+    is always provided. Indonesian has no plural forms, so both `id` variants
+    carry the same text. */
+export function plural(
+  t: Dict,
+  base: PluralBase,
+  n: number,
+  vars: Record<string, string | number> = {},
+): string {
+  const key = `${base}${n === 1 ? 'One' : 'Other'}` as StringKey;
+  return fill(t[key], { n, ...vars });
+}
+
+/** "2 hari 3 jam" / "3 jam 5 menit" / "5 menit" from a span in seconds. */
+export function formatDuration(t: Dict, seconds: number): string {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return fill(t.durDaysHours, { d, h });
+  if (h > 0) return fill(t.durHoursMinutes, { h, m });
+  return fill(t.durMinutes, { m });
+}
+
+/** Relative age ("12 dtk lalu" / "12s ago") from an elapsed span in seconds. */
+export function formatAgo(t: Dict, seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  if (s < 60) return fill(t.agoSec, { n: s });
+  if (s < 3600) return fill(t.agoMin, { n: Math.floor(s / 60) });
+  if (s < 86400) return fill(t.agoHour, { n: Math.floor(s / 3600) });
+  return fill(t.agoDay, { n: Math.floor(s / 86400) });
+}
+
+/* Backend status enums are stable Indonesian values stored in the DB (and
+   used as filter/grouping keys). Only the DISPLAYED label is translated;
+   unknown values fall back to the raw text. */
+const STATUS_KEYS: Record<string, StringKey> = {
+  'Berlaku': 'stBerlaku',
+  'Tidak Berlaku': 'stTidakBerlaku',
+  'Memproses': 'stMemproses',
+  'Menunggu Konfirmasi': 'stMenunggu',
+  'Gagal': 'stGagal',
+  'Duplikat': 'stDuplikat',
+  'Tidak Berubah': 'stTidakBerubah',
+  'Diubah': 'stDiubah',
+  'Baru': 'stBaru',
+  'Dicabut': 'stDicabut',
+  'Perubahan': 'stPerubahan',
+  'Rahasia': 'stRahasia',
+  'Terbatas': 'stTerbatas',
+  'Umum': 'stUmum',
+  'Selesai': 'stCompleted',
+  'Menunggu': 'stQueued',
+  'Berjalan': 'stRunning',
+  'Dibatalkan': 'stCancelled',
+  'Aktif': 'stActive',
+  'Kedaluwarsa': 'stExpired',
+  SESUAI: 'stSesuai',
+  BERESIKO: 'stBeresiko',
+  FATAL: 'stFatal',
+  'TIDAK DIATUR': 'stTidakDiatur',
+  QUEUED: 'stQueued',
+  RUNNING: 'stRunning',
+  COMPLETED: 'stCompleted',
+  FAILED: 'stGagal',
+  CANCELLED: 'stCancelled',
+};
+
+/** Localized label for a raw backend status. Composite values such as
+    "Berlaku (Perubahan) (Diubah)" or "Gagal - Duplikat" are translated
+    segment by segment; unrecognized segments are kept verbatim. */
+export function statusLabel(t: Dict, raw: string): string {
+  const whole = STATUS_KEYS[raw.trim()];
+  if (whole) return t[whole];
+  return raw
+    .split(/(\([^)]*\)| - )/)
+    .map((part) => {
+      if (part === ' - ') return part;
+      const paren = /^\(([^)]*)\)$/.exec(part);
+      const inner = (paren ? paren[1] : part).trim();
+      const key = STATUS_KEYS[inner];
+      if (!key) return part;
+      return paren ? `(${t[key]})` : part.replace(inner, t[key]);
+    })
+    .join('');
+}
+
+const STAGE_KEYS: Record<string, StringKey> = {
+  'Ekstraksi teks': 'stageExtract',
+  'Klasifikasi AI': 'stageClassify',
+  'Deteksi duplikat': 'stageDedup',
+  'Ringkasan konteks': 'stageContext',
+  'Chunking & embedding': 'stageEmbed',
+  'Graf pengetahuan': 'stageGraph',
+};
+
+/** Localized name for a backend processing-queue stage (fixed set in
+    task_queue.py STAGES); unknown names pass through. */
+export function stageLabel(t: Dict, raw: string): string {
+  const key = STAGE_KEYS[raw];
+  return key ? t[key] : raw;
 }
 
 /* Runtime <title> sync (2026-10-06, owner decision): index.html's static

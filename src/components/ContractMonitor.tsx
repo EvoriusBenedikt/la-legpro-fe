@@ -15,6 +15,7 @@ import ContractUploadModal from './ContractUploadModal';
 import LoadingOrb from './LoadingOrb';
 import api, { isHttpError } from '../services/api';
 import { useDateFormatters, formatDateWith } from '../format';
+import { useStrings, msg } from '../i18n';
 
 /* Contracts page hardening (critique 2026-10-06): failure paths get honest,
    recoverable UI (error panel + retry, inline dialog failures, job history
@@ -226,7 +227,8 @@ export default function ContractMonitor() {
   const [loadingViewId, setLoadingViewId] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const { jobs, retryJob, clearJobs, notify, subscribe } = useContractUpload();
-  const { dateFormat, formatDate } = useDateFormatters();
+  const { dateFormat, formatDate, locale } = useDateFormatters();
+  const t = useStrings();
   const processingCount = jobs.filter(j => j.status === 'processing').length;
 
   const fetchDocs = async () => {
@@ -260,8 +262,8 @@ export default function ContractMonitor() {
     } catch (e) {
       console.error(e);
       notify('error', isHttpError(e)
-        ? 'Gagal memuat analisis. Coba buka lagi dalam beberapa saat.'
-        : NETWORK_ERROR, 12000);
+        ? { text: 'Gagal memuat analisis. Coba buka lagi dalam beberapa saat.' } // FEAT-002: key
+        : { key: 'errNetwork' }, 12000);
     } finally { setLoadingViewId(null); }
   };
 
@@ -280,23 +282,23 @@ export default function ContractMonitor() {
     } catch (e) {
       console.error(e);
       notify('error', isHttpError(e)
-        ? 'Gagal mengunduh kalender. Coba lagi dalam beberapa saat.'
-        : NETWORK_ERROR, 12000);
+        ? { text: 'Gagal mengunduh kalender. Coba lagi dalam beberapa saat.' } // FEAT-002: key
+        : { key: 'errNetwork' }, 12000);
     }
   };
 
   // Compute KPIs
   const total = documents.length;
-  const expired = documents.filter(d => getExpiryInfo(d.expiration_date, dateFormat).status === 'expired').length;
-  const expiring = documents.filter(d => getExpiryInfo(d.expiration_date, dateFormat).status === 'warning').length;
-  const active = documents.filter(d => getExpiryInfo(d.expiration_date, dateFormat).status === 'active').length;
+  const expired = documents.filter(d => getExpiryInfo(d.expiration_date, dateFormat, locale).status === 'expired').length;
+  const expiring = documents.filter(d => getExpiryInfo(d.expiration_date, dateFormat, locale).status === 'warning').length;
+  const active = documents.filter(d => getExpiryInfo(d.expiration_date, dateFormat, locale).status === 'active').length;
 
   // Filter + search, then default-sort by urgency: expired first (most
   // overdue on top), then soonest expiry; null-expiry rows last — the list
   // is a countdown queue, not API order (critique P1 #3).
   const filtered = documents
     .filter(doc => {
-      const expiry = getExpiryInfo(doc.expiration_date, dateFormat);
+      const expiry = getExpiryInfo(doc.expiration_date, dateFormat, locale);
       const matchesTab = filterTab === 'all' ||
         (filterTab === 'active' && expiry.status === 'active') ||
         (filterTab === 'expiring' && expiry.status === 'warning') ||
@@ -307,7 +309,7 @@ export default function ContractMonitor() {
         (doc.company_name || '').toLowerCase().includes(q);
       return matchesTab && matchesSearch;
     })
-    .map(doc => ({ doc, daysLeft: getExpiryInfo(doc.expiration_date, dateFormat).daysLeft }))
+    .map(doc => ({ doc, daysLeft: getExpiryInfo(doc.expiration_date, dateFormat, locale).daysLeft }))
     .sort((a, b) => (a.daysLeft ?? Infinity) - (b.daysLeft ?? Infinity))
     .map(x => x.doc);
 
@@ -317,12 +319,12 @@ export default function ContractMonitor() {
     const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
     const header = ['Berkas', 'Perusahaan', 'Tanggal Kedaluwarsa', 'Status', 'Sisa Hari'];
     const rows = filtered.map(doc => {
-      const expiry = getExpiryInfo(doc.expiration_date, dateFormat);
+      const expiry = getExpiryInfo(doc.expiration_date, dateFormat, locale);
       return [
         doc.filename,
         doc.company_name || 'Tidak terdeteksi',
-        doc.expiration_date ? formatDateWith(dateFormat, new Date(doc.expiration_date), 'short') : 'Tidak terdeteksi',
-        expiryStatusWord(expiry.status),
+        doc.expiration_date ? formatDateWith(dateFormat, new Date(doc.expiration_date), 'short', locale) : 'Tidak terdeteksi',
+        expiryStatusWord(expiry.status, locale),
         expiry.daysLeft === null ? '' : String(expiry.daysLeft),
       ].map(esc).join(',');
     });
@@ -407,7 +409,7 @@ export default function ContractMonitor() {
                 <span className="cm-jobs-main">
                   <span className="cm-jobs-name" title={job.filename}>{job.filename}</span>
                   {job.status === 'error' && job.error && (
-                    <span className="cm-jobs-error">{job.error}</span>
+                    <span className="cm-jobs-error">{msg(t, job.error)}</span>
                   )}
                   {job.status === 'interrupted' && (
                     <span className="cm-jobs-note">Terputus oleh muat ulang halaman — unggah ulang dokumen untuk mencoba lagi.</span>
@@ -528,7 +530,7 @@ export default function ContractMonitor() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {filtered.map(doc => {
-            const expiry = getExpiryInfo(doc.expiration_date, dateFormat);
+            const expiry = getExpiryInfo(doc.expiration_date, dateFormat, locale);
             const isViewing = viewingDoc?.id === doc.id;
             return (
               <div key={doc.id}>
@@ -670,7 +672,7 @@ export default function ContractMonitor() {
               }
               setDocuments(prev => prev.filter(d => d.id !== deleteDoc.id));
               setViewingDoc(v => (v?.id === deleteDoc.id ? null : v));
-              notify('success', `"${deleteDoc.filename}" dihapus dari monitoring.`, 6000);
+              notify('success', { text: `"${deleteDoc.filename}" dihapus dari monitoring.` }, 6000); // FEAT-002: key
             },
           }}
           onClose={() => setDeleteDoc(null)}
@@ -687,7 +689,7 @@ export default function ContractMonitor() {
             setDocuments(prev => prev.map(d =>
               d.id === editDoc.id ? { ...d, company_name: companyName, expiration_date: expirationDate } : d
             ));
-            notify('success', 'Metadata dokumen diperbarui.', 6000);
+            notify('success', { text: 'Metadata dokumen diperbarui.' }, 6000); // FEAT-002: key
           }}
         />
       )}

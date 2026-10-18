@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { MessageSquare, ShieldCheck, ChevronDown } from 'lucide-react';
 import api from '../services/api';
+import { useStrings } from '../i18n';
 
 interface Activity {
   id: string;
@@ -9,7 +10,6 @@ interface Activity {
   title: string;
   /** Raw ISO timestamp — never displayed; used only for sorting below. */
   date: string;
-  detail: string;
 }
 
 /** Row shape consumed from GET /api/chat-sessions (only the fields mapped below). */
@@ -28,6 +28,7 @@ interface ComplianceHistoryRow {
 
 export default function ActivityFeed() {
   const { user } = useAuth();
+  const t = useStrings();
   const [activities, setActivities] = useState<Activity[]>([]);
 
   useEffect(() => {
@@ -48,7 +49,6 @@ export default function ActivityFeed() {
             type: 'chat',
             title: c.title,
             date: c.created_at,
-            detail: 'started a new legal analysis chat'
           }));
           newActivities = [...newActivities, ...chatActivities];
         }
@@ -61,7 +61,6 @@ export default function ActivityFeed() {
             type: 'compliance',
             title: c.filename,
             date: c.created_at,
-            detail: 'uploaded a document for compliance check'
           }));
           newActivities = [...newActivities, ...compActivities];
         }
@@ -81,17 +80,17 @@ export default function ActivityFeed() {
     <div className="activity-feed">
       <div className="activity-feed-header">
         <div>
-          <h3>Latest activities</h3>
-          <p>Today</p>
+          <h3>{t.actTitle}</h3>
+          <p>{t.actToday}</p>
         </div>
         <button className="filter-btn">
-          This week <ChevronDown size={14} />
+          {t.actWeek} <ChevronDown size={14} />
         </button>
       </div>
 
       <div className="activity-list">
         {activities.length === 0 ? (
-          <div className="empty-activity">No recent activity.</div>
+          <div className="empty-activity">{t.actEmpty}</div>
         ) : (
           activities.map((act) => (
             <div key={act.id} className="activity-item">
@@ -100,7 +99,7 @@ export default function ActivityFeed() {
               </div>
               <div className="activity-content">
                 <p>
-                  <strong>{user?.username || 'You'}</strong> {act.detail}
+                  <strong>{user?.username || t.actYou}</strong> {act.type === 'chat' ? t.actChat : t.actCompliance}
                 </p>
                 <span className="activity-title">{act.title}</span>
               </div>

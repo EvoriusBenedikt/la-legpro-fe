@@ -58,16 +58,17 @@ function App() {
   const t = useStrings();
   const mainRef = useRef<HTMLDivElement>(null);
   const wasAuthed = useRef(isAuthenticated);
-  const [signedInNote, setSignedInNote] = useState('');
+  // Flag, not text: the note is resolved at render so it follows the locale.
+  const [showSignedInNote, setShowSignedInNote] = useState(false);
   useEffect(() => {
     if (isAuthenticated && !wasAuthed.current) {
       mainRef.current?.focus();
-      setSignedInNote(t.signedInNote);
+      setShowSignedInNote(true);
     } else if (!isAuthenticated && wasAuthed.current) {
-      setSignedInNote('');
+      setShowSignedInNote(false);
     }
     wasAuthed.current = isAuthenticated;
-  }, [isAuthenticated, t.signedInNote]);
+  }, [isAuthenticated]);
 
   const isITAdmin = role === 'admin';
   const isSekretaris = role === 'sekretaris perusahaan';
@@ -77,7 +78,7 @@ function App() {
 
   if (!isAuthenticated) {
     return (
-      <Suspense fallback={<div style={{ padding: '48px', textAlign: 'center' }}>Loading…</div>}>
+      <Suspense fallback={<div style={{ padding: '48px', textAlign: 'center' }}>{t.appLoading}</div>}>
         {/* Keyed boundary (2026-10-12): a rejected lazy chunk (LandingPage /
             AuthLegacy) degrades to a reload panel instead of blanking the
             document; the pathname key remounts it fresh on navigation. */}
@@ -118,10 +119,10 @@ function App() {
             tabIndex={-1}
             ref={mainRef}
           >
-            <span className="visually-hidden" role="status">{signedInNote}</span>
+            <span className="visually-hidden" role="status">{showSignedInNote ? t.signedInNote : ''}</span>
             <Suspense fallback={
               <div style={{ padding: '24px' }}>
-                <LoadingOrb label="Memuat..." />
+                <LoadingOrb label={t.appLoading} />
               </div>
             }>
             <div className="tab-panel--active" ref={scrollerRef}>

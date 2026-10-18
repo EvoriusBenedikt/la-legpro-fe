@@ -8,8 +8,8 @@ import api, { isAbortError, isTimeoutError, isNetworkError, uploadAttachment, li
 import type { AttachmentMeta } from '../services/api';
 import { PendingChipRow, MessageAttachmentChips } from './ChatAttachments';
 import type { PendingAttachment } from './ChatAttachments';
-import { getSettings } from '../settings';
-import { useStrings, getLocale, fill, STRINGS, GREETING_POOLS } from '../i18n';
+import { getSettings, type Locale } from '../settings';
+import { useStrings, useLocale, fill, msg, STRINGS, GREETING_POOLS, type Dict, type Msg, type StringKey } from '../i18n';
 import { useAuth } from '../hooks/useAuth';
 import { useJobStatus } from '../context/JobStatusContext';
 import { useContractUpload } from '../hooks/useContractUpload';
@@ -45,6 +45,12 @@ interface Message {
       never as an AI-shaped apology bubble — and excluded from the LLM
       context of later requests. */
   kind?: 'greeting' | 'error';
+  /* i18n (2026-10-14): an 'error' row persists WHICH error it was, not its
+     translated sentence, so it re-renders in the active language after a
+     switch (the old build froze the text in the language of the failure).
+     `content` stays only as the fallback for rows saved before this. */
+  errorKey?: StringKey;
+  errorParams?: Record<string, string | number>;
   /* Chat attachments (2026-10-12): server attachment ids that rode with
      this USER message. Replayed in the /api/chat window so later turns can
      still recall the files. Absent on pre-feature stored history. */
@@ -53,7 +59,13 @@ interface Message {
 
 interface Conversation {
   id: string;
+  /* '' while the title is still the auto-generated default: the display
+     title is then derived at render from `autoTitleN` (see convTitle), so
+     "Percakapan 2" becomes "Conversation 2" after a language switch.
+     Renamed / LLM-titled conversations store their literal text here. */
   title: string;
+  /* n for "Conversation {n}"; absent/0 = the "New conversation" default. */
+  autoTitleN?: number;
   createdAt: number;
   updatedAt: number;
   messages: Message[];
@@ -66,9 +78,9 @@ interface Conversation {
 /* Glass-dialog state — replaces native window.confirm/prompt/alert with a
    system-consistent modal (see AppDialog at the bottom of this file). */
 type DialogState =
-  | { kind: 'confirm'; title: string; body?: string; confirmLabel: string; danger?: boolean; onConfirm: () => void }
-  | { kind: 'prompt'; title: string; label: string; initialValue: string; onSubmit: (value: string) => void }
-  | { kind: 'alert'; title: string; body: string };
+  | { kind: 'confirm'; title: Msg; body?: Msg; confirmLabel: Msg; danger?: boolean; onConfirm: () => void }
+  | { kind: 'prompt'; title: Msg; label: Msg; initialValue: string; onSubmit: (value: string) => void }
+  | { kind: 'alert'; title: Msg; body: Msg };
 
 type DrawerDoc = {
   id: string;
@@ -141,7 +153,7 @@ const REL_MED = 1.5;
    keeps one greeting across renders and reloads while each new chat
    rotates. Templates substitute {time} (the salutation above) and
    {offer} (opGreetOffer). */
-function greetingContent(locale: ReturnType<typeof getLocale>, variant: number): string {
+function greetingContent(locale: Locale, variant: number): string {
   const s = STRINGS[locale];
   const h = new Date().getHours();
   const time = h < 5 || h >= 18 ? s.opGreetNight : h < 12 ? s.opGreetMorning : s.opGreetAfternoon;
@@ -275,11 +287,21 @@ interface InFlightEntry {
 }
 const inFlightGenerations = new Map<string, InFlightEntry>();
 
-function createConversation(title?: string): Conversation {
+/* Display title of a conversation. Auto-generated defaults are stored as an
+   empty title (+ optional autoTitleN) and resolved here with the live
+   dictionary, so they follow the language. Titles saved by older builds are
+   literal text and are shown as-is. */
+function convTitle(c: Conversation, t: Dict): string {
+  if (c.title) return c.title;
+  return c.autoTitleN ? fill(t.opNewTitle, { n: c.autoTitleN }) : t.opDefaultTitle;
+}
+
+function createConversation(autoTitleN?: number): Conversation {
   const now = Date.now();
   return {
     id: `conv_${now}_${Math.random().toString(36).slice(2, 7)}`,
-    title: title ?? STRINGS[getLocale()].opDefaultTitle,
+    title: '',
+    autoTitleN,
     createdAt: now,
     updatedAt: now,
     messages: [],
@@ -288,6 +310,7 @@ function createConversation(title?: string): Conversation {
 
 export default function LegalOpinion() {
   const t = useStrings();
+  const locale = useLocale();
   const { user } = useAuth();
   const { addJob, updateJob, clearJob } = useJobStatus();
   const { notify } = useContractUpload();
@@ -700,7 +723,7 @@ export default function LegalOpinion() {
     const query = conversationSearch.trim().toLowerCase();
     const base = query
       ? conversations.filter((c) => {
-          const inTitle = c.title.toLowerCase().includes(query);
+          const inTitle = convTitle(c, t).toLowerCase().includes(query);
           const inMessages = c.messages.some(m => m.content.toLowerCase().includes(query));
           return inTitle || inMessages;
         })
@@ -709,11 +732,11 @@ export default function LegalOpinion() {
        Pinned/unpinned split happens after, so both sections share the
        order (Claude's grammar). */
     return [...base].sort((a, b) => {
-      if (sortMode === 'name') return a.title.localeCompare(b.title);
+      if (sortMode === 'name') return convTitle(a, t).localeCompare(convTitle(b, t));
       if (sortMode === 'created') return b.createdAt - a.createdAt;
       return b.updatedAt - a.updatedAt;
     });
-  }, [conversationSearch, conversations, sortMode]);
+  }, [conversationSearch, conversations, sortMode, t]);
 
   const pinnedConversations = useMemo(
     () => filteredConversations.filter((c) => c.pinned),
@@ -864,6 +887,8 @@ export default function LegalOpinion() {
       const userText = prefix.filter(m => m.role === 'user').slice(-1)[0]?.content ?? '';
       persistConversationUpdate((c) => {
         const shouldSetTitle =
+          !c.title ||
+          // Legacy: titles stored as translated literals by older builds.
           c.title.startsWith('Percakapan') ||
           c.title.startsWith('Conversation') ||
           c.title === 'New conversation' ||
@@ -892,18 +917,22 @@ export default function LegalOpinion() {
          UploadProvider (which lives above the router and is always mounted),
          so the user gets a visible nudge to come back and read the answer. */
       if (!mountedRef.current) {
-        notify('success', 'Jawaban opini legal siap — kembali ke halaman untuk membaca.', 8000);
+        notify('success', { key: 'opNotifyReady' }, 8000);
       }
     } catch (error) {
       console.error(error);
-      const s = STRINGS[getLocale()];
-      let content = s.opServerError;
+      /* Persist WHICH error this was (a key + params), never the translated
+         sentence: the row is saved to localStorage and must re-render in
+         whatever language is active when it is read (bug 2026-10-14). */
+      let errorKey: StringKey = 'opServerError';
+      let errorParams: Record<string, string | number> | undefined;
       if (isAbortError(error)) {
-        content = s.opErrorAborted;
+        errorKey = 'opErrorAborted';
       } else if (isTimeoutError(error)) {
-        content = fill(s.opErrorTimeout, { s: Math.round(CHAT_TIMEOUT_MS / 1000) });
+        errorKey = 'opErrorTimeout';
+        errorParams = { s: Math.round(CHAT_TIMEOUT_MS / 1000) };
       } else if (isNetworkError(error)) {
-        content = s.opErrorNetwork;
+        errorKey = 'opErrorNetwork';
       }
       persistConversationUpdate((c) => ({
         ...c,
@@ -914,7 +943,11 @@ export default function LegalOpinion() {
             id: Date.now() + 1,
             role: 'ai',
             kind: 'error',
-            content
+            // Empty on purpose: the row renders from errorKey. Rows saved
+            // by older builds keep their literal `content` as the fallback.
+            content: '',
+            errorKey,
+            errorParams
           }
         ]
       }));
@@ -925,7 +958,7 @@ export default function LegalOpinion() {
         else updateJob(jobId, 'failed');
       }
       if (!mountedRef.current && !isAbortError(error)) {
-        notify('error', 'Opini legal gagal diproses — buka halaman untuk melihat detailnya.', 12000);
+        notify('error', { key: 'opNotifyFailed' }, 12000);
       }
     } finally {
       inFlightGenerations.delete(conversationId);
@@ -943,7 +976,7 @@ export default function LegalOpinion() {
   };
 
   const handleCreateConversation = () => {
-    const convo = createConversation(fill(t.opNewTitle, { n: conversations.length + 1 }));
+    const convo = createConversation(conversations.length + 1);
     setConversations(prev => [convo, ...prev]);
     setActiveConversationId(convo.id);
     setInput('');
@@ -955,9 +988,9 @@ export default function LegalOpinion() {
   const handleClearConversation = (conversationId: string) => {
     setDialog({
       kind: 'confirm',
-      title: t.opClearTitle,
-      body: t.opClearBody,
-      confirmLabel: t.opClearConfirm,
+      title: { key: 'opClearTitle' },
+      body: { key: 'opClearBody' },
+      confirmLabel: { key: 'opClearConfirm' },
       danger: true,
       onConfirm: () => {
         updateConversation(conversationId, (c) => ({
@@ -978,9 +1011,9 @@ export default function LegalOpinion() {
     if (!target) return;
     setDialog({
       kind: 'prompt',
-      title: t.opRenameTitle,
-      label: t.opRenameLabel,
-      initialValue: target.title,
+      title: { key: 'opRenameTitle' },
+      label: { key: 'opRenameLabel' },
+      initialValue: convTitle(target, t),
       onSubmit: (value) => {
         const cleanTitle = value.trim();
         if (!cleanTitle) return;
@@ -997,8 +1030,8 @@ export default function LegalOpinion() {
     if (conversations.length <= 1) {
       setDialog({
         kind: 'alert',
-        title: t.opDeleteLastTitle,
-        body: t.opDeleteLastBody,
+        title: { key: 'opDeleteLastTitle' },
+        body: { key: 'opDeleteLastBody' },
       });
       return;
     }
@@ -1007,9 +1040,16 @@ export default function LegalOpinion() {
     if (!target) return;
     setDialog({
       kind: 'confirm',
-      title: t.opDeleteTitle,
-      body: fill(t.opDeleteBody, { t: target.title }),
-      confirmLabel: t.opDeleteConfirm,
+      title: { key: 'opDeleteTitle' },
+      // The title param is itself a Msg-free literal when the user named it,
+      // or an auto title that must follow the language: keep it as a Msg.
+      body: {
+        key: 'opDeleteBody',
+        params: { t: target.title ? { text: target.title } : target.autoTitleN
+          ? { key: 'opNewTitle', params: { n: target.autoTitleN } }
+          : { key: 'opDefaultTitle' } },
+      },
+      confirmLabel: { key: 'opDeleteConfirm' },
       danger: true,
       onConfirm: () => {
         const remaining = conversations.filter((c) => c.id !== conversationId);
@@ -1051,9 +1091,9 @@ export default function LegalOpinion() {
       // Deleting ALL conversations — confirm then auto-create a fresh one
       setDialog({
         kind: 'confirm',
-        title: t.opDeleteAllTitle,
-        body: fill(t.opDeleteAllBody, { n: selectedIds.size }),
-        confirmLabel: t.opDeleteConfirm,
+        title: { key: 'opDeleteAllTitle' },
+        body: { key: 'opDeleteAllBody', params: { n: selectedIds.size } },
+        confirmLabel: { key: 'opDeleteConfirm' },
         danger: true,
         onConfirm: () => {
           const fresh = createConversation();
@@ -1067,9 +1107,9 @@ export default function LegalOpinion() {
     }
     setDialog({
       kind: 'confirm',
-      title: t.opDeleteManyTitle,
-      body: fill(t.opDeleteManyBody, { n: selectedIds.size }),
-      confirmLabel: t.opDeleteConfirm,
+      title: { key: 'opDeleteManyTitle' },
+      body: { key: 'opDeleteManyBody', params: { n: selectedIds.size } },
+      confirmLabel: { key: 'opDeleteConfirm' },
       danger: true,
       onConfirm: () => {
         const remaining = conversations.filter((c) => !selectedIds.has(c.id));
@@ -1114,7 +1154,7 @@ export default function LegalOpinion() {
     if (!files || files.length === 0) return;
     let convId = activeConversation?.id;
     if (!convId) {
-      const convo = createConversation(fill(t.opNewTitle, { n: conversations.length + 1 }));
+      const convo = createConversation(conversations.length + 1);
       setConversations((prev) => [convo, ...prev]);
       setActiveConversationId(convo.id);
       convId = convo.id;
@@ -1211,7 +1251,7 @@ export default function LegalOpinion() {
       .catch(() => undefined);
 
     const opJobId = `opinion-${now}`;
-    addJob(opJobId, 'uploading', userContent.slice(0, 48) || 'Opini Legal', 'opinion');
+    addJob(opJobId, 'uploading', userContent.slice(0, 48) || t.notifTypeOpinion, 'opinion');
     await runGeneration(activeConversation.id, [...existingMessages, userMessage], opJobId);
   };
 
@@ -1401,7 +1441,7 @@ export default function LegalOpinion() {
                       <Square size={16} className="conv-check" />
                     ))}
                   <span className="conv-text">
-                    <div className="conversation-title">{conv.title}</div>
+                    <div className="conversation-title">{convTitle(conv, t)}</div>
                     <div className="conversation-preview">
                       {stripMarkdown(conv.messages[conv.messages.length - 1]?.content ?? '') ||
                         t.opNoPreview}
@@ -1482,7 +1522,7 @@ export default function LegalOpinion() {
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {normalizeMarkdown(
                       messages.length === 0
-                        ? greetingContent(getLocale(), greetingVariant(activeConversationId))
+                        ? greetingContent(locale, greetingVariant(activeConversationId))
                         : messages[0].content
                     )}
                   </ReactMarkdown>
@@ -1498,7 +1538,11 @@ export default function LegalOpinion() {
                 <div key={msg.id} className="message-error" role="alert">
                   <AlertCircle size={18} className="message-error-icon" aria-hidden="true" />
                   <div className="message-error-body">
-                    <p>{msg.content}</p>
+                    <p>
+                      {msg.errorKey
+                        ? fill(t[msg.errorKey], msg.errorParams ?? {})
+                        : msg.content}
+                    </p>
                     <button
                       type="button"
                       className="btn btn-primary message-error-retry"
@@ -1901,10 +1945,10 @@ function AppDialog({ dialog, onClose }: { dialog: DialogState; onClose: () => vo
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <h3 className="confirm-modal-title" id={titleId}>{dialog.title}</h3>
+        <h3 className="confirm-modal-title" id={titleId}>{msg(t, dialog.title)}</h3>
         {dialog.kind === 'prompt' ? (
           <>
-            <label className="confirm-modal-label" htmlFor={`${titleId}-input`}>{dialog.label}</label>
+            <label className="confirm-modal-label" htmlFor={`${titleId}-input`}>{msg(t, dialog.label)}</label>
             <input
               id={`${titleId}-input`}
               ref={inputRef}
@@ -1916,12 +1960,12 @@ function AppDialog({ dialog, onClose }: { dialog: DialogState; onClose: () => vo
             />
           </>
         ) : (
-          <p className="confirm-modal-body">{dialog.body}</p>
+          <p className="confirm-modal-body">{dialog.body ? msg(t, dialog.body) : null}</p>
         )}
         <div className="confirm-modal-actions">
           {dialog.kind === 'alert' ? (
             <button ref={defaultBtnRef} type="button" className="btn btn-primary" onClick={onClose}>
-              OK
+              {t.opDialogOk}
             </button>
           ) : dialog.kind === 'prompt' ? (
             <>
@@ -1938,7 +1982,7 @@ function AppDialog({ dialog, onClose }: { dialog: DialogState; onClose: () => vo
                 className={`btn ${dialog.danger ? 'btn-danger' : 'btn-primary'}`}
                 onClick={() => { dialog.onConfirm(); onClose(); }}
               >
-                {dialog.confirmLabel}
+                {msg(t, dialog.confirmLabel)}
               </button>
             </>
           )}

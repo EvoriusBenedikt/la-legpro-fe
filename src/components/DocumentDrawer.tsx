@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, FileText, List, Eye, AlertCircle, BookOpen, ChevronRight, BarChart2, FolderOpen, ExternalLink } from 'lucide-react';
 import api from '../services/api';
 import { useDialogA11y } from '../hooks/useDialogA11y';
-import { useStrings, getLocale, fill, STRINGS } from '../i18n';
+import { useStrings, fill, statusLabel, type Dict } from '../i18n';
 import LoadingOrb from './LoadingOrb';
 
 interface OutlineItem {
@@ -52,6 +52,22 @@ const STATUS_COLORS: Record<string, string> = {
   'Dicabut': 'status-chip--revoked',
 };
 
+/* Failure state, kept language-neutral. Async catches record WHAT failed
+   (an HTTP status, a network drop, a missing file or a raw backend message)
+   and the JSX resolves the sentence with the live dictionary, so an error
+   raised in one language re-renders in the other after a switch. */
+type Cause = { status: number } | { network: true };
+type DeepError = { cause: Cause } | { raw: string };
+
+function causeText(t: Dict, cause: Cause): string {
+  return 'status' in cause ? fill(t.drawerErrServer, { code: cause.status }) : t.drawerErrNetwork;
+}
+
+function causeOf(err: unknown): Cause {
+  const status = (err as { response?: { status?: number } } | null)?.response?.status;
+  return typeof status === 'number' ? { status } : { network: true };
+}
+
 export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
   const [activeTab, setActiveTab] = useState<DrawerTab>('overview');
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
@@ -62,14 +78,16 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
   // 2026-10-07): the catch used to be console-only, leaving a bare
   // "Gagal memuat PDF." with no reason and no way to retry. retryable=false
   // only for 404 — a missing corpus file won't reappear on a second click.
-  const [pdfError, setPdfError] = useState<{ msg: string; retryable: boolean } | null>(null);
+  const [pdfError, setPdfError] = useState<{ missing: boolean } | null>(null);
+  // Overview-analysis failure; the overview sentence is built at render.
+  const [analysisError, setAnalysisError] = useState<Cause | null>(null);
   const [pdfAttempt, setPdfAttempt] = useState(0);
   const [pasalData, setPasalData] = useState<PasalItem[]>([]);
   const [isDeepAnalyzing, setIsDeepAnalyzing] = useState(false);
-  const [deepError, setDeepError] = useState<string | null>(null);
+  const [deepError, setDeepError] = useState<DeepError | null>(null);
   /* Drawer copy follows the app locale (2026-10-08 critique remediation
-     P2-5); async catches read STRINGS[getLocale()] at throw time because
-     hooks cannot run inside effect callbacks. */
+     P2-5). Async catches store language-neutral causes (see Cause above),
+     never translated text, and the JSX resolves them with this dictionary. */
   const t = useStrings();
   /* Roving-tabindex tablist: refs for the arrow-key focus moves. */
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -87,6 +105,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
     // effect body's direct call graph. Same pattern as LegalRepository's PDF effect.
     (async () => {
       setAnalysis(null);
+      setAnalysisError(null);
       setActiveTab('overview');
       setIsAnalyzing(true);
       setPdfBlobUrl(null);
@@ -104,15 +123,12 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
         .then(data => setAnalysis(data))
         .catch(err => {
           console.error('Analyze error:', err);
-          // Indonesian user-facing copy; technical detail stays in the console
-          // (critique re-score P1 copy pass).
-          const s = STRINGS[getLocale()];
-          const msg = err?.response
-            ? fill(s.drawerErrServer, { code: err.response.status })
-            : s.drawerErrNetwork;
+          // User-facing copy is resolved at render; technical detail stays in
+          // the console (critique re-score P1 copy pass).
+          setAnalysisError(causeOf(err));
           setAnalysis({
             total_pasal: 0,
-            overview: fill(s.drawerErrAnalyze, { msg }),
+            overview: '',
             status: { dicabut: [], diubah_dengan: [] },
             outline: [],
           });
@@ -145,10 +161,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
           console.error('PDF load error:', err);
           // 404 = the corpus file is genuinely not on the server (a data gap,
           // not the user's fault); anything else gets the house network copy.
-          const s = STRINGS[getLocale()];
-          setPdfError(err?.response?.status === 404
-            ? { msg: s.drawerErrPdfMissing, retryable: false }
-            : { msg: s.drawerErrPdfNet, retryable: true });
+          setPdfError({ missing: err?.response?.status === 404 });
         })
         .finally(() => setIsPdfLoading(false));
     })();
@@ -173,16 +186,12 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
       })
         .then(r => r.data)
         .then(data => {
-          if (data.error) setDeepError(data.error);
+          if (data.error) setDeepError({ raw: String(data.error) });
           setPasalData(data.pasals || []);
         })
         .catch(err => {
           console.error('Deep analysis error:', err);
-          const s = STRINGS[getLocale()];
-          const msg = err?.response
-            ? fill(s.drawerErrServer, { code: err.response.status })
-            : s.drawerErrNetwork;
-          setDeepError(fill(s.drawerErrDeep, { msg }));
+          setDeepError({ cause: causeOf(err) });
         })
         .finally(() => setIsDeepAnalyzing(false));
     })();
@@ -318,7 +327,11 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
                     <div className="skeleton-line short" />
                   </div>
                 ) : (
-                  <p className="drawer-section-body">{analysis?.overview}</p>
+                  <p className="drawer-section-body">
+                    {analysisError
+                      ? fill(t.drawerErrAnalyze, { msg: causeText(t, analysisError) })
+                      : analysis?.overview}
+                  </p>
                 )}
               </div>
 
@@ -390,8 +403,12 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
               ) : (
                 <div className="empty-pdf">
                   <FileText size={48} style={{ opacity: 0.3 }} />
-                  <p>{pdfError?.msg ?? t.drawerPdfFailed}</p>
-                  {(pdfError?.retryable ?? true) && (
+                  <p>
+                    {pdfError
+                      ? (pdfError.missing ? t.drawerErrPdfMissing : t.drawerErrPdfNet)
+                      : t.drawerPdfFailed}
+                  </p>
+                  {!pdfError?.missing && (
                     <button className="btn btn-primary" onClick={() => setPdfAttempt(a => a + 1)}>
                       {t.drawerTryAgain}
                     </button>
@@ -443,7 +460,11 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
               ) : deepError ? (
                 <div className="empty-pdf">
                   <AlertCircle size={40} style={{ opacity: 0.5, color: 'var(--danger)' }} />
-                  <p style={{ color: 'var(--danger-text)' }}>{deepError}</p>
+                  <p style={{ color: 'var(--danger-text)' }}>
+                    {'raw' in deepError
+                      ? deepError.raw
+                      : fill(t.drawerErrDeep, { msg: causeText(t, deepError.cause) })}
+                  </p>
                 </div>
               ) : pasalData.length === 0 ? (
                 <div className="empty-pdf">
@@ -462,7 +483,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
                         <div className="pasal-card-num">({idx + 1})</div>
                         <span className="pasal-card-label">{item.pasal}</span>
                         <span className={`status-chip ${STATUS_COLORS[item.status] ?? 'status-chip--unchanged'}`}>
-                          {item.status}
+                          {statusLabel(t, item.status)}
                         </span>
                       </div>
 
