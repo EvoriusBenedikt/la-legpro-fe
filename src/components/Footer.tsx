@@ -146,7 +146,7 @@ export default function Footer() {
                   <div className="footer-section" key={section.key}>
                     <h3>{t[section.key]}</h3>
                     {Array.from({ length: section.items }, (_, j) => (
-                      <a key={j} href="#" className="footer-link">Placeholder</a>
+                      <a key={j} href="#" className="footer-link">{t.footPlaceholder}</a>
                     ))}
                   </div>
                 ))}

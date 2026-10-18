@@ -241,8 +241,8 @@ const TrendChart = memo(function TrendChart({ data }: { data: MetricPointData[] 
   return (
     <>
       <div className="chart-legend">
-        <span className="chart-legend-item"><span className="chart-swatch series-cpu" aria-hidden="true" />CPU (%)</span>
-        <span className="chart-legend-item"><span className="chart-swatch series-ram" aria-hidden="true" />RAM (%)</span>
+        <span className="chart-legend-item"><span className="chart-swatch series-cpu" aria-hidden="true" />{t.monLegendCpu}</span>
+        <span className="chart-legend-item"><span className="chart-swatch series-ram" aria-hidden="true" />{t.monLegendRam}</span>
       </div>
       <div className="chart-body" role="img" aria-label={t.monTrendAria}>
         <ResponsiveContainer width="100%" height="100%">
@@ -255,8 +255,8 @@ const TrendChart = memo(function TrendChart({ data }: { data: MetricPointData[] 
               labelFormatter={(v) => formatDateTime(String(v))}
               cursor={{ stroke: 'currentColor', strokeOpacity: 0.2 }}
             />
-            <Line className="series-cpu" type="monotone" dataKey="cpu" name="CPU (%)" stroke="currentColor" strokeWidth={2} dot={false} isAnimationActive={false} />
-            <Line className="series-ram" type="monotone" dataKey="ram" name="RAM (%)" stroke="currentColor" strokeWidth={2} dot={false} isAnimationActive={false} />
+            <Line className="series-cpu" type="monotone" dataKey="cpu" name={t.monLegendCpu} stroke="currentColor" strokeWidth={2} dot={false} isAnimationActive={false} />
+            <Line className="series-ram" type="monotone" dataKey="ram" name={t.monLegendRam} stroke="currentColor" strokeWidth={2} dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
