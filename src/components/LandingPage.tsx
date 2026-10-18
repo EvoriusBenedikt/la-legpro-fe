@@ -61,8 +61,8 @@ export default function LandingPage() {
         <Link to="/" className="lp-brand"><span className="lp-brand-mark"><Scale size={18} /></span>Legal Analyzer</Link>
         <nav className="lp-links"><a href="#capabilities">{nav('lpCapabilities')}</a><a href="#how">{nav('lpHow')}</a><a href="#results">{nav('lpResults')}</a><a href="#security">{nav('lpSecurity')}</a></nav>
         <div className="auths-lang lp-lang" role="group" aria-label={t.secLanguage}>
-          <button type="button" className={`auths-lang-btn${locale === 'id' ? ' is-active' : ''}`} aria-pressed={locale === 'id'} aria-label="Bahasa Indonesia" onClick={() => setSetting('locale', 'id')}><FlagId /></button>
-          <button type="button" className={`auths-lang-btn${locale === 'en' ? ' is-active' : ''}`} aria-pressed={locale === 'en'} aria-label="English" onClick={() => setSetting('locale', 'en')}><FlagUs /></button>
+          <button type="button" className={`auths-lang-btn${locale === 'id' ? ' is-active' : ''}`} aria-pressed={locale === 'id'} aria-label={t.langIndonesian} onClick={() => setSetting('locale', 'id')}><FlagId /></button>
+          <button type="button" className={`auths-lang-btn${locale === 'en' ? ' is-active' : ''}`} aria-pressed={locale === 'en'} aria-label={t.langEnglish} onClick={() => setSetting('locale', 'en')}><FlagUs /></button>
         </div>
         <Link to="/login" className="lp-btn lp-btn-ghost lp-btn-sm">{t.lpSignIn}</Link>
         <a href="#demo" className="lp-btn lp-btn-primary lp-btn-sm">{t.lpRequestDemo}</a>

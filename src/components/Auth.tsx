@@ -318,7 +318,7 @@ export default function Auth() {
             type="button"
             className={`auths-lang-btn${locale === 'id' ? ' is-active' : ''}`}
             aria-pressed={locale === 'id'}
-            aria-label="Bahasa Indonesia"
+            aria-label={t.langIndonesian}
             onClick={() => setSetting('locale', 'id')}
           >
             <FlagId />
@@ -327,7 +327,7 @@ export default function Auth() {
             type="button"
             className={`auths-lang-btn${locale === 'en' ? ' is-active' : ''}`}
             aria-pressed={locale === 'en'}
-            aria-label="English"
+            aria-label={t.langEnglish}
             onClick={() => setSetting('locale', 'en')}
           >
             <FlagUs />

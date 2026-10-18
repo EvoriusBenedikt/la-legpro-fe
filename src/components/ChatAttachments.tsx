@@ -59,7 +59,7 @@ export function PendingChipRow({
         const busy = c.status === 'uploading' || c.status === 'processing';
         const failed = c.status === 'failed';
         const failedText = failed
-          ? fill(t.opAttachFailed, { e: ERROR_TEXT[c.error ?? ''] ?? c.error ?? '?' })
+          ? fill(t.opAttachFailed, { e: ERROR_TEXT[c.error ?? ''] ?? t.errUnexpected })
           : '';
         return (
           <span

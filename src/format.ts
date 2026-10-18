@@ -67,9 +67,10 @@ export function formatDateWith(
   if (Number.isNaN(d.getTime())) return INVALID;
   if (fmt === 'iso') return isoDate(d);
   if (style === 'short') {
-    return d.toLocaleDateString(locale ? localeTag(locale) : fmt, {
-      day: 'numeric', month: 'short', year: 'numeric',
-    });
+    const month = d.toLocaleDateString(locale ? localeTag(locale) : fmt, { month: 'short' });
+    const day = String(d.getDate());
+    const year = String(d.getFullYear());
+    return fmt === 'en-US' ? `${month} ${day}, ${year}` : `${day} ${month} ${year}`;
   }
   return d.toLocaleDateString(fmt, { day: 'numeric', month: 'numeric', year: 'numeric' });
 }

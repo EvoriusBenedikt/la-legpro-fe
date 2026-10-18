@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom';
 import { X, FileText, List, Eye, AlertCircle, BookOpen, ChevronRight, BarChart2, FolderOpen, ExternalLink } from 'lucide-react';
 import api from '../services/api';
 import { useDialogA11y } from '../hooks/useDialogA11y';
-import { useStrings, fill, statusLabel, type Dict } from '../i18n';
+import { useStrings, fill, msg, statusLabel, type Dict, type Msg } from '../i18n';
+import { apiErrorMsg, mapApiDetail } from '../apiErrors';
 import LoadingOrb from './LoadingOrb';
 
 interface OutlineItem {
@@ -57,15 +58,15 @@ const STATUS_COLORS: Record<string, string> = {
    and the JSX resolves the sentence with the live dictionary, so an error
    raised in one language re-renders in the other after a switch. */
 type Cause = { status: number } | { network: true };
-type DeepError = { cause: Cause } | { raw: string };
-
-function causeText(t: Dict, cause: Cause): string {
-  return 'status' in cause ? fill(t.drawerErrServer, { code: cause.status }) : t.drawerErrNetwork;
-}
+type DeepError = { message: Msg };
 
 function causeOf(err: unknown): Cause {
   const status = (err as { response?: { status?: number } } | null)?.response?.status;
   return typeof status === 'number' ? { status } : { network: true };
+}
+
+function causeText(t: Dict, cause: Cause): string {
+  return 'status' in cause ? fill(t.drawerErrServer, { code: cause.status }) : t.drawerErrNetwork;
 }
 
 export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
@@ -186,12 +187,20 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
       })
         .then(r => r.data)
         .then(data => {
-          if (data.error) setDeepError({ raw: String(data.error) });
+          if (data.error) {
+            const detail = String(data.error);
+            const mapped = mapApiDetail(detail);
+            if (mapped) setDeepError({ message: mapped });
+            else {
+              console.error('Unmapped deep analysis error:', detail);
+              setDeepError({ message: { key: 'errUnexpected' } });
+            }
+          }
           setPasalData(data.pasals || []);
         })
         .catch(err => {
           console.error('Deep analysis error:', err);
-          setDeepError({ cause: causeOf(err) });
+          setDeepError({ message: apiErrorMsg(err, 'errUnexpected') });
         })
         .finally(() => setIsDeepAnalyzing(false));
     })();
@@ -461,9 +470,7 @@ export default function DocumentDrawer({ doc, onClose }: DocumentDrawerProps) {
                 <div className="empty-pdf">
                   <AlertCircle size={40} style={{ opacity: 0.5, color: 'var(--danger)' }} />
                   <p style={{ color: 'var(--danger-text)' }}>
-                    {'raw' in deepError
-                      ? deepError.raw
-                      : fill(t.drawerErrDeep, { msg: causeText(t, deepError.cause) })}
+                    {msg(t, deepError.message)}
                   </p>
                 </div>
               ) : pasalData.length === 0 ? (
