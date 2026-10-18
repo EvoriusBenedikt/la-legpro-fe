@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import LoadingOrb from './LoadingOrb';
 import DocumentDrawer from './DocumentDrawer';
-import { useStrings } from '../i18n';
+import { useStrings, msg, fill, plural, statusLabel, STRINGS, getLocale, type Dict, type Msg, type StringKey } from '../i18n';
 
 interface KGNode {
   id: string;
@@ -143,20 +143,31 @@ const RELATION_COLORS_DEEP: Record<string, string> = {
    identifier and leaked straight into the UI ("DITERBITKAN_OLEH", critique
    2026-10-07 minor). RELATION_COLORS* keys stay enum-based — only display
    text goes through here; unknown enums fall back to the raw value. */
-const RELATION_LABELS: Record<string, string> = {
-  MENCABUT: 'Mencabut',
-  MENGUBAH: 'Mengubah',
-  MERUJUK: 'Merujuk',
-  MENGATUR: 'Mengatur',
-  DITERBITKAN_OLEH: 'Diterbitkan oleh',
+const RELATION_LABEL_KEYS: Record<string, StringKey> = {
+  MENCABUT: 'kgRelMencabut',
+  MENGUBAH: 'kgRelMengubah',
+  MERUJUK: 'kgRelMerujuk',
+  MENGATUR: 'kgRelMengatur',
+  DITERBITKAN_OLEH: 'kgRelDiterbitkan',
 };
-const relationLabel = (rel: string): string => RELATION_LABELS[rel] ?? rel;
+const relationLabel = (t: Dict, rel: string): string =>
+  RELATION_LABEL_KEYS[rel] ? t[RELATION_LABEL_KEYS[rel]] : rel;
 
-const TYPE_LABELS: Record<string, string> = {
-  regulasi: 'Regulasi',
-  entitas: 'Entitas',
-  topik: 'Topik',
+const TYPE_LABEL_KEYS: Record<string, StringKey> = {
+  regulasi: 'kgTypeRegulasi',
+  entitas: 'kgTypeEntitas',
+  topik: 'kgTypeTopik',
 };
+/* relationsFor can synthesize type:'unknown' when an edge references a node
+   missing from the array — honest fallback instead of an empty badge. */
+const typeLabel = (t: Dict, type: string): string =>
+  TYPE_LABEL_KEYS[type] ? t[TYPE_LABEL_KEYS[type]] : t.kgTypeUnknown;
+
+/* vis-network tooltip text is imperative (set on the dataset, not rendered by
+   React): callers pass the dictionary for the locale active at the time, and
+   a locale effect in the component re-applies it after a language switch. */
+const nodeTooltip = (t: Dict, n: KGNode): string =>
+  n.doc_status ? fill(t.kgNodeTipStatus, { label: n.label, status: statusLabel(t, n.doc_status) }) : n.label;
 
 /* Regulation-status grammar — parity with LegalRepository's statusTone
    (fixed-vocabulary chips, critique remediation P0): 'Tidak Berlaku' rides
@@ -290,6 +301,7 @@ const NodeListCard = ({ node, connections, onNavigate }: {
   connections: { node: KGNode; rel: string }[];
   onNavigate: (id: string) => void;
 }) => {
+  const t = useStrings();
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
@@ -308,13 +320,13 @@ const NodeListCard = ({ node, connections, onNavigate }: {
               triplets frozen at light-theme hues — critique minor). */}
           <strong style={{ color: 'var(--text-primary)', fontSize: '1rem', fontFamily: node.type === 'regulasi' ? 'var(--font-mono)' : undefined }}>{node.label}</strong>
           <span style={{ ...STAMP_STYLE, padding: '4px 8px', borderRadius: '4px', whiteSpace: 'nowrap', background: `color-mix(in srgb, ${NODE_COLORS_DEEP[node.type] ?? 'var(--text-secondary)'} 12%, transparent)`, color: NODE_COLORS_DEEP[node.type] ?? 'var(--text-secondary)' }}>
-            {node.type.toUpperCase()}
+            {typeLabel(t, node.type)}
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-          {connections.length} relasi terhubung
+          {plural(t, 'kgConnectedRel', connections.length)}
           {node.doc_status && (
-            <span className={`status-chip ${statusTone(node.doc_status)}`}>{node.doc_status}</span>
+            <span className={`status-chip ${statusTone(node.doc_status)}`}>{statusLabel(t, node.doc_status)}</span>
           )}
         </div>
       </button>
@@ -330,14 +342,14 @@ const NodeListCard = ({ node, connections, onNavigate }: {
           >
             {/* The state glyphs are decorative — aria-expanded already carries
                 the state, so screen readers skip the characters. */}
-            {isExpanded ? <>Sembunyikan relasi <span aria-hidden="true">▲</span></> : <>Lihat relasi terhubung <span aria-hidden="true">▼</span></>}
+            {isExpanded ? <>{t.kgHideRelations} <span aria-hidden="true">▲</span></> : <>{t.kgShowRelations} <span aria-hidden="true">▼</span></>}
           </button>
 
           {isExpanded && (
             <div style={{ marginTop: '12px', maxHeight: '200px', overflowY: 'auto', background: 'var(--bg-element)', borderRadius: '6px', padding: '8px' }}>
               {connections.map((cn, i) => (
                 <div key={i} style={{ padding: '8px', borderBottom: i < connections.length - 1 ? '1px solid var(--border-color)' : 'none', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}><span style={{ color: RELATION_COLORS_DEEP[cn.rel] ?? 'var(--text-secondary)', fontWeight: 600 }}>{relationLabel(cn.rel)}</span> • {cn.node.type.toUpperCase()}</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}><span style={{ color: RELATION_COLORS_DEEP[cn.rel] ?? 'var(--text-secondary)', fontWeight: 600 }}>{relationLabel(t, cn.rel)}</span> • {typeLabel(t, cn.node.type).toUpperCase()}</div>
                   <button
                     type="button"
                     className="kg-node-link"
@@ -453,7 +465,7 @@ export default function KnowledgeGraph() {
 
   const [kgData, setKgData] = useState<KGData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<Msg | null>(null);
   const [search, setSearch] = useState(() => initialParams().q);
   const [filterType, setFilterType] = useState(() => initialParams().type);
   /* The query the fetched dataset actually shows, vs the draft in the input.
@@ -480,8 +492,9 @@ export default function KnowledgeGraph() {
   });
   const [drawerDoc, setDrawerDoc] = useState<DrawerDoc | null>(null);
   const [docLoading, setDocLoading] = useState(false);
-  const [toasts, setToasts] = useState<{ id: number; kind: 'success' | 'error' | 'info'; message: string }[]>([]);
-  const [scenarioNotice, setScenarioNotice] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<{ id: number; kind: 'success' | 'error' | 'info'; msg: Msg }[]>([]);
+  // A key, not text: the notice re-renders in the new language after a switch.
+  const [scenarioNotice, setScenarioNotice] = useState<StringKey | null>(null);
   // Small screens default to the read-only list view (canvas physics is
   // unusable on phones); follow the breakpoint if the viewport changes.
   // isNarrow also stacks the side panel below the canvas — the fixed 260px
@@ -536,9 +549,9 @@ export default function KnowledgeGraph() {
   // Local toast strip reusing the UploadProvider's .upload-toast grammar
   // (components.css) — replaces console-only failures and the native alert()
   // (critique 2026-10-06 P1). There is no app-wide toast context to join.
-  const pushToast = useCallback((kind: 'success' | 'error' | 'info', message: string, ttl = 8000) => {
+  const pushToast = useCallback((kind: 'success' | 'error' | 'info', m: Msg, ttl = 8000) => {
     const id = ++toastIdRef.current;
-    setToasts(prev => [...prev, { id, kind, message }]);
+    setToasts(prev => [...prev, { id, kind, msg: m }]);
     window.setTimeout(() => dismissToast(id), ttl);
   }, [dismissToast]);
 
@@ -565,6 +578,17 @@ export default function KnowledgeGraph() {
       font: { ...baseFont(n.id), color: fontColorFor(n.id) },
     })));
   }, [baseFont, fontColorFor]);
+
+  /* Language switch: vis-network tooltips (node status line, edge relation
+     name) live on the datasets, outside React's render, so re-apply them
+     with the new dictionary. Initial data is built with getLocale() in
+     renderGraph; this covers every later switch. */
+  useEffect(() => {
+    const data = kgDataRef.current;
+    if (!data) return;
+    nodesDataset.current.update(data.nodes.map(n => ({ id: n.id, title: nodeTooltip(t, n) })));
+    edgesDataset.current.update(data.edges.map(e => ({ id: e.id, title: relationLabel(t, e.relation) })));
+  }, [t]);
 
   /* Theme switch (topbar Terang/Gelap or OS) re-pins --text-primary; canvas
      labels hold literal colors, so re-apply them without a full re-render. */
@@ -604,13 +628,13 @@ export default function KnowledgeGraph() {
       }
       const doc = repoDocsRef.current.find(d => String(d.id) === String(docId));
       if (!doc) {
-        pushToast('error', 'Dokumen tidak ditemukan atau tidak dapat diakses dengan akun Anda.');
+        pushToast('error', { key: 'kgToastDocMissing' });
         return;
       }
       setDrawerDoc({ ...doc, status: doc.status ?? undefined, filename: doc.filename ?? undefined });
     } catch (err) {
       console.error('Open document error:', err);
-      pushToast('error', 'Gagal memuat dokumen. Periksa koneksi Anda lalu coba lagi.');
+      pushToast('error', { key: 'kgToastDocLoadFail' });
     } finally {
       setDocLoading(false);
     }
@@ -740,7 +764,7 @@ export default function KnowledgeGraph() {
       const data = res?.data ?? {};
       const matchedNodeIds = new Set<string>(data.matchedNodeIds || []);
 
-      let notice: string | null = null;
+      let notice: StringKey | null = null;
       // Fallback
       if (matchedNodeIds.size === 0) {
         const keywords = scenario === 'NDA' ? NDA_KEYWORDS : PKS_KEYWORDS;
@@ -752,9 +776,7 @@ export default function KnowledgeGraph() {
         });
         // Disclose the degradation instead of silently swapping engines
         // (critique 2026-10-06 P1: the fallback was undisclosed).
-        notice = res === null
-          ? 'Analisis AI tidak tersedia — node dicocokkan dengan kata kunci.'
-          : 'Analisis AI tidak menemukan kecocokan — node dicocokkan dengan kata kunci.';
+        notice = res === null ? 'kgNoticeAiDown' : 'kgNoticeAiNoMatch';
         if (matchedNodeIds.size === 0) {
           // Zero-match after the fallback. If the AI was DOWN (res===null)
           // the outcome is transient — classify it as a failure so the
@@ -762,9 +784,7 @@ export default function KnowledgeGraph() {
           // 2026-10-12 P2·4). If the AI ran and keywords are exhausted it
           // is a deterministic answer: keep the outcome copy; the unlatched
           // chip below is the retry.
-          notice = res === null
-            ? 'Analisis AI tidak tersedia dan tidak ada node yang cocok dengan kata kunci. Coba lagi, atau gunakan pencarian untuk menemukan node secara langsung.'
-            : 'Tidak ada node yang cocok untuk skenario ini. Coba skenario lainnya, atau gunakan pencarian untuk menemukan node secara langsung.';
+          notice = res === null ? 'kgNoticeDownNone' : 'kgNoticeNone';
           if (res === null) setFailedScenario(scenario);
         }
       }
@@ -779,7 +799,7 @@ export default function KnowledgeGraph() {
         // The AI returned only IDs that don't exist in this graph — an
         // engine failure, not an answer, and the LLM is nondeterministic:
         // classify as failure (error grammar + retry).
-        notice = 'Analisis skenario tidak mengembalikan node yang cocok di graf. Coba lagi, atau gunakan pencarian untuk menemukan node secara langsung.';
+        notice = 'kgNoticeInvalid';
         setFailedScenario(scenario);
       }
       setScenarioNotice(notice);
@@ -834,7 +854,7 @@ export default function KnowledgeGraph() {
     } catch (e) {
       if (reqId !== scenarioReqIdRef.current) return;
       console.error("Failed to fetch scenario from LLM", e);
-      setScenarioNotice('Analisis skenario gagal — coba lagi.');
+      setScenarioNotice('kgNoticeFailed');
       // Unlatch and remember which scenario failed so the notice can offer
       // a real inline retry (critique 2026-10-12 P2·4).
       setActiveScenario(null);
@@ -979,7 +999,7 @@ export default function KnowledgeGraph() {
       const nodeProps: VisGraphNode = {
         id: n.id,
         label: n.label.length > 25 ? n.label.slice(0, 23) + '…' : n.label,
-        title: n.doc_status ? `${n.label} — Status: ${n.doc_status}` : n.label,
+        title: nodeTooltip(STRINGS[getLocale()], n),
         font: font,
       };
 
@@ -1021,7 +1041,7 @@ export default function KnowledgeGraph() {
         from: e.source_id,
         to: e.target_id,
         // Removed label to prevent edge labels from obscuring the massive graph
-        title: relationLabel(e.relation), // Still show relation on hover (humanized)
+        title: relationLabel(STRINGS[getLocale()], e.relation), // Still show relation on hover (humanized)
         color: { color: edgeColor, opacity: e.relation === 'DITERBITKAN_OLEH' ? 0.3 : 0.7 },
         arrows: { to: { enabled: true, scaleFactor: 0.5 } },
         width: e.relation === 'DITERBITKAN_OLEH' ? 1 : 1.5,
@@ -1149,7 +1169,7 @@ export default function KnowledgeGraph() {
       // #10): the rebuild silently dropped a selected node — say so through
       // the toast strip (always-mounted aria-live, so it is announced too).
       if (selectedNodeRef.current) {
-        pushToast('info', 'Pilihan node sebelumnya dibersihkan karena data graf dimuat ulang.');
+        pushToast('info', { key: 'kgToastSelCleared' });
       }
       setSelectedNode(null);
       setScenarioClearedSelection(false);
@@ -1161,8 +1181,8 @@ export default function KnowledgeGraph() {
       // console-only, leaving a permanently blank canvas (critique P1).
       const status = (err as { response?: { status?: number } })?.response?.status;
       setLoadError(status
-        ? `Kesalahan server (kode ${status}).`
-        : 'Periksa koneksi Anda lalu coba lagi.');
+        ? { key: 'drawerErrServer', params: { code: status } }
+        : { key: 'drawerErrNetwork' });
     } finally {
       setLoading(false);
     }
@@ -1308,10 +1328,10 @@ export default function KnowledgeGraph() {
       link.click();
       // Success toast closes the loop (critique 2026-10-12 minor #5): the
       // browser's download chrome is easy to miss and only errors toasted.
-      pushToast('success', 'Gambar graf berhasil diunduh.');
+      pushToast('success', { key: 'kgToastPngOk' });
     } catch (err) {
       console.error('Failed to export graph', err);
-      pushToast('error', 'Gagal mengekspor gambar graf.');
+      pushToast('error', { key: 'kgToastPngFail' });
     } finally {
       container.style.background = prevBg;
       if (data) {
@@ -1333,14 +1353,12 @@ export default function KnowledgeGraph() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      pushToast('success', format === 'json'
-        ? 'Data JSON berhasil diunduh.'
-        : 'Data CSV (ZIP) berhasil diunduh.');
+      pushToast('success', { key: format === 'json' ? 'kgToastJsonOk' : 'kgToastCsvOk' });
     } catch (err) {
       console.error('Export error', err);
       // Toast instead of the native alert() — DESIGN.md bans the browser
       // dialogs (critique 2026-10-06 P1).
-      pushToast('error', 'Gagal mengekspor data.');
+      pushToast('error', { key: 'kgToastExportFail' });
     }
   };
 
@@ -1399,14 +1417,15 @@ export default function KnowledgeGraph() {
      silent, so the first thing a screen-reader user ever heard was the
      finished state. */
   const srStatus = loadError
-    ? `Gagal memuat graf pengetahuan. ${loadError}`
+    ? fill(t.kgSrLoadFail, { msg: msg(t, loadError) })
     : loading
-      ? 'Memuat graf pengetahuan...'
+      ? t.kgLoading
       : isScenarioLoading
-        ? `Menganalisis skenario ${isScenarioLoading}. Dapat memakan waktu hingga satu menit.`
+        ? fill(t.kgSrAnalyzing, { scenario: isScenarioLoading })
         : scenarioNotice
-          ?? (selectedNode
-            ? `Node ${selectedNode.label} dipilih. ${selectedNode.connectedCount} relasi terhubung.`
+          ? t[scenarioNotice]
+          : (selectedNode
+            ? fill(t.kgSrSelected, { label: selectedNode.label, count: plural(t, 'kgConnectedRel', selectedNode.connectedCount) })
             : '');
 
   return (
@@ -1440,7 +1459,7 @@ export default function KnowledgeGraph() {
           <div>
             <h2>{t.navGraph}</h2>
             {kgData && (
-              <p>{kgData.total_nodes} node · {kgData.total_edges} relasi</p>
+              <p>{fill(t.kgCounts, { nodes: kgData.total_nodes, edges: kgData.total_edges })}</p>
             )}
           </div>
         </div>
@@ -1449,12 +1468,12 @@ export default function KnowledgeGraph() {
             carried 9 controls at one decision point (critique: minimal
             choices / chunking failures). */}
         <form onSubmit={handleSearch} style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div role="group" aria-label="Mode tampilan" style={{ display: 'flex', background: 'var(--bg-element)', borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
+          <div role="group" aria-label={t.kgViewModeAria} style={{ display: 'flex', background: 'var(--bg-element)', borderRadius: '8px', border: '1px solid var(--border-color)', overflow: 'hidden' }}>
             <button type="button" onClick={() => { centerOnViewRef.current = true; setViewMode('graph'); }} aria-pressed={viewMode === 'graph'} style={{ padding: '6px 12px', background: viewMode === 'graph' ? 'var(--accent-glow)' : 'transparent', color: viewMode === 'graph' ? 'var(--accent-hover)' : 'var(--text-secondary)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
-              <NetworkIcon size={14} /> Grafik
+              <NetworkIcon size={14} /> {t.kgViewGraph}
             </button>
             <button type="button" onClick={() => setViewMode('list')} aria-pressed={viewMode === 'list'} style={{ padding: '6px 12px', background: viewMode === 'list' ? 'var(--accent-glow)' : 'transparent', color: viewMode === 'list' ? 'var(--accent-hover)' : 'var(--text-secondary)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', fontWeight: 600 }}>
-              <List size={14} /> Daftar
+              <List size={14} /> {t.kgViewList}
             </button>
           </div>
           {/* Visible focus treatment moves to the wrapper (ring + hairline
@@ -1476,14 +1495,14 @@ export default function KnowledgeGraph() {
             transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
           }}>
             <Search size={14} color="var(--text-secondary)" />
-            <label htmlFor="kg-search" className="visually-hidden">Cari node</label>
+            <label htmlFor="kg-search" className="visually-hidden">{t.kgSearchLabel}</label>
             <input
               id="kg-search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
-              placeholder="Cari node..."
+              placeholder={t.kgSearchPh}
               style={{
                 background: 'transparent', border: 'none', outline: 'none',
                 color: 'var(--text-primary)', fontSize: '0.85rem', width: '160px',
@@ -1492,7 +1511,7 @@ export default function KnowledgeGraph() {
             />
           </div>
 
-          <label htmlFor="kg-filter-type" className="visually-hidden">Filter tipe node</label>
+          <label htmlFor="kg-filter-type" className="visually-hidden">{t.kgFilterTypeLabel}</label>
           <select
             id="kg-filter-type"
             value={filterType}
@@ -1503,10 +1522,10 @@ export default function KnowledgeGraph() {
               color: 'var(--text-primary)', fontSize: '0.85rem', cursor: 'pointer',
             }}
           >
-            <option value="">Semua Tipe</option>
-            <option value="regulasi">Regulasi</option>
-            <option value="entitas">Entitas</option>
-            <option value="topik">Topik</option>
+            <option value="">{t.kgAllTypes}</option>
+            <option value="regulasi">{t.kgTypeRegulasi}</option>
+            <option value="entitas">{t.kgTypeEntitas}</option>
+            <option value="topik">{t.kgTypeTopik}</option>
           </select>
 
           {/* Standard .btn .btn-primary carrier (v5 colorize): the one-off
@@ -1517,12 +1536,12 @@ export default function KnowledgeGraph() {
           <button
             type="submit"
             className="btn btn-primary"
-            title={filtersDirty ? 'Terapkan pencarian dan filter (Enter)' : undefined}
+            title={filtersDirty ? t.kgApplyTip : undefined}
           >
-            {filtersDirty ? 'Terapkan' : 'Cari'}
+            {filtersDirty ? t.kgApply : t.kgSearch}
           </button>
 
-          <button type="button" onClick={handleReset} aria-label="Atur ulang pencarian dan filter" title="Atur ulang" style={{
+          <button type="button" onClick={handleReset} aria-label={t.kgResetAria} title={t.kgResetTip} style={{
             background: 'var(--bg-element)', border: '1px solid var(--border-color)',
             borderRadius: '8px', padding: '8px', cursor: 'pointer', color: 'var(--text-secondary)',
             display: 'flex', alignItems: 'center',
@@ -1548,7 +1567,7 @@ export default function KnowledgeGraph() {
                 borderRadius: '8px', color: 'var(--text-secondary)', cursor: 'pointer',
               }}
             >
-              <Download size={14} /> Ekspor <ChevronDown size={12} />
+              <Download size={14} /> {t.kgExport} <ChevronDown size={12} />
             </button>
             {/* Dropdown grammar, not toast grammar (critique 2026-10-12
                 minor #3): the 0 16px 40px/0.25 shadow and the documented
@@ -1556,7 +1575,7 @@ export default function KnowledgeGraph() {
                 off-ladder). id + aria-orientation pair with the trigger's
                 aria-controls (minor #8). */}
             {exportMenuOpen && (
-              <div role="menu" id="kg-export-menu" aria-label="Ekspor data graf" aria-orientation="vertical" ref={exportMenuListRef} onKeyDown={handleExportMenuKeyDown} style={{
+              <div role="menu" id="kg-export-menu" aria-label={t.kgExportMenuAria} aria-orientation="vertical" ref={exportMenuListRef} onKeyDown={handleExportMenuKeyDown} style={{
                 position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 500,
                 minWidth: '200px', padding: '6px',
                 background: 'var(--bg-card)', backdropFilter: 'blur(12px)',
@@ -1567,17 +1586,17 @@ export default function KnowledgeGraph() {
                 <button
                   role="menuitem" type="button"
                   disabled={viewMode === 'list'}
-                  title={viewMode === 'list' ? 'Tersedia pada tampilan Grafik' : undefined}
+                  title={viewMode === 'list' ? t.kgExportPngOnlyGraph : undefined}
                   onClick={() => { setExportMenuOpen(false); exportTriggerRef.current?.focus(); exportToPng(); }}
                   style={menuItemStyle(viewMode === 'list')}
                 >
-                  <Download size={14} /> Ekspor PNG
+                  <Download size={14} /> {t.kgExportPng}
                 </button>
                 <button role="menuitem" type="button" onClick={() => { setExportMenuOpen(false); exportTriggerRef.current?.focus(); exportData('json'); }} style={menuItemStyle(false)}>
-                  <Download size={14} /> Ekspor JSON
+                  <Download size={14} /> {t.kgExportJson}
                 </button>
                 <button role="menuitem" type="button" onClick={() => { setExportMenuOpen(false); exportTriggerRef.current?.focus(); exportData('csv'); }} style={menuItemStyle(false)}>
-                  <Download size={14} /> Ekspor CSV (ZIP)
+                  <Download size={14} /> {t.kgExportCsv}
                 </button>
               </div>
             )}
@@ -1603,7 +1622,7 @@ export default function KnowledgeGraph() {
                   veil doctrine (DESIGN.md — the --overlay-veil family); the
                   old rgba(22,18,43,0.85) drifted purple (critique 2026-10-07
                   minor). */}
-              <LoadingOrb theme="dark" className="loading-orb--on-dark" label="Memuat graf pengetahuan..." />
+              <LoadingOrb theme="dark" className="loading-orb--on-dark" label={t.kgLoading} />
             </div>
           )}
           {/* Fetch failure: an honest error state with retry — this used to
@@ -1617,11 +1636,11 @@ export default function KnowledgeGraph() {
             }}>
               <AlertCircle size={40} color="var(--danger-text)" />
               <div>
-                <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-primary)' }}>Gagal memuat graf pengetahuan</p>
-                <p style={{ margin: '6px 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{loadError}</p>
+                <p style={{ margin: 0, fontWeight: 600, color: 'var(--text-primary)' }}>{t.kgLoadFailTitle}</p>
+                <p style={{ margin: '6px 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{msg(t, loadError)}</p>
               </div>
               <button type="button" className="secondary-action-btn" onClick={() => fetchGraph(lastAttemptRef.current.search, lastAttemptRef.current.type)}>
-                <RefreshCw size={14} /> Coba lagi
+                <RefreshCw size={14} /> {t.drawerTryAgain}
               </button>
             </div>
           )}
@@ -1650,10 +1669,10 @@ export default function KnowledgeGraph() {
               }}>
                 <Search size={40} color="var(--text-secondary)" style={{ opacity: 0.4 }} />
                 <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.95rem' }}>
-                  Tidak ada node yang cocok dengan pencarian atau filter saat ini.
+                  {t.kgNoMatch}
                 </p>
                 <button type="button" className="secondary-action-btn" onClick={handleReset}>
-                  <RefreshCw size={14} /> Atur ulang pencarian
+                  <RefreshCw size={14} /> {t.kgResetSearch}
                 </button>
               </div>
             ) : (
@@ -1663,13 +1682,13 @@ export default function KnowledgeGraph() {
             }}>
               <GitFork size={48} color="var(--accent-color)" style={{ opacity: 0.3, marginBottom: '16px' }} />
               <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '1rem' }}>
-                Belum ada data graf.
+                {t.kgEmpty}
               </p>
               {/* Truthful + product-register copy: the old line told users to
                   "minta Admin menjalankan Rebuild" — an action no screen in
                   the product exposes (critique 2026-10-06 P1/H9). */}
               <p style={{ color: 'var(--text-secondary)', margin: '8px 0 0', fontSize: '0.85rem', opacity: 0.7 }}>
-                Unggah dokumen baru melalui Repositori, atau hubungi administrator untuk membangun ulang graf.
+                {t.kgEmptyHint}
               </p>
             </div>
             )
@@ -1679,21 +1698,21 @@ export default function KnowledgeGraph() {
             {/* The canvas is opaque to assistive tech; the list view is the
                 keyboard-navigable path through the node model. */}
             <p className="visually-hidden">
-              Kanvas graf interaktif. Gunakan mode Daftar untuk menelusuri node dengan keyboard.
+              {t.kgCanvasHint}
             </p>
             <div style={{
               position: 'absolute', bottom: '20px', right: '20px',
               display: 'flex', flexDirection: 'column', gap: '8px',
             }}>
-              <GraphControlButton onClick={handleZoomIn} label="Perbesar"><ZoomIn size={18} /></GraphControlButton>
-              <GraphControlButton onClick={handleZoomOut} label="Perkecil"><ZoomOut size={18} /></GraphControlButton>
-              <GraphControlButton onClick={fitGraph} label="Sesuaikan tampilan"><Maximize2 size={18} /></GraphControlButton>
+              <GraphControlButton onClick={handleZoomIn} label={t.kgZoomIn}><ZoomIn size={18} /></GraphControlButton>
+              <GraphControlButton onClick={handleZoomOut} label={t.kgZoomOut}><ZoomOut size={18} /></GraphControlButton>
+              <GraphControlButton onClick={fitGraph} label={t.kgFit}><Maximize2 size={18} /></GraphControlButton>
             </div>
           </div>
 
           <div style={{ display: viewMode === 'list' ? 'block' : 'none', width: '100%', height: '100%', background: 'var(--bg-base)', padding: '20px', overflowY: 'auto' }}>
             <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-              <h3 style={{ color: 'var(--text-primary)', marginBottom: '16px', fontSize: '1.15rem', fontWeight: 600, lineHeight: 1.3 }}>Daftar Node</h3>
+              <h3 style={{ color: 'var(--text-primary)', marginBottom: '16px', fontSize: '1.15rem', fontWeight: 600, lineHeight: 1.3 }}>{t.kgListTitle}</h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {visibleNodes.slice(0, 100).map(node => (
                   <NodeListCard
@@ -1713,16 +1732,16 @@ export default function KnowledgeGraph() {
                   kgData?.nodes.length === 0 && appliedParams.search === '' && appliedParams.type === '' ? (
                     <div style={{ textAlign: 'center', padding: '20px' }}>
                       <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.95rem' }}>
-                        Belum ada data graf.
+                        {t.kgEmpty}
                       </p>
                       <p style={{ color: 'var(--text-secondary)', margin: '8px 0 0', fontSize: '0.85rem', opacity: 0.7 }}>
-                        Unggah dokumen baru melalui Repositori, atau hubungi administrator untuk membangun ulang graf.
+                        {t.kgEmptyHint}
                       </p>
                     </div>
                   ) : (
                     <div style={{ textAlign: 'center', padding: '20px' }}>
                       <p style={{ color: 'var(--text-secondary)', margin: 0, fontSize: '0.85rem' }}>
-                        Tidak ada node yang cocok dengan pencarian atau filter saat ini.
+                        {t.kgNoMatch}
                       </p>
                       {/* Subset-illusion breaker (critique 2026-10-12 P2·2):
                           while the draft is unapplied this list only
@@ -1730,9 +1749,9 @@ export default function KnowledgeGraph() {
                           button that makes it corpus-wide. */}
                       {filtersDirty && (
                         <p style={{ color: 'var(--text-secondary)', margin: '10px 0 0', fontSize: '0.8rem', lineHeight: 1.5 }}>
-                          Daftar hanya menyaring jendela node yang dimuat — tekan{' '}
-                          <strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Terapkan</strong>{' '}
-                          untuk mencari di seluruh korpus.
+                          {t.kgDirtyPre}{' '}
+                          <strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{t.kgApply}</strong>{' '}
+                          {t.kgDirtyPost}
                         </p>
                       )}
                     </div>
@@ -1740,7 +1759,7 @@ export default function KnowledgeGraph() {
                 )}
                 {visibleNodes.length > 100 && (
                   <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '20px', fontSize: '0.85rem' }}>
-                    Menampilkan 100 dari {visibleNodes.length} node. Gunakan pencarian untuk hasil lebih spesifik.
+                    {fill(t.kgShowing100, { n: visibleNodes.length })}
                   </div>
                 )}
               </div>
@@ -1769,9 +1788,9 @@ export default function KnowledgeGraph() {
               one-line explanation it never had, and the buttons announce
               their toggle state. */}
           <div style={{ padding: '20px', borderBottom: '1px solid var(--border-color)' }}>
-            <div style={{ ...STAMP_STYLE, color: 'var(--text-secondary)', marginBottom: '4px' }}>Analisis Skenario</div>
+            <div style={{ ...STAMP_STYLE, color: 'var(--text-secondary)', marginBottom: '4px' }}>{t.kgScenarioTitle}</div>
             <p style={{ margin: '0 0 12px', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-              Sorot node terkait skenario kontrak: PKS (Perjanjian Kerja Sama) atau NDA (kerahasiaan informasi).
+              {t.kgScenarioHelp}
             </p>
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
@@ -1779,7 +1798,7 @@ export default function KnowledgeGraph() {
                 onClick={() => handleScenarioClick('PKS')}
                 aria-pressed={activeScenario === 'PKS'}
                 disabled={isScenarioLoading !== null && isScenarioLoading !== 'PKS'}
-                title={isScenarioLoading === 'PKS' ? 'Klik untuk membatalkan analisis' : undefined}
+                title={isScenarioLoading === 'PKS' ? t.kgCancelAnalysisTip : undefined}
                 style={{
                   flex: 1, padding: '8px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600,
                   cursor: isScenarioLoading === 'NDA' ? 'not-allowed' : 'pointer',
@@ -1789,14 +1808,14 @@ export default function KnowledgeGraph() {
                   border: `1px solid ${activeScenario === 'PKS' ? 'var(--accent-color)' : 'var(--border-color)'}`,
                   transition: 'background 0.2s ease, color 0.2s ease, border-color 0.2s ease',
                 }}>
-                {isScenarioLoading === 'PKS' ? <><Loader2 size={12} className="animate-spin" style={{ marginRight: '4px' }} /> Menganalisis...</> : 'PKS'}
+                {isScenarioLoading === 'PKS' ? <><Loader2 size={12} className="animate-spin" style={{ marginRight: '4px' }} /> {t.kgAnalyzing}</> : 'PKS'}
               </button>
               <button
                 type="button"
                 onClick={() => handleScenarioClick('NDA')}
                 aria-pressed={activeScenario === 'NDA'}
                 disabled={isScenarioLoading !== null && isScenarioLoading !== 'NDA'}
-                title={isScenarioLoading === 'NDA' ? 'Klik untuk membatalkan analisis' : undefined}
+                title={isScenarioLoading === 'NDA' ? t.kgCancelAnalysisTip : undefined}
                 style={{
                   flex: 1, padding: '8px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 600,
                   cursor: isScenarioLoading === 'PKS' ? 'not-allowed' : 'pointer',
@@ -1806,7 +1825,7 @@ export default function KnowledgeGraph() {
                   border: `1px solid ${activeScenario === 'NDA' ? 'var(--accent-color)' : 'var(--border-color)'}`,
                   transition: 'background 0.2s ease, color 0.2s ease, border-color 0.2s ease',
                 }}>
-                {isScenarioLoading === 'NDA' ? <><Loader2 size={12} className="animate-spin" style={{ marginRight: '4px' }} /> Menganalisis...</> : 'NDA'}
+                {isScenarioLoading === 'NDA' ? <><Loader2 size={12} className="animate-spin" style={{ marginRight: '4px' }} /> {t.kgAnalyzing}</> : 'NDA'}
               </button>
             </div>
 
@@ -1820,15 +1839,15 @@ export default function KnowledgeGraph() {
             {isScenarioLoading && (
               <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
                 <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Loader2 size={12} className="animate-spin" /> Menganalisis skenario {isScenarioLoading}... dapat memakan waktu hingga ±1 menit.
+                  <Loader2 size={12} className="animate-spin" /> {fill(t.kgAnalyzingScenario, { scenario: isScenarioLoading })}
                 </p>
                 {scenarioClearedSelection && (
                   <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, opacity: 0.85 }}>
-                    Pilihan node sebelumnya dibersihkan agar sorotan skenario terlihat penuh.
+                    {t.kgSelCleared}
                   </p>
                 )}
                 <button type="button" className="secondary-action-btn" onClick={cancelScenario}>
-                  <X size={14} /> Batal
+                  <X size={14} /> {t.kgCancel}
                 </button>
               </div>
             )}
@@ -1841,11 +1860,11 @@ export default function KnowledgeGraph() {
             {!isScenarioLoading && scenarioNotice && (
               <div style={{ margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
                 <p style={{ margin: 0, fontSize: '0.75rem', lineHeight: 1.5, color: failedScenario ? 'var(--danger-text)' : 'var(--text-secondary)' }}>
-                  {scenarioNotice}
+                  {t[scenarioNotice]}
                 </p>
                 {failedScenario && (
                   <button type="button" className="secondary-action-btn" onClick={() => { setFailedScenario(null); void handleScenarioClick(failedScenario); }}>
-                    <RefreshCw size={14} /> Coba lagi
+                    <RefreshCw size={14} /> {t.drawerTryAgain}
                   </button>
                 )}
               </div>
@@ -1853,12 +1872,12 @@ export default function KnowledgeGraph() {
 
             {activeScenario && scenarioNodes.length > 0 && (
               <div style={{ marginTop: '16px', background: 'var(--bg-element)', borderRadius: '8px', padding: '12px', border: '1px solid var(--border-color)' }}>
-                <div style={{ ...STAMP_STYLE, color: 'var(--text-secondary)', marginBottom: '8px' }}>Node Terkait ({activeScenario})</div>
+                <div style={{ ...STAMP_STYLE, color: 'var(--text-secondary)', marginBottom: '8px' }}>{fill(t.kgRelatedNodes, { scenario: activeScenario })}</div>
                 {/* Explains the dimming semantics — "faded" used to be
                     undefined from the user's side (critique 2026-10-07 P1·2
                     companion). Legend-footnote grammar (0.75rem / 0.85). */}
                 <p style={{ margin: '0 0 8px', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, opacity: 0.85 }}>
-                  Node yang diredupkan di kanvas berjarak lebih dari 2 lompatan relasi dari node-node ini.
+                  {t.kgDimHint}
                 </p>
                 <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'block', paddingRight: '4px' }}>
                   {scenarioNodes.map(node => (
@@ -1898,7 +1917,7 @@ export default function KnowledgeGraph() {
               style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', padding: 0, fontFamily: 'inherit', width: '100%' }}
             >
               <Filter size={14} />
-              <span style={{ ...STAMP_STYLE }}>Legenda</span>
+              <span style={{ ...STAMP_STYLE }}>{t.kgLegend}</span>
               <span aria-hidden="true" style={{ marginLeft: 'auto', display: 'flex', transition: 'transform 0.15s ease', transform: legendOpen ? 'none' : 'rotate(-90deg)' }}>
                 <ChevronDown size={14} />
               </span>
@@ -1913,15 +1932,15 @@ export default function KnowledgeGraph() {
                         gray outline was an abstraction. Hub fills cycle the
                         neon cluster palette; --dv-sky stands in. */}
                     <span aria-hidden="true" style={{ width: '16px', height: '11px', background: 'var(--dv-sky)', border: '2px solid #ffffff', borderRadius: '3px', flexShrink: 0 }} />
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.4 }}>Hub (simpul pusat) — lebih dari 10 relasi</span>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.4 }}>{t.kgLegendHub}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span aria-hidden="true" style={{ width: '11px', height: '11px', borderRadius: '50%', border: '2px solid var(--text-secondary)', flexShrink: 0, marginLeft: '2.5px', marginRight: '2.5px' }} />
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.4 }}>Node biasa</span>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.4 }}>{t.kgLegendPlain}</span>
                   </div>
                 </div>
                 <div style={{ marginTop: '14px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
-                  <div style={{ ...STAMP_STYLE, color: 'var(--text-secondary)', marginBottom: '8px' }}>Tipe Node</div>
+                  <div style={{ ...STAMP_STYLE, color: 'var(--text-secondary)', marginBottom: '8px' }}>{t.kgLegendNodeType}</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {[
                       { type: 'regulasi', icon: <FileText size={14} /> },
@@ -1931,33 +1950,33 @@ export default function KnowledgeGraph() {
                       <div key={item.type} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span aria-hidden="true" style={{ width: '10px', height: '10px', borderRadius: '50%', background: NODE_COLORS_DEEP[item.type], flexShrink: 0 }} />
                         <span style={{ color: NODE_COLORS_DEEP[item.type], display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}>
-                          {item.icon} {TYPE_LABELS[item.type]}
+                          {item.icon} {typeLabel(t, item.type)}
                         </span>
                       </div>
                     ))}
                   </div>
                 </div>
                 <div style={{ marginTop: '14px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
-                  <div style={{ ...STAMP_STYLE, color: 'var(--text-secondary)', marginBottom: '8px' }}>Status Regulasi</div>
+                  <div style={{ ...STAMP_STYLE, color: 'var(--text-secondary)', marginBottom: '8px' }}>{t.kgLegendStatus}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <span aria-hidden="true" style={{ width: '11px', height: '11px', borderRadius: '50%', border: '2px dashed var(--text-secondary)', flexShrink: 0, marginLeft: '2.5px', marginRight: '2.5px' }} />
-                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.4 }}>Cincin putus-putus — status bukan "Berlaku" penuh</span>
+                    <span style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', lineHeight: 1.4 }}>{fill(t.kgLegendDashed, { valid: t.stBerlaku })}</span>
                   </div>
                   <p style={{ margin: '8px 0 0', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, opacity: 0.85 }}>
-                    Hanya node regulasi yang berstatus hukum: cincin solid berarti "Berlaku", cincin putus-putus berarti status lain (mis. "Tidak Berlaku", "Berlaku (Dicabut Sebagian)"). Status lengkap tampil di panel node dan daftar. Entitas dan topik tidak berstatus.
+                    {fill(t.kgLegendStatusNote, { valid: t.stBerlaku, invalid: t.stTidakBerlaku })}
                   </p>
                 </div>
                 <div style={{ marginTop: '14px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
-                  <div style={{ ...STAMP_STYLE, color: 'var(--text-secondary)', marginBottom: '8px' }}>Relasi</div>
+                  <div style={{ ...STAMP_STYLE, color: 'var(--text-secondary)', marginBottom: '8px' }}>{t.kgLegendRelation}</div>
                   {Object.entries(RELATION_COLORS_DEEP).map(([rel, color]) => (
                     <div key={rel} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                       <div aria-hidden="true" style={{ width: '20px', height: '2px', background: color, borderRadius: '1px', flexShrink: 0 }} />
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{relationLabel(rel)}</span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{relationLabel(t, rel)}</span>
                     </div>
                   ))}
                 </div>
                 <p style={{ margin: '14px 0 0', borderTop: '1px solid var(--border-color)', paddingTop: '12px', fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5, opacity: 0.85 }}>
-                  Di dalam klaster, node dan garis mewarisi warna hub — warna tipe dan relasi hanya berlaku di luar klaster.
+                  {t.kgLegendCluster}
                 </p>
               </div>
             )}
@@ -1969,7 +1988,7 @@ export default function KnowledgeGraph() {
               <div style={{ textAlign: 'center', padding: '32px 0' }}>
                 <Info size={28} color="var(--text-secondary)" style={{ opacity: 0.4, marginBottom: '12px', display: 'block', margin: '0 auto 12px' }} />
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.82rem', margin: 0, lineHeight: 1.5 }}>
-                  Pilih node pada grafik atau daftar untuk melihat detail relasi.
+                  {t.kgSelectHint}
                 </p>
               </div>
             ) : (
@@ -1981,14 +2000,12 @@ export default function KnowledgeGraph() {
                       background: NODE_COLORS_DEEP[selectedNode.type] ?? 'var(--text-secondary)',
                     }} />
                     <span style={{ ...STAMP_STYLE, color: NODE_COLORS_DEEP[selectedNode.type] ?? 'var(--text-secondary)' }}>
-                      {/* relationsFor can synthesize type:'unknown' when an
-                          edge references a node missing from the array —
-                          honest fallback instead of an empty badge
-                          (critique 2026-10-12 minor #9). */}
-                      {TYPE_LABELS[selectedNode.type] ?? 'Tidak diketahui'}
+                      {/* typeLabel falls back to "unknown" for the synthesized
+                          type:'unknown' (critique 2026-10-12 minor #9). */}
+                      {typeLabel(t, selectedNode.type)}
                     </span>
                   </div>
-                  <button type="button" onClick={() => setSelectedNode(null)} aria-label="Tutup detail node" style={{
+                  <button type="button" onClick={() => setSelectedNode(null)} aria-label={t.kgCloseDetail} style={{
                     background: 'transparent', border: 'none', cursor: 'pointer',
                     color: 'var(--text-secondary)', display: 'flex', padding: '2px',
                   }}>
@@ -2013,7 +2030,7 @@ export default function KnowledgeGraph() {
                       (statusTone parity with LegalRepository). */}
                   {selectedNode.doc_status && (
                     <span className={`status-chip ${statusTone(selectedNode.doc_status)}`} style={{ display: 'inline-block', marginTop: '8px' }}>
-                      {selectedNode.doc_status}
+                      {statusLabel(t, selectedNode.doc_status)}
                     </span>
                   )}
                 </div>
@@ -2024,7 +2041,7 @@ export default function KnowledgeGraph() {
                   background: 'var(--bg-element)', borderRadius: '8px', padding: '12px',
                   marginBottom: '16px',
                 }}>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Koneksi</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>{t.kgConnections}</div>
                   <div style={{ fontSize: '1.4rem', fontWeight: 700, color: NODE_COLORS_DEEP[selectedNode.type] ?? 'var(--text-secondary)' }}>
                     {selectedNode.connectedCount}
                   </div>
@@ -2033,7 +2050,7 @@ export default function KnowledgeGraph() {
                 {selectedNode.relations && selectedNode.relations.length > 0 && (
                   <div style={{ marginBottom: '16px' }}>
                     <div style={{ ...STAMP_STYLE, color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                      Detail Relasi
+                      {t.kgRelationDetail}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
                       {selectedNode.relations.map((rel, idx) => (
@@ -2061,8 +2078,8 @@ export default function KnowledgeGraph() {
                                 "right arrow" noise — glyph hidden, semantics
                                 spoken (critique 2026-10-12, Sam). */}
                             <span aria-hidden="true">{rel.direction === 'out' ? '→' : '←'}</span>{' '}
-                            <span className="visually-hidden">{rel.direction === 'out' ? 'Relasi keluar: ' : 'Relasi masuk: '}</span>
-                            {relationLabel(rel.relation)}
+                            <span className="visually-hidden">{rel.direction === 'out' ? t.kgRelOut : t.kgRelIn}</span>
+                            {relationLabel(t, rel.relation)}
                           </div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-primary)', lineHeight: 1.3 }}>
                             {rel.label}
@@ -2099,7 +2116,7 @@ export default function KnowledgeGraph() {
                     }}
                   >
                     {docLoading ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-                    {docLoading ? 'Memuat dokumen...' : 'Buka Dokumen'}
+                    {docLoading ? t.kgOpeningDoc : t.kgOpenDoc}
                   </button>
                 )}
               </div>
@@ -2128,8 +2145,8 @@ export default function KnowledgeGraph() {
         {toasts.map(tt => (
           <div key={tt.id} className={`upload-toast upload-toast--${tt.kind}`}>
             {tt.kind === 'success' ? <CheckCircle size={16} /> : tt.kind === 'error' ? <AlertTriangle size={16} /> : <Info size={16} />}
-            <span>{tt.message}</span>
-            <button type="button" className="upload-toast-close" onClick={() => dismissToast(tt.id)} aria-label="Tutup notifikasi">
+            <span>{msg(t, tt.msg)}</span>
+            <button type="button" className="upload-toast-close" onClick={() => dismissToast(tt.id)} aria-label={t.kgToastClose}>
               <X size={14} />
             </button>
           </div>

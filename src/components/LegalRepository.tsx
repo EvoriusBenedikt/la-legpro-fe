@@ -12,8 +12,10 @@ import ComplianceResultsViewer, {
   type ComplianceSummary,
 } from './ComplianceResultsViewer';
 import ProtectedRoute from './ProtectedRoute';
-import api, { isHttpError } from '../services/api';
+import api from '../services/api';
 import { useDateFormatters } from '../format';
+import { useStrings, msg, fill, statusLabel, STRINGS, getLocale, LocalizedError, type Msg, type StringKey } from '../i18n';
+import { apiErrorMsg } from '../apiErrors';
 
 interface OJKDocument {
   id: string;
@@ -61,15 +63,15 @@ interface UploadHistoryEntry {
 
 /** Outcome badge vocabulary + tones (see DESIGN.md: processing/provenance stays
     neutral; resolved outcomes reuse the status triad like document statuses). */
-const OUTCOME_META: Record<string, { label: string; cls: string }> = {
-  processing:        { label: 'Diproses',            cls: 'status-chip--neutral' },
-  awaiting_approval: { label: 'Menunggu Konfirmasi', cls: 'status-chip--warning' },
-  auto_approved:     { label: 'Otomatis disetujui',  cls: 'status-chip--success' },
-  confirmed:         { label: 'Dikonfirmasi',        cls: 'status-chip--success' },
-  rejected:          { label: 'Ditolak',             cls: 'status-chip--danger' },
-  failed_duplicate:  { label: 'Gagal - Duplikat',    cls: 'status-chip--danger' },
-  failed_error:      { label: 'Gagal - Error',       cls: 'status-chip--danger' },
-  deleted:           { label: 'Dihapus',             cls: 'status-chip--neutral' },
+const OUTCOME_META: Record<string, { labelKey: StringKey; cls: string }> = {
+  processing:        { labelKey: 'repoOutProcessing', cls: 'status-chip--neutral' },
+  awaiting_approval: { labelKey: 'repoOutAwaiting',   cls: 'status-chip--warning' },
+  auto_approved:     { labelKey: 'repoOutAuto',       cls: 'status-chip--success' },
+  confirmed:         { labelKey: 'repoOutConfirmed',  cls: 'status-chip--success' },
+  rejected:          { labelKey: 'repoOutRejected',   cls: 'status-chip--danger' },
+  failed_duplicate:  { labelKey: 'repoOutFailedDup',  cls: 'status-chip--danger' },
+  failed_error:      { labelKey: 'repoOutFailedErr',  cls: 'status-chip--danger' },
+  deleted:           { labelKey: 'repoOutDeleted',    cls: 'status-chip--neutral' },
 };
 
 interface AnalyzedDocument {
@@ -134,9 +136,11 @@ const shortJudul = (judul: string): string => {
 };
 
 interface ConfirmState {
-  title: string;
-  body: string;
-  confirmLabel: string;
+  /* Msg, not text: a dialog left open across a language switch re-renders
+     in the new language (i18n rule: never store translated text). */
+  title: Msg;
+  body: Msg;
+  confirmLabel: Msg;
   /** 'danger' (default) for destructive acts; 'primary' for reversible ones. */
   confirmTone?: 'danger' | 'primary';
   /** Resolves → dialog closes. Rejects → dialog stays open with the error
@@ -150,9 +154,10 @@ interface ConfirmState {
     .confirm-modal, pending state blocks Esc/backdrop mid-mutation, failures
     surface inline instead of the dialog vanishing). */
 const ConfirmDialog = ({ state, onClose }: { state: ConfirmState; onClose: () => void }) => {
+  const t = useStrings();
   const dialogRef = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Msg | null>(null);
 
   // Mounted only while open; Escape is a no-op mid-mutation so the dialog
   // cannot vanish during the DELETE. Focus restores to the trigger on close.
@@ -166,7 +171,7 @@ const ConfirmDialog = ({ state, onClose }: { state: ConfirmState; onClose: () =>
       onClose();
     } catch (e) {
       // Stay open: the user sees why it failed and can retry or cancel.
-      setError(e instanceof Error ? e.message : 'Terjadi kesalahan tak terduga.');
+      setError(e instanceof LocalizedError ? e.msg : { key: 'errUnexpected' });
     } finally {
       setPending(false);
     }
@@ -186,12 +191,12 @@ const ConfirmDialog = ({ state, onClose }: { state: ConfirmState; onClose: () =>
         aria-busy={pending}
         tabIndex={-1}
       >
-        <h3 className="confirm-modal-title" id="repo-confirm-title">{state.title}</h3>
-        <p className="confirm-modal-body">{state.body}</p>
-        {error && <p className="confirm-modal-error" role="alert">{error}</p>}
+        <h3 className="confirm-modal-title" id="repo-confirm-title">{msg(t, state.title)}</h3>
+        <p className="confirm-modal-body">{msg(t, state.body)}</p>
+        {error && <p className="confirm-modal-error" role="alert">{msg(t, error)}</p>}
         <div className="confirm-modal-actions">
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={pending}>
-            Batal
+            {t.repoCancel}
           </button>
           <button
             type="button"
@@ -200,7 +205,7 @@ const ConfirmDialog = ({ state, onClose }: { state: ConfirmState; onClose: () =>
             disabled={pending}
           >
             {pending && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
-            {pending ? 'Memproses...' : state.confirmLabel}
+            {pending ? t.repoWorking : msg(t, state.confirmLabel)}
           </button>
         </div>
       </div>
@@ -209,6 +214,7 @@ const ConfirmDialog = ({ state, onClose }: { state: ConfirmState; onClose: () =>
 };
 
 export default function LegalRepository() {
+  const t = useStrings();
   const { user, token } = useAuth();
   const { addJob, updateJob } = useJobStatus();
   const { formatDate, formatDateTime } = useDateFormatters();
@@ -239,7 +245,11 @@ export default function LegalRepository() {
   const [search, setSearch] = useState(searchParams.get('q') || '');
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  // Upload progress is structured data (counts), rendered through the
+  // dictionary — the old string state was matched with .includes('berhasil').
+  const [uploadStatus, setUploadStatus] = useState<
+    { phase: 'uploading'; i: number; total: number } | { phase: 'done'; ok: number; total: number } | null
+  >(null);
   const [taxonomyList, setTaxonomyList] = useState<{id: number, name: string}[]>([]);
   const [selectedTaxonomy] = useState<string>('');
 
@@ -248,11 +258,11 @@ export default function LegalRepository() {
   // messages go to a floating .admin-feedback banner (errors persist until
   // dismissed, successes auto-clear after 8 s — AdminDashboard grammar).
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
-  const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; text: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; msg: Msg } | null>(null);
   const feedbackTimer = useRef<number | undefined>(undefined);
-  const showFeedback = useCallback((kind: 'success' | 'error', text: string) => {
+  const showFeedback = useCallback((kind: 'success' | 'error', m: Msg) => {
     window.clearTimeout(feedbackTimer.current);
-    setFeedback({ kind, text });
+    setFeedback({ kind, msg: m });
     if (kind === 'success') {
       feedbackTimer.current = window.setTimeout(() => setFeedback(null), 8000);
     }
@@ -261,7 +271,7 @@ export default function LegalRepository() {
   // Pending-confirm card state: per-doc busy + inline error (replaces the
   // native alerts around handleConfirmPending).
   const [pendingBusy, setPendingBusy] = useState<string | null>(null);
-  const [pendingActionError, setPendingActionError] = useState<{ docId: string; text: string } | null>(null);
+  const [pendingActionError, setPendingActionError] = useState<{ docId: string; msg: Msg } | null>(null);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
   // Adopt an externally changed ?tab during render (React's "adjust
@@ -306,16 +316,16 @@ export default function LegalRepository() {
   const [sektorShowAll, setSektorShowAll] = useState(false);
   // Per-source load errors: a failed fetch must never render as an empty
   // result set (critique remediation P1)
-  const [repoError, setRepoError] = useState<string | null>(null);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-  const [templatesError, setTemplatesError] = useState<string | null>(null);
-  const [pendingError, setPendingError] = useState<string | null>(null);
+  const [repoError, setRepoError] = useState<StringKey | null>(null);
+  const [historyError, setHistoryError] = useState<StringKey | null>(null);
+  const [templatesError, setTemplatesError] = useState<StringKey | null>(null);
+  const [pendingError, setPendingError] = useState<StringKey | null>(null);
   // Riwayat Unggahan (2026-09-30): upload-trail state (migration 006).
   const [uploadHistory, setUploadHistory] = useState<UploadHistoryEntry[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyOutcome, setHistoryOutcome] = useState('');
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
-  const [uploadHistoryError, setUploadHistoryError] = useState<string | null>(null);
+  const [uploadHistoryError, setUploadHistoryError] = useState<StringKey | null>(null);
   // Post-upload watch window: keeps lists fresh while the backend scans and
   // classifies a just-uploaded doc (the pending-first flow hides in-flight
   // docs from the designated tabs until they resolve).
@@ -338,7 +348,7 @@ export default function LegalRepository() {
   const [shareUser, setShareUser] = useState('');
   const [shareReason, setShareReason] = useState('');
   const [shareExpiry, setShareExpiry] = useState('');
-  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<Msg | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pdfModalRef = useRef<HTMLDivElement>(null);
@@ -358,7 +368,7 @@ export default function LegalRepository() {
       setPendingDocs(response.data.documents || []);
     } catch (error) {
       console.error("Error fetching pending docs", error);
-      setPendingError('Gagal memuat dokumen pending. Periksa koneksi Anda lalu coba lagi.');
+      setPendingError('repoLoadPendingFail');
     }
   };
 
@@ -378,7 +388,7 @@ export default function LegalRepository() {
       setUploadHistory(prev => (append ? [...prev, ...entries] : entries));
     } catch (error) {
       console.error("Error fetching upload history", error);
-      setUploadHistoryError('Gagal memuat riwayat unggahan. Periksa koneksi Anda lalu coba lagi.');
+      setUploadHistoryError('repoLoadUploadsFail');
     }
   };
 
@@ -387,17 +397,17 @@ export default function LegalRepository() {
   // dialog, success lands in the feedback banner. Was confirm() + 2 alerts.
   const handleDeleteDocument = (doc: OJKDocument) => {
     setConfirmState({
-      title: 'Hapus dokumen?',
-      body: `"${shortJudul(doc.judul)}" akan dihapus permanen beserta semua relasi dan aksesnya. Tindakan ini tidak dapat dibatalkan.`,
-      confirmLabel: 'Hapus dokumen',
+      title: { key: 'repoDeleteTitle' },
+      body: { key: 'repoDeleteBody', params: { title: shortJudul(doc.judul) } },
+      confirmLabel: { key: 'repoDeleteConfirm' },
       onConfirm: async () => {
         try {
           await api.delete(`/api/repository/document/${doc.id}`);
         } catch (e) {
           // Rethrow so the dialog stays open with the reason inline.
-          throw new Error(isHttpError(e) ? (e.response.data?.detail || 'Gagal menghapus dokumen.') : 'Terjadi kesalahan koneksi.');
+          throw new LocalizedError(apiErrorMsg(e, 'repoDeleteFail'));
         }
-        showFeedback('success', `"${shortJudul(doc.judul)}" dihapus dari repositori.`);
+        showFeedback('success', { key: 'repoDeleted', params: { title: shortJudul(doc.judul) } });
         fetchDocs();
         fetchPendingDocs();
       },
@@ -411,16 +421,12 @@ export default function LegalRepository() {
       await api.post(`/api/repository/pending/${docId}/confirm`, { klasifikasi, jenis });
       // The confirmed card leaves the queue on refetch, so the success
       // message must outlive it: floating banner instead of a native alert.
-      showFeedback('success', 'Dokumen berhasil dikonfirmasi dan dimasukkan ke repositori.');
+      showFeedback('success', { key: 'repoConfirmedOk' });
       fetchPendingDocs();
       fetchDocs();
     } catch (e) {
-      if (isHttpError(e)) {
-        setPendingActionError({ docId, text: e.response?.data?.detail || 'Gagal mengkonfirmasi dokumen.' });
-      } else {
-        console.error(e);
-        setPendingActionError({ docId, text: 'Terjadi kesalahan koneksi.' });
-      }
+      console.error(e);
+      setPendingActionError({ docId, msg: apiErrorMsg(e, 'repoConfirmFail') });
     } finally {
       setPendingBusy(null);
     }
@@ -431,18 +437,18 @@ export default function LegalRepository() {
   // Opens the house ConfirmDialog (danger) — was window.confirm + alerts.
   const handleRejectPending = (doc: OJKDocument) => {
     setConfirmState({
-      title: 'Tolak dokumen?',
-      body: `"${shortJudul(doc.judul)}" akan dihapus permanen dari antrean dan tidak masuk ke repositori.`,
-      confirmLabel: 'Tolak dokumen',
+      title: { key: 'repoRejectTitle' },
+      body: { key: 'repoRejectBody', params: { title: shortJudul(doc.judul) } },
+      confirmLabel: { key: 'repoRejectConfirm' },
       onConfirm: async () => {
         try {
           await api.delete(`/api/repository/document/${doc.id}`);
         } catch (e) {
-          if (!isHttpError(e)) console.error(e);
+          console.error(e);
           // Rethrow so the dialog stays open with the reason inline.
-          throw new Error(isHttpError(e) ? (e.response?.data?.detail || 'Gagal menolak dokumen.') : 'Terjadi kesalahan koneksi.');
+          throw new LocalizedError(apiErrorMsg(e, 'repoRejectFail'));
         }
-        showFeedback('success', `"${shortJudul(doc.judul)}" ditolak dan dihapus dari antrean.`);
+        showFeedback('success', { key: 'repoRejected', params: { title: shortJudul(doc.judul) } });
         fetchPendingDocs();
       },
     });
@@ -456,7 +462,7 @@ export default function LegalRepository() {
       setDocuments(response.data.documents || []);
     } catch (error) {
       console.error("Error fetching repository", error);
-      setRepoError('Gagal memuat repositori. Periksa koneksi Anda lalu coba lagi.');
+      setRepoError('repoLoadRepoFail');
     } finally {
       setIsLoading(false);
     }
@@ -469,7 +475,7 @@ export default function LegalRepository() {
       setHistoryDocs(response.data.history || []);
     } catch (error) {
       console.error("Error fetching history", error);
-      setHistoryError('Gagal memuat riwayat analisis. Periksa koneksi Anda lalu coba lagi.');
+      setHistoryError('repoLoadAnalysisFail');
     }
   };
 
@@ -480,7 +486,7 @@ export default function LegalRepository() {
       setSelectedHistoryDoc(response.data);
     } catch (err) {
       console.error(err);
-      showFeedback('error', 'Gagal memuat detail hasil analisis.');
+      showFeedback('error', { key: 'repoAnalysisDetailFail' });
     } finally {
       setLoadingReportId(null);
     }
@@ -514,29 +520,27 @@ export default function LegalRepository() {
       (u.email || '').toLowerCase() === q
     );
     if (!grantee) {
-      setShareError('Pengguna tidak ditemukan. Pilih dari daftar atau ketik ID, username, atau email yang persis.');
+      setShareError({ key: 'repoShareUserNotFound' });
       return;
     }
     setShareError(null);
     setIsSharing(true);
     
     try {
-      const res = await api.post(`/api/documents/${showShareModal.id}/grant-access`, {
+      await api.post(`/api/documents/${showShareModal.id}/grant-access`, {
         granted_to: grantee.id,
         reason: shareReason,
         expires_at: shareExpiry || null
       });
       
-      showFeedback('success', res.data.message || 'Akses berhasil diberikan.');
+      showFeedback('success', { key: 'repoShareOk' });
       setShowShareModal(null);
       setShareUser('');
       setShareReason('');
       setShareExpiry('');
     } catch (e) {
       // Inline in the share modal, which stays open on failure — was alerts.
-      setShareError(isHttpError(e)
-        ? (e.response.data?.detail || 'Gagal memberikan akses.')
-        : 'Terjadi kesalahan saat memberikan akses.');
+      setShareError(apiErrorMsg(e, 'repoShareFail'));
     } finally {
       setIsSharing(false);
     }
@@ -549,7 +553,7 @@ export default function LegalRepository() {
       setTemplates(response.data.templates || []);
     } catch (error) {
       console.error("Error fetching templates", error);
-      setTemplatesError('Gagal memuat template dokumen. Periksa koneksi Anda lalu coba lagi.');
+      setTemplatesError('repoLoadTemplatesFail');
     }
   };
 
@@ -658,18 +662,16 @@ export default function LegalRepository() {
       });
       setGeneratedDoc(response.data.generated_document);
     } catch (e) {
-      if (isHttpError(e)) {
-        showFeedback('error', 'Gagal membuat dokumen dari template.');
-      } else {
-        console.error(e);
-        showFeedback('error', 'Terjadi kesalahan koneksi.');
-      }
+      console.error(e);
+      showFeedback('error', apiErrorMsg(e, 'repoTemplateFail'));
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleExportWord = (content: string) => {
+    // Generated artifact: follows the language active at export time.
+    const w = STRINGS[getLocale()];
     const htmlContent = content
       .replace(/^### (.+)$/gm, '<h3>$1</h3>')
       .replace(/^## (.+)$/gm, '<h2>$1</h2>')
@@ -684,7 +686,7 @@ export default function LegalRepository() {
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
       <head>
         <meta charset='utf-8'>
-        <title>Dokumen Hukum</title>
+        <title>${w.repoWordTitle}</title>
         <style>
           body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.8; color: #1a1a1a; }
           h1 { font-size: 16pt; text-align: center; margin-bottom: 24px; text-transform: uppercase; letter-spacing: 0.05em; }
@@ -705,7 +707,7 @@ export default function LegalRepository() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'Draft_Dokumen_Hukum.doc';
+    a.download = w.repoWordFile;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -723,16 +725,16 @@ export default function LegalRepository() {
 
   const handleClearFailedDocuments = () => {
     setConfirmState({
-      title: 'Bersihkan dokumen gagal?',
-      body: `${failedTotal} dokumen berstatus Gagal (termasuk ${failedDupTotal} duplikat) akan dihapus permanen dari repositori beserta berkasnya di server. Tindakan ini tidak dapat dibatalkan.`,
-      confirmLabel: `Hapus ${failedTotal} dokumen`,
+      title: { key: 'repoClearTitle' },
+      body: { key: 'repoClearBody', params: { n: failedTotal, dup: failedDupTotal } },
+      confirmLabel: { key: failedTotal === 1 ? 'repoClearConfirmOne' : 'repoClearConfirmOther', params: { n: failedTotal } },
       onConfirm: async () => {
         try {
-          const response = await api.delete('/api/repository/failed');
-          showFeedback('success', response.data.message || `${failedTotal} dokumen gagal dihapus.`);
+          await api.delete('/api/repository/failed');
+          showFeedback('success', { key: failedTotal === 1 ? 'repoClearedOne' : 'repoClearedOther', params: { n: failedTotal } });
         } catch (e) {
           // Rethrow so the dialog stays open with the reason inline.
-          throw new Error(isHttpError(e) ? (e.response.data?.detail || 'Gagal menghapus dokumen.') : 'Terjadi kesalahan koneksi.');
+          throw new LocalizedError(apiErrorMsg(e, 'repoDeleteFail'));
         }
         fetchDocs();
       },
@@ -746,7 +748,7 @@ export default function LegalRepository() {
     // Filter PDFs only
     const validFiles = Array.from(files).filter(f => f.type === "application/pdf");
     if (validFiles.length === 0) {
-      showFeedback('error', 'Hanya format PDF yang didukung.');
+      showFeedback('error', { key: 'repoPdfOnly' });
       return;
     }
 
@@ -758,7 +760,7 @@ export default function LegalRepository() {
     // Process files sequentially to avoid overloading browser
     for (let i = 0; i < validFiles.length; i++) {
       const file = validFiles[i];
-      setUploadStatus(`Mengunggah dokumen ${i + 1} dari ${validFiles.length}...`);
+      setUploadStatus({ phase: 'uploading', i: i + 1, total: validFiles.length });
 
       const formData = new FormData();
       formData.append("file", file);
@@ -779,7 +781,7 @@ export default function LegalRepository() {
       }
     }
 
-    setUploadStatus(`Selesai! Berhasil mengantrekan ${successCount} dari ${validFiles.length} dokumen.`);
+    setUploadStatus({ phase: 'done', ok: successCount, total: validFiles.length });
     if (successCount > 0) {
       // Pending-first flow (2026-09-30): in-flight docs stay hidden from the
       // designated tabs, so keep the lists refreshing for two minutes while
@@ -859,11 +861,11 @@ export default function LegalRepository() {
   // Status -> chip tone. Qualified statuses ("Berlaku (Dicabut Sebagian)",
   // "Berlaku (Perubahan) (Diubah)") must never read as plain success green
   // (critique remediation P0).
-  const statusTone = (status: string): { cls: string; hint?: string } => {
+  const statusTone = (status: string): { cls: string; hasHint?: boolean } => {
     if (status.includes('Gagal')) return { cls: 'status-chip--danger' };
     if (status === 'Tidak Berlaku') return { cls: 'status-chip--danger' };
     if (status.startsWith('Berlaku (')) {
-      return { cls: 'status-chip--warning', hint: 'Status berlaku dengan catatan — periksa tab Analisis untuk pasal yang dicabut/diubah.' };
+      return { cls: 'status-chip--warning', hasHint: true };
     }
     if (status === 'Berlaku') return { cls: 'status-chip--success' };
     return { cls: 'status-chip--neutral' };
@@ -1032,16 +1034,16 @@ export default function LegalRepository() {
   const tdStyle: React.CSSProperties = { padding: '8px 10px', verticalAlign: 'top', color: 'var(--text-primary)' };
 
   const tabs = [
-    { id: 'regulations' as ActiveTab, label: 'Regulasi', icon: <BookOpen size={16} />, count: regulationDocs.length },
-    { id: 'internal' as ActiveTab, label: 'Dokumen Internal', icon: <FolderOpen size={16} />, count: internalDocs.length },
-    { id: 'analyzed' as ActiveTab, label: 'Dokumen Teranalisis', icon: <FileCheck size={16} />, count: historyDocs.length },
-    { id: 'templates' as ActiveTab, label: 'Template Dokumen', icon: <File size={16} />, count: templates.length },
+    { id: 'regulations' as ActiveTab, label: t.repoTabRegs, icon: <BookOpen size={16} />, count: regulationDocs.length },
+    { id: 'internal' as ActiveTab, label: t.repoTabInternal, icon: <FolderOpen size={16} />, count: internalDocs.length },
+    { id: 'analyzed' as ActiveTab, label: t.repoTabAnalyzed, icon: <FileCheck size={16} />, count: historyDocs.length },
+    { id: 'templates' as ActiveTab, label: t.repoTabTemplates, icon: <File size={16} />, count: templates.length },
   ];
   if (['sekretaris perusahaan', 'dewa'].includes(user?.role?.toLowerCase() || '')) {
-    tabs.push({ id: 'pending' as ActiveTab, label: 'Dokumen Pending', icon: <Clock size={16} />, count: pendingDocs.length });
+    tabs.push({ id: 'pending' as ActiveTab, label: t.repoTabPending, icon: <Clock size={16} />, count: pendingDocs.length });
   }
   if (canSeeHistory) {
-    tabs.push({ id: 'history' as ActiveTab, label: 'Riwayat Unggahan', icon: <History size={16} />, count: historyTotal });
+    tabs.push({ id: 'history' as ActiveTab, label: t.repoTabHistory, icon: <History size={16} />, count: historyTotal });
   }
 
   const gotoPage = (p: number) => {
@@ -1071,13 +1073,13 @@ export default function LegalRepository() {
           style={{ position: 'fixed', top: '76px', right: '24px', zIndex: 900, maxWidth: '420px', margin: 0, boxShadow: '0 8px 24px rgba(2, 6, 23, 0.35)' }}
         >
           {feedback.kind === 'error' && <AlertTriangle size={16} aria-hidden="true" />}
-          {feedback.text}
+          {msg(t, feedback.msg)}
           {feedback.kind === 'error' && (
             <button
               type="button"
               className="admin-feedback-dismiss"
               onClick={() => setFeedback(null)}
-              aria-label="Tutup pesan error"
+              aria-label={t.repoCloseErrorAria}
             >
               <X size={14} />
             </button>
@@ -1089,22 +1091,19 @@ export default function LegalRepository() {
       {isUploading && (
         <div className="upload-overlay">
           <WorkBeam
-            active={
-              !uploadStatus?.includes('berhasil') &&
-              !uploadStatus?.includes('Gagal') &&
-              !uploadStatus?.includes('Duplikat')
-            }
+            active={uploadStatus?.phase !== 'done'}
           >
             <div className="upload-card">
-              {uploadStatus?.includes('berhasil') ? (
+              {uploadStatus?.phase === 'done' ? (
                 <CheckCircle2 size={48} className="success-icon" />
-              ) : uploadStatus?.includes('Gagal') || uploadStatus?.includes('Duplikat') ? (
-                <Database size={48} className="error-icon" style={{ color: uploadStatus?.includes('Duplikat') ? 'var(--warning-text)' : undefined }} />
               ) : (
                 <LoadingOrb state="weaving" size={64} />
               )}
-              <h3>{uploadStatus?.includes('Duplikat') ? 'Peringatan Duplikasi' : 'Memproses Basis Pengetahuan'}</h3>
-              <p>{uploadStatus}</p>
+              <h3>{t.repoUploadingTitle}</h3>
+              <p>
+                {uploadStatus?.phase === 'uploading' && fill(t.repoUploadProgress, { i: uploadStatus.i, total: uploadStatus.total })}
+                {uploadStatus?.phase === 'done' && fill(t.repoUploadDone, { ok: uploadStatus.ok, total: uploadStatus.total })}
+              </p>
             </div>
           </WorkBeam>
         </div>
@@ -1117,19 +1116,19 @@ export default function LegalRepository() {
             <span className="hero-icon-tile" aria-hidden="true">
               <Scale size={22} strokeWidth={1.75} />
             </span>
-            <h2>Legal Repository</h2>
+            <h2>{t.repoTitle}</h2>
           </div>
-          <p>Kelola seluruh dokumen regulasi dan internal Anda di satu tempat.</p>
+          <p>{t.repoHeroSub}</p>
           {!selectedHistoryDoc && (
             <div className="search-bar hero-search">
               <Search size={20} className="search-icon" />
-              <label htmlFor="repo-search" className="visually-hidden">Cari dokumen</label>
+              <label htmlFor="repo-search" className="visually-hidden">{t.repoSearchLabel}</label>
               <input
                 id="repo-search"
                 type="text"
                 placeholder={activeTab === 'regulations'
-                  ? "Cari regulasi berdasarkan judul, nomor, atau instansi..."
-                  : activeTab === 'analyzed' ? "Cari dokumen teranalisis..." : "Cari dokumen internal berdasarkan nama..."}
+                  ? t.repoSearchPhReg
+                  : activeTab === 'analyzed' ? t.repoSearchPhAnalyzed : t.repoSearchPhInternal}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -1145,8 +1144,8 @@ export default function LegalRepository() {
             <CheckCircle2 size={16} />
           </div>
           <div className="stat-info">
-            <h4>{documents.length} Total</h4>
-            <p>Dokumen terindeks</p>
+            <h4>{fill(t.repoStatTotal, { n: documents.length })}</h4>
+            <p>{t.repoStatTotalSub}</p>
           </div>
         </div>
         <div className="stat-card">
@@ -1154,8 +1153,8 @@ export default function LegalRepository() {
             <Database size={16} />
           </div>
           <div className="stat-info">
-            <h4>{regulationDocs.length} Publik</h4>
-            <p>Regulasi</p>
+            <h4>{fill(t.repoStatPublic, { n: regulationDocs.length })}</h4>
+            <p>{t.repoStatPublicSub}</p>
           </div>
         </div>
         <div className="stat-card">
@@ -1163,18 +1162,18 @@ export default function LegalRepository() {
             <FolderOpen size={16} />
           </div>
           <div className="stat-info">
-            <h4>{internalDocs.length} Internal</h4>
-            <p>Dokumen privat Anda</p>
+            <h4>{fill(t.repoStatInternal, { n: internalDocs.length })}</h4>
+            <p>{t.repoStatInternalSub}</p>
           </div>
         </div>
         {['sekretaris perusahaan', 'dewa'].includes(roleLower) && (
-          <div className="stat-card priority" title="Dokumen yang menunggu konfirmasi Anda">
+          <div className="stat-card priority" title={t.repoStatPendingTip}>
             <div className="stat-icon orange">
               <Clock size={16} />
             </div>
             <div className="stat-info">
-              <h4>{pendingDocs.length} Pending</h4>
-              <p>Menunggu konfirmasi</p>
+              <h4>{fill(t.repoStatPending, { n: pendingDocs.length })}</h4>
+              <p>{t.repoStatPendingSub}</p>
             </div>
           </div>
         )}
@@ -1183,17 +1182,17 @@ export default function LegalRepository() {
       {/* Header / Actions */}
       <div className="view-header repo-header" style={{ marginTop: '24px' }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Rincian Repositori</h3>
+          <h3 style={{ margin: 0, fontSize: '1.2rem' }}>{t.repoDetailTitle}</h3>
           {/* Demoted out of the primary toolbar (critique P1·2): honest label
               + live count, rendered only when there is something to clean. */}
           <ProtectedRoute minRole="manajer">
             {failedTotal > 0 && (
               <button
                 onClick={handleClearFailedDocuments}
-                title={`Hapus permanen ${failedTotal} dokumen berstatus Gagal, termasuk ${failedDupTotal} duplikat`}
+                title={fill(t.repoClearTip, { n: failedTotal, dup: failedDupTotal })}
                 style={{ marginTop: '6px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: 'var(--danger-text)', display: 'inline-flex', alignItems: 'center', gap: '5px', textDecoration: 'underline' }}
               >
-                <Trash2 size={12} /> Bersihkan Gagal & Duplikat ({failedTotal})
+                <Trash2 size={12} /> {fill(t.repoClearBtn, { n: failedTotal })}
               </button>
             )}
           </ProtectedRoute>
@@ -1210,16 +1209,17 @@ export default function LegalRepository() {
                 aria-expanded={filterOpen}
                 style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}
               >
-                Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+                {t.repoFilter}{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
                 <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>{filterOpen ? '▲' : '▼'}</span>
               </button>
               {filterOpen && (
                 <div className="repo-filter-panel">
                   {[
-                    { key: 'klasifikasi', title: 'Klasifikasi', options: klasifikasiOptions, selected: selectedKlasifikasi, set: setSelectedKlasifikasi, count: countKlas, label: (o: string) => o },
-                    { key: 'jenis', title: 'Kategori (Jenis)', options: jenisOptions, selected: selectedJenis, set: setSelectedJenis, count: countJenis, label: (o: string) => o },
-                    { key: 'status', title: 'Status', options: statusOptions, selected: selectedStatus, set: setSelectedStatus, count: countStatus, label: (o: string) => o },
-                    { key: 'sektor', title: 'Instansi', options: sektorOptions, selected: selectedSektor, set: setSelectedSektor, count: countSektor, label: fmtSektor },
+                    // Option VALUES stay raw (filter/URL state); only the shown label is translated.
+                    { key: 'klasifikasi', title: t.repoFacetKlas, options: klasifikasiOptions, selected: selectedKlasifikasi, set: setSelectedKlasifikasi, count: countKlas, label: (o: string) => statusLabel(t, o) },
+                    { key: 'jenis', title: t.repoFacetJenis, options: jenisOptions, selected: selectedJenis, set: setSelectedJenis, count: countJenis, label: (o: string) => o },
+                    { key: 'status', title: t.repoFacetStatus, options: statusOptions, selected: selectedStatus, set: setSelectedStatus, count: countStatus, label: (o: string) => statusLabel(t, o) },
+                    { key: 'sektor', title: t.repoFacetSektor, options: sektorOptions, selected: selectedSektor, set: setSelectedSektor, count: countSektor, label: fmtSektor },
                   ].map(group => {
                     // Progressive disclosure: rare jenis options and the long
                     // instansi tail hide behind a "Lainnya (n)" toggle; the
@@ -1247,8 +1247,8 @@ export default function LegalRepository() {
                         <input
                           value={sektorQuery}
                           onChange={e => setSektorQuery(e.target.value)}
-                          placeholder="Cari instansi..."
-                          aria-label="Cari instansi"
+                          placeholder={t.repoSearchAgencyPh}
+                          aria-label={t.repoSearchAgencyAria}
                           style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '6px 8px', color: 'var(--text-primary)', fontSize: '0.82rem', marginBottom: '6px' }}
                         />
                       )}
@@ -1256,7 +1256,7 @@ export default function LegalRepository() {
                         {group.title}
                       </div>
                       {visible.length === 0 && (
-                        <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', padding: '2px 4px' }}>Tidak ada opsi.</div>
+                        <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', padding: '2px 4px' }}>{t.repoNoOptions}</div>
                       )}
                       {visible.map(opt => {
                         const n = group.count(opt);
@@ -1278,7 +1278,7 @@ export default function LegalRepository() {
                           onClick={() => (group.key === 'jenis' ? setJenisShowAll(v => !v) : setSektorShowAll(v => !v))}
                           style={{ background: 'none', border: 'none', color: 'var(--accent-color)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, padding: '4px 4px 8px', textDecoration: 'underline' }}
                         >
-                          Lainnya ({hidden.length})
+                          {fill(t.repoMore, { n: hidden.length })}
                         </button>
                       )}
                       {group.key === 'sektor' && (sektorShowAll || sektorQuery.trim()) && group.options.length > 6 && (
@@ -1286,7 +1286,7 @@ export default function LegalRepository() {
                           onClick={() => { setSektorShowAll(false); setSektorQuery(''); }}
                           style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, padding: '4px 4px 8px', textDecoration: 'underline' }}
                         >
-                          Sembunyikan instansi lain
+                          {t.repoHideAgencies}
                         </button>
                       )}
                     </div>
@@ -1298,7 +1298,7 @@ export default function LegalRepository() {
                       disabled={activeFilterCount === 0}
                       style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-color)', background: activeFilterCount === 0 ? 'transparent' : 'rgba(239, 68, 68, 0.1)', color: activeFilterCount === 0 ? 'var(--text-secondary)' : 'var(--danger-text)', cursor: activeFilterCount === 0 ? 'not-allowed' : 'pointer', fontSize: '0.85rem', fontWeight: 600, opacity: activeFilterCount === 0 ? 0.5 : 1 }}
                     >
-                      Bersihkan semua filter
+                      {t.repoClearAllFilters}
                     </button>
                   </div>
                 </div>
@@ -1310,7 +1310,7 @@ export default function LegalRepository() {
                 override measured 3.7:1 in dark — critique P1, DESIGN.md
                 "Dark Theme" open item. */}
             <button className="upload-btn" onClick={() => fileInputRef.current?.click()}>
-              <Upload size={18} /> Tambah PDF
+              <Upload size={18} /> {t.repoAddPdf}
             </button>
           </div>
           <input
@@ -1331,7 +1331,7 @@ export default function LegalRepository() {
             onClick={() => setSelectedHistoryDoc(null)}
             style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.95rem', fontWeight: 500 }}
           >
-            ← Kembali ke Repositori
+            {t.repoBack}
           </button>
           <div style={{ padding: '0 8px 32px 8px' }}>
             <ComplianceResultsViewer
@@ -1364,62 +1364,62 @@ export default function LegalRepository() {
         {(activeTab === 'regulations' || activeTab === 'internal' || activeTab === 'analyzed') && !isLoading && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', margin: '16px 0 4px' }}>
             <span style={{ fontSize: '0.88rem', color: 'var(--text-secondary)' }}>
-              Menampilkan{' '}
+              {t.repoShowing}{' '}
               <strong style={{ color: 'var(--text-primary)' }}>
                 {activeTab === 'analyzed' ? pagedHistoryDocs.length : pagedDocs.length}
               </strong>
-              {' '}dari{' '}
+              {' '}{t.repoOf}{' '}
               <strong style={{ color: 'var(--text-primary)' }}>
                 {activeTab === 'analyzed' ? filteredHistoryDocs.length : filteredDocs.length}
               </strong>
-              {' '}dokumen
+              {' '}{(activeTab === 'analyzed' ? filteredHistoryDocs.length : filteredDocs.length) === 1 ? t.repoDocWordOne : t.repoDocWordOther}
               {(activeFilterCount > 0 || search) && (
-                <span style={{ color: 'var(--accent-color)' }}> (terfilter)</span>
+                <span style={{ color: 'var(--accent-color)' }}> {t.repoFiltered}</span>
               )}
             </span>
             {(activeTab === 'regulations' || activeTab === 'internal') && (
               <>
                 {visibleKlasifikasi.map(v => (
-                  <button key={'k-' + v} onClick={() => setSelectedKlasifikasi(toggleInList(selectedKlasifikasi, v))} style={chipStyle} title="Hapus filter">
-                    {v} <X size={12} />
+                  <button key={'k-' + v} onClick={() => setSelectedKlasifikasi(toggleInList(selectedKlasifikasi, v))} style={chipStyle} title={t.repoRemoveFilter}>
+                    {statusLabel(t, v)} <X size={12} />
                   </button>
                 ))}
                 {selectedJenis.map(v => (
-                  <button key={'j-' + v} onClick={() => setSelectedJenis(toggleInList(selectedJenis, v))} style={chipStyle} title="Hapus filter">
+                  <button key={'j-' + v} onClick={() => setSelectedJenis(toggleInList(selectedJenis, v))} style={chipStyle} title={t.repoRemoveFilter}>
                     {v} <X size={12} />
                   </button>
                 ))}
                 {selectedStatus.map(v => (
-                  <button key={'s-' + v} onClick={() => setSelectedStatus(toggleInList(selectedStatus, v))} style={chipStyle} title="Hapus filter">
-                    {v} <X size={12} />
+                  <button key={'s-' + v} onClick={() => setSelectedStatus(toggleInList(selectedStatus, v))} style={chipStyle} title={t.repoRemoveFilter}>
+                    {statusLabel(t, v)} <X size={12} />
                   </button>
                 ))}
                 {selectedSektor.map(v => (
-                  <button key={'sek-' + v} onClick={() => setSelectedSektor(toggleInList(selectedSektor, v))} style={chipStyle} title="Hapus filter">
+                  <button key={'sek-' + v} onClick={() => setSelectedSektor(toggleInList(selectedSektor, v))} style={chipStyle} title={t.repoRemoveFilter}>
                     {fmtSektor(v)} <X size={12} />
                   </button>
                 ))}
                 {activeFilterCount > 0 && (
                   <button onClick={clearAllFilters} style={{ ...chipStyle, background: 'transparent', color: 'var(--text-secondary)', borderColor: 'var(--border-color)' }}>
-                    Bersihkan semua
+                    {t.repoClearAll}
                   </button>
                 )}
               </>
             )}
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              <label htmlFor="repo-sort">Urutkan:</label>
+              <label htmlFor="repo-sort">{t.repoSortLabel}</label>
               <select
                 id="repo-sort"
                 value={sortBy}
                 onChange={e => setSortBy(e.target.value as typeof sortBy)}
                 style={{ background: 'var(--bg-card)', color: 'var(--text-primary)', border: '1px solid var(--border-color)', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', fontSize: '0.85rem' }}
               >
-                <option value="default">Urutan default</option>
-                <option value="tahun-desc">Tahun terbaru</option>
-                <option value="judul-asc">Judul A–Z</option>
-                <option value="instansi-asc">Instansi A–Z</option>
+                <option value="default">{t.repoSortDefault}</option>
+                <option value="tahun-desc">{t.repoSortYear}</option>
+                <option value="judul-asc">{t.repoSortTitle}</option>
+                <option value="instansi-asc">{t.repoSortAgency}</option>
               </select>
-              <label htmlFor="repo-rows">Baris per halaman:</label>
+              <label htmlFor="repo-rows">{t.repoRowsLabel}</label>
               <select
                 id="repo-rows"
                 value={rowsPerPage}
@@ -1436,12 +1436,12 @@ export default function LegalRepository() {
 
         {/* Document Grid */}
         {isLoading ? (
-          <LoadingOrb className="loading-orb--padded" state="searching" label="Memuat database regulasi..." />
+          <LoadingOrb className="loading-orb--padded" state="searching" label={t.repoLoading} />
         ) : activeTabError ? (
           <div className="empty-state" role="alert">
             <AlertCircle size={48} style={{ opacity: 0.6, color: 'var(--danger-text)' }} />
-            <p>{activeTabError}</p>
-            <button className="btn btn-primary" onClick={activeTabRetry}>Coba lagi</button>
+            <p>{t[activeTabError]}</p>
+            <button className="btn btn-primary" onClick={activeTabRetry}>{t.repoRetry}</button>
           </div>
         ) : (activeTab === 'regulations' && sortedDocs.length === 0) || 
             (activeTab === 'internal' && sortedDocs.length === 0) || 
@@ -1453,54 +1453,54 @@ export default function LegalRepository() {
             {activeTab === 'internal' && internalDocs.length === 0 ? (
               <>
                 <FolderOpen size={48} style={{ opacity: 0.3 }} />
-                <p>Belum ada dokumen internal.</p>
-                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>Klik "Tambah PDF" untuk mengunggah dokumen pertama Anda.</p>
+                <p>{t.repoEmptyInternal}</p>
+                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>{t.repoEmptyInternalHint}</p>
               </>
             ) : activeTab === 'analyzed' && historyDocs.length === 0 ? (
               <>
                 <FileCheck size={48} style={{ opacity: 0.3 }} />
-                <p>Belum ada dokumen yang dianalisis.</p>
-                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>Gunakan tombol Upload Dokumen di halaman Contracts untuk menganalisis dokumen dan menyimpannya ke sini.</p>
+                <p>{t.repoEmptyAnalyzed}</p>
+                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>{t.repoEmptyAnalyzedHint}</p>
               </>
             ) : activeTab === 'templates' && templates.length === 0 ? (
               <>
                 <File size={48} style={{ opacity: 0.3 }} />
-                <p>Belum ada template dokumen.</p>
-                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>Template akan ditambahkan oleh administrator.</p>
+                <p>{t.repoEmptyTemplates}</p>
+                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>{t.repoEmptyTemplatesHint}</p>
               </>
             ) : activeTab === 'pending' && pendingDocs.length === 0 ? (
               <>
                 <Clock size={48} style={{ opacity: 0.3 }} />
-                <p>Antrean dokumen kosong.</p>
-                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>Dokumen yang baru diunggah dipindai dan diklasifikasikan di antrean ini terlebih dahulu.</p>
+                <p>{t.repoEmptyPending}</p>
+                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>{t.repoEmptyPendingHint}</p>
               </>
             ) : activeTab === 'history' && uploadHistory.length === 0 ? (
               <>
                 <History size={48} style={{ opacity: 0.3 }} />
-                <p>Belum ada riwayat unggahan.</p>
-                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>Setiap dokumen yang diunggah tercatat di sini beserta vonis AI dan penyelesaiannya.</p>
+                <p>{t.repoEmptyHistory}</p>
+                <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>{t.repoEmptyHistoryHint}</p>
               </>
             ) : (
               <>
                 <Search size={48} style={{ opacity: 0.3 }} />
                 <p>
                   {search
-                    ? <>Tidak ada hasil untuk <strong>"{search}"</strong>.</>
-                    : 'Tidak ada dokumen yang sesuai dengan filter aktif.'}
+                    ? <>{t.repoNoResultsFor} <strong>"{search}"</strong>.</>
+                    : t.repoNoMatchFilters}
                 </p>
                 {(search || activeFilterCount > 0) && (
                   <button className="btn btn-primary" onClick={() => { setSearch(''); clearAllFilters(); }}>
-                    Bersihkan pencarian & filter
+                    {t.repoClearSearchFilters}
                   </button>
                 )}
                 {(activeTab === 'regulations' || activeTab === 'internal') && hiddenDups > 0 && selectedStatus.length === 0 && (
                   <p style={{ fontSize: '0.85rem', opacity: 0.85 }}>
-                    {hiddenDups} dokumen disembunyikan karena berstatus Duplikat.{' '}
+                    {fill(hiddenDups === 1 ? t.repoHiddenDupsOne : t.repoHiddenDupsOther, { n: hiddenDups })}{' '}
                     <button
                       onClick={() => setSelectedStatus(['Duplikat'])}
                       style={{ background: 'none', border: 'none', color: 'var(--accent-color)', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600, padding: 0, textDecoration: 'underline' }}
                     >
-                      Tampilkan duplikat
+                      {t.repoShowDups}
                     </button>
                   </p>
                 )}
@@ -1524,25 +1524,25 @@ export default function LegalRepository() {
                         ? { ...chipStyle, background: '#2563eb', color: 'white', borderColor: 'var(--accent-color)' }
                         : chipStyle}
                     >
-                      {o === '' ? `Semua${historyTotal > 0 ? ` (${historyTotal})` : ''}` : (OUTCOME_META[o]?.label || o)}
+                      {o === '' ? (historyTotal > 0 ? fill(t.repoAllN, { n: historyTotal }) : t.repoAll) : (OUTCOME_META[o] ? t[OUTCOME_META[o].labelKey] : o)}
                     </button>
                   ))}
                 </div>
                 {uploadHistory.length === 0 ? (
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', padding: '12px 0' }}>
-                    Tidak ada riwayat dengan hasil tersebut.
+                    {t.repoHistoryNone}
                   </p>
                 ) : (
                   <div style={{ overflowX: 'auto', background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                       <thead>
                         <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)' }}>
-                          <th style={thStyle}>Berkas</th>
-                          <th style={thStyle}>Pengunggah</th>
-                          <th style={thStyle}>Waktu Unggah</th>
-                          <th style={thStyle}>Vonis AI</th>
-                          <th style={thStyle}>Hasil</th>
-                          <th style={thStyle}>Penyelesaian</th>
+                          <th style={thStyle}>{t.repoColFile}</th>
+                          <th style={thStyle}>{t.repoColUploader}</th>
+                          <th style={thStyle}>{t.repoColUploadTime}</th>
+                          <th style={thStyle}>{t.repoColAiVerdict}</th>
+                          <th style={thStyle}>{t.repoColOutcome}</th>
+                          <th style={thStyle}>{t.repoColResolution}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1567,7 +1567,7 @@ export default function LegalRepository() {
                                   {h.ai_jenis && <div>{h.ai_jenis}</div>}
                                   {h.ai_klasifikasi && (
                                     <div style={{ color: 'var(--text-secondary)' }}>
-                                      {h.ai_klasifikasi}{h.ai_confidence != null ? ` · ${h.ai_confidence}%` : ''}
+                                      {statusLabel(t, h.ai_klasifikasi)}{h.ai_confidence != null ? ` · ${h.ai_confidence}%` : ''}
                                     </div>
                                   )}
                                 </>
@@ -1575,12 +1575,12 @@ export default function LegalRepository() {
                             </td>
                             <td style={tdStyle}>
                               <span className={`status-chip ${OUTCOME_META[h.outcome]?.cls || 'status-chip--neutral'}`}>
-                                {OUTCOME_META[h.outcome]?.label || h.outcome}
+                                {OUTCOME_META[h.outcome] ? t[OUTCOME_META[h.outcome].labelKey] : h.outcome}
                               </span>
                             </td>
                             <td style={tdStyle}>
                               {h.final_jenis && (
-                                <div>{h.final_jenis}{h.final_klasifikasi ? ` · ${h.final_klasifikasi}` : ''}</div>
+                                <div>{h.final_jenis}{h.final_klasifikasi ? ` · ${statusLabel(t, h.final_klasifikasi)}` : ''}</div>
                               )}
                               {(h.resolved_at || h.resolved_by_name) && (
                                 <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
@@ -1606,7 +1606,7 @@ export default function LegalRepository() {
                           .finally(() => setHistoryLoadingMore(false));
                       }}
                     >
-                      {historyLoadingMore ? 'Memuat…' : `Muat lebih banyak (${historyTotal - uploadHistory.length} tersisa)`}
+                      {historyLoadingMore ? t.repoLoadingMore : fill(t.repoLoadMore, { n: historyTotal - uploadHistory.length })}
                     </button>
                   </div>
                 )}
@@ -1616,28 +1616,28 @@ export default function LegalRepository() {
               <div key={doc.id} className="document-card" style={{ borderColor: 'var(--border-color)' }}>
                 <div className="doc-type-badge" style={{ background: 'rgba(59, 130, 246, 0.12)', color: 'var(--accent-hover)' }}>
                   <Loader2 size={12} className="animate-spin-slow" style={{ marginRight: '4px', verticalAlign: '-2px' }} />
-                  Sedang Dipindai
+                  {t.repoScanning}
                 </div>
                 <h3 className="doc-title">{doc.judul}</h3>
                 <div className="doc-meta">
-                  <span>Nomor: {doc.nomor}</span>
-                  {doc.uploaded_at && <span>Diunggah: {formatDateTime(doc.uploaded_at)}</span>}
+                  <span>{t.drawerNomorPrefix}: {doc.nomor}</span>
+                  {doc.uploaded_at && <span>{fill(t.repoUploadedAt, { date: formatDateTime(doc.uploaded_at) })}</span>}
                 </div>
                 <p style={{ margin: '12px 0 0', fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                  Dokumen sedang dipindai dan diklasifikasikan oleh AI. Bila keyakinan di atas ambang batas, dokumen langsung masuk ke tab tujuannya; bila di bawahnya, kartu ini berubah menjadi formulir persetujuan.
+                  {t.repoScanningBody}
                 </p>
                 {doc.stale ? (
                   <>
                     <div style={{ marginTop: '12px', padding: '10px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', fontSize: '0.83rem', color: 'var(--danger-text)' }}>
                       <AlertCircle size={14} style={{ marginRight: '6px', verticalAlign: '-2px' }} />
-                      Pemindaian tidak lagi berjalan (backend mungkin sempat dimuat ulang). Dokumen macet di antrean — Anda dapat menolaknya.
+                      {t.repoStaleWarn}
                     </div>
                     <button
                       onClick={() => handleRejectPending(doc)}
                       style={{ width: '100%', marginTop: '8px', background: 'transparent', color: 'var(--danger-text)', border: '1px solid var(--danger-text)', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                     >
                       <Trash2 size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                      Tolak Dokumen
+                      {t.repoRejectBtn}
                     </button>
                   </>
                 ) : (
@@ -1646,24 +1646,24 @@ export default function LegalRepository() {
                     onClick={() => setViewPdfDoc(doc)}
                     style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', marginTop: '12px' }}
                   >
-                    <BookOpen size={14} /> Lihat Dokumen
+                    <BookOpen size={14} /> {t.repoViewDoc}
                   </button>
                 )}
               </div>
             ) : (
               <div key={doc.id} className="document-card" style={{ borderColor: '#f59e0b', background: 'rgba(245, 158, 11, 0.05)' }}>
                 <div className="doc-type-badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warning-text)' }}>
-                  Menunggu Konfirmasi
+                  {t.stMenunggu}
                 </div>
                 <h3 className="doc-title">{doc.judul}</h3>
                 <div className="doc-meta">
-                  <span>Nomor: {doc.nomor}</span>
+                  <span>{t.drawerNomorPrefix}: {doc.nomor}</span>
                   {doc.ai_confidence != null && (
                     <span
                       className="status-chip status-chip--warning"
-                      title="Keyakinan hasil pemindaian & klasifikasi VLM berada di bawah ambang batas, sehingga dokumen memerlukan persetujuan manusia."
+                      title={t.repoAiConfTip}
                     >
-                      Keyakinan AI: {doc.ai_confidence}%
+                      {fill(t.repoAiConf, { n: doc.ai_confidence })}
                     </span>
                   )}
                 </div>
@@ -1672,16 +1672,16 @@ export default function LegalRepository() {
                   onClick={() => setViewPdfDoc(doc)}
                   style={{ background: 'transparent', border: '1px solid #f59e0b', color: 'var(--warning-text)', marginTop: '12px' }}
                 >
-                  <BookOpen size={14} /> Lihat Dokumen
+                  <BookOpen size={14} /> {t.repoViewDoc}
                 </button>
                 <div style={{ marginTop: '12px', padding: '12px', background: 'var(--bg-element)', borderRadius: '8px' }}>
                   
                   {revealedAi[doc.id] ? (
                     <div style={{ padding: '8px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid var(--info)', borderRadius: '6px', marginBottom: '12px', fontSize: '0.85rem', color: 'var(--accent-hover)' }}>
                       <Bot size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                      AI merekomendasikan: <strong>{doc.klasifikasi || 'Umum'}</strong>
-                      {doc.ai_jenis && <> · Jenis: <strong>{doc.ai_jenis}</strong></>}
-                      {doc.ai_confidence != null && <> · Keyakinan: <strong>{doc.ai_confidence}%</strong></>}
+                      {t.repoAiRecommends} <strong>{statusLabel(t, doc.klasifikasi || 'Umum')}</strong>
+                      {doc.ai_jenis && <> · {t.repoAiType} <strong>{doc.ai_jenis}</strong></>}
+                      {doc.ai_confidence != null && <> · {t.repoAiConfidence} <strong>{doc.ai_confidence}%</strong></>}
                       {doc.ai_reasoning && (
                         <p style={{ margin: '6px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{doc.ai_reasoning}</p>
                       )}
@@ -1691,23 +1691,23 @@ export default function LegalRepository() {
                       onClick={() => setRevealedAi(prev => ({ ...prev, [doc.id]: true }))}
                       style={{ width: '100%', background: 'transparent', border: '1px solid var(--info)', color: 'var(--accent-hover)', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '12px' }}
                     >
-                      <Bot size={14} /> Tampilkan Rekomendasi AI
+                      <Bot size={14} /> {t.repoShowAi}
                     </button>
                   )}
 
-                  <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Klasifikasi Akhir:</p>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t.repoFinalKlas}</p>
                   <select
                     value={pendingSel[doc.id]?.klass ?? doc.klasifikasi ?? ''}
                     onChange={(e) => setPendingSel(prev => ({ ...prev, [doc.id]: { ...prev[doc.id], klass: e.target.value } }))}
                     style={{ width: '100%', background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', color: 'var(--text-primary)', marginBottom: '12px' }}
                   >
-                    <option value="" disabled>Pilih Klasifikasi...</option>
-                    <option value="Umum">Umum</option>
-                    <option value="Rahasia">Rahasia</option>
-                    <option value="Terbatas">Terbatas</option>
+                    <option value="" disabled>{t.repoPickKlas}</option>
+                    <option value="Umum">{t.stUmum}</option>
+                    <option value="Rahasia">{t.stRahasia}</option>
+                    <option value="Terbatas">{t.stTerbatas}</option>
                   </select>
 
-                  <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Jenis Dokumen (Taksonomi):</p>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{t.repoFinalJenis}</p>
                   <select
                     value={pendingSel[doc.id]?.jenis ?? doc.ai_jenis ?? doc.jenis ?? ''}
                     onChange={(e) => setPendingSel(prev => ({ ...prev, [doc.id]: { ...prev[doc.id], jenis: e.target.value } }))}
@@ -1723,14 +1723,14 @@ export default function LegalRepository() {
                   {pendingActionError?.docId === doc.id && (
                     <p role="alert" style={{ margin: '0 0 8px', fontSize: '0.83rem', color: 'var(--danger-text)' }}>
                       <AlertCircle size={13} style={{ verticalAlign: '-2px', marginRight: '5px' }} aria-hidden="true" />
-                      {pendingActionError.text}
+                      {msg(t, pendingActionError.msg)}
                     </p>
                   )}
                   <button
                     onClick={() => {
                       const finalClass = pendingSel[doc.id]?.klass ?? doc.klasifikasi;
                       if (!finalClass) {
-                        setPendingActionError({ docId: doc.id, text: 'Pilih klasifikasi terlebih dahulu.' });
+                        setPendingActionError({ docId: doc.id, msg: { key: 'repoPickKlasFirst' } });
                         return;
                       }
                       setPendingActionError(null);
@@ -1741,14 +1741,14 @@ export default function LegalRepository() {
                     style={{ width: '100%', background: '#92400e', color: 'white', border: 'none', padding: '8px', borderRadius: '6px', cursor: pendingBusy === doc.id ? 'not-allowed' : 'pointer', fontWeight: 600, opacity: pendingBusy === doc.id ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                   >
                     {pendingBusy === doc.id && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
-                    {pendingBusy === doc.id ? 'Memproses...' : 'Konfirmasi & Simpan'}
+                    {pendingBusy === doc.id ? t.repoWorking : t.repoConfirmSave}
                   </button>
                   <button
                     onClick={() => handleRejectPending(doc)}
                     style={{ width: '100%', background: 'transparent', color: 'var(--danger-text)', border: '1px solid var(--danger-text)', padding: '8px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600, marginTop: '8px' }}
                   >
                     <Trash2 size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                    Tolak Dokumen
+                    {t.repoRejectBtn}
                   </button>
                 </div>
               </div>
@@ -1757,7 +1757,7 @@ export default function LegalRepository() {
             {activeTab === 'templates' && templates.map((tpl) => (
               <div key={tpl.id} className="document-card internal-card" style={{ borderTopColor: 'var(--accent-color)' }}>
                 <div className="doc-type-badge internal-badge">
-                  Template {tpl.category}
+                  {fill(t.repoTemplateBadge, { category: tpl.category })}
                 </div>
                 <h3 className="doc-title">{tpl.title}</h3>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '8px 0 16px', lineHeight: '1.4' }}>
@@ -1768,7 +1768,7 @@ export default function LegalRepository() {
                   style={{ width: '100%', marginTop: '12px' }}
                   onClick={() => setShowPromptModal(tpl.id)}
                 >
-                  <File size={14} /> Gunakan Template
+                  <File size={14} /> {t.repoUseTemplate}
                 </button>
               </div>
             ))}
@@ -1783,14 +1783,14 @@ export default function LegalRepository() {
                     {doc.approval_mode === 'auto' && (
                       <span
                         className="status-chip status-chip--neutral"
-                        title={`Disetujui otomatis oleh AI — keyakinan VLM ${doc.ai_confidence != null ? `${doc.ai_confidence}%` : '—'} (di atas ambang batas), tanpa antrean pending.`}
+                        title={fill(t.repoAutoTip, { conf: doc.ai_confidence != null ? `${doc.ai_confidence}%` : '—' })}
                       >
-                        <Zap size={10} style={{ marginRight: '3px', verticalAlign: '-1px' }} />Otomatis
+                        <Zap size={10} style={{ marginRight: '3px', verticalAlign: '-1px' }} />{t.repoAuto}
                       </span>
                     )}
                     {doc.klasifikasi && doc.klasifikasi !== 'Umum' && (
                       <span className={`status-chip ${klasTone(doc.klasifikasi)}`}>
-                        {doc.klasifikasi}
+                        {statusLabel(t, doc.klasifikasi)}
                       </span>
                     )}
                     {(() => {
@@ -1804,16 +1804,16 @@ export default function LegalRepository() {
                       return (
                         <span
                           className={`status-chip ${tone.cls}`}
-                          title={tone.hint ? undefined : `Status dokumen: ${doc.status}`}
-                          {...(tone.hint ? {
+                          title={tone.hasHint ? undefined : fill(t.repoStatusTip, { status: statusLabel(t, doc.status) })}
+                          {...(tone.hasHint ? {
                             tabIndex: 0,
-                            'data-hint': tone.hint,
+                            'data-hint': t.drawerStatusNote,
                             'aria-describedby': `status-hint-${doc.id}`,
                           } : {})}
                         >
-                          {doc.status}
-                          {tone.hint && (
-                            <span id={`status-hint-${doc.id}`} className="visually-hidden">{tone.hint}</span>
+                          {statusLabel(t, doc.status)}
+                          {tone.hasHint && (
+                            <span id={`status-hint-${doc.id}`} className="visually-hidden">{t.drawerStatusNote}</span>
                           )}
                         </span>
                       );
@@ -1826,16 +1826,16 @@ export default function LegalRepository() {
                     box now matches on. */}
                 <div className="doc-citation">
                   {citationInfo.get(doc.id)?.citation
-                    ? `${doc.jenis} No. ${citationInfo.get(doc.id)!.citation}`
+                    ? fill(t.repoCitation, { jenis: doc.jenis, citation: citationInfo.get(doc.id)!.citation! })
                     : doc.jenis}
                   {' · ID '}{doc.id}
                 </div>
                 <div className="doc-meta">
-                  <span>Nomor: {doc.nomor}</span>
+                  <span>{t.drawerNomorPrefix}: {doc.nomor}</span>
                   <span className="doc-sektor">{fmtSektor(doc.sektor)}</span>
                 </div>
                 <div className="doc-footer">
-                  <File size={16} /> Disimpan dalam Basis Data
+                  <File size={16} /> {t.repoStoredDb}
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
@@ -1843,14 +1843,14 @@ export default function LegalRepository() {
                     onClick={() => setSelectedDoc(doc)}
                     style={{ flex: 1 }}
                   >
-                    <Zap size={14} /> Analisis
+                    <Zap size={14} /> {t.repoAnalyze}
                   </button>
                   {['sekretaris perusahaan', 'dewa'].includes(user?.role?.toLowerCase() || '') && (
                     <button
                       onClick={() => handleDeleteDocument(doc)}
                       style={{ background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger-text)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '0 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
-                      title="Hapus Dokumen"
-                      aria-label="Hapus dokumen"
+                      title={t.repoDeleteDocTip}
+                      aria-label={t.repoDeleteDocAria}
                       onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
                       onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
                     >
@@ -1864,7 +1864,7 @@ export default function LegalRepository() {
                     style={{ background: 'rgba(59, 130, 246, 0.1)', color: 'var(--accent-hover)', marginTop: '8px', border: '1px solid var(--info)' }}
                     onClick={() => { setShowShareModal(doc); setShareError(null); fetchUsersList(); }}
                   >
-                    <FolderOpen size={14} /> Beri Akses
+                    <FolderOpen size={14} /> {t.repoGrant}
                   </button>
                 )}
               </div>
@@ -1873,26 +1873,26 @@ export default function LegalRepository() {
             {activeTab === 'analyzed' && pagedHistoryDocs.map((doc) => (
               <div key={doc.id} className="document-card internal-card">
                 <div className="doc-type-badge internal-badge">
-                  Laporan Kepatuhan
+                  {t.repoComplianceReport}
                 </div>
                 <h3 className="doc-title">{doc.filename}</h3>
                 <div className="doc-meta">
-                  <span>Dianalisis: {formatDate(doc.created_at)}</span>
+                  <span>{fill(t.repoAnalyzedOn, { date: formatDate(doc.created_at) })}</span>
                 </div>
-                <div className="doc-status">Tersimpan secara lokal</div>
+                <div className="doc-status">{t.repoStoredLocally}</div>
                 <button
                   className="analyze-btn"
                   onClick={() => handleViewHistoryDoc(doc)}
                   disabled={loadingReportId === doc.id}
                 >
-                  <FileCheck size={14} /> {loadingReportId === doc.id ? 'Memuat...' : 'Lihat Hasil'}
+                  <FileCheck size={14} /> {loadingReportId === doc.id ? t.repoLoadingShort : t.repoViewResult}
                 </button>
               </div>
             ))}
           </div>
           {showPager && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', margin: '20px 0 8px', flexWrap: 'wrap' }}>
-              <button onClick={() => gotoPage(pagerCur - 1)} disabled={pagerCur <= 1} aria-label="Halaman sebelumnya" style={{ ...navBtn, opacity: pagerCur <= 1 ? 0.4 : 1, cursor: pagerCur <= 1 ? 'not-allowed' : 'pointer' }}>
+              <button onClick={() => gotoPage(pagerCur - 1)} disabled={pagerCur <= 1} aria-label={t.repoPrevPage} style={{ ...navBtn, opacity: pagerCur <= 1 ? 0.4 : 1, cursor: pagerCur <= 1 ? 'not-allowed' : 'pointer' }}>
                 ‹
               </button>
               {pagerNums.map(n => (
@@ -1908,11 +1908,11 @@ export default function LegalRepository() {
                   {n}
                 </button>
               ))}
-              <button onClick={() => gotoPage(pagerCur + 1)} disabled={pagerCur >= pagerPages} aria-label="Halaman berikutnya" style={{ ...navBtn, opacity: pagerCur >= pagerPages ? 0.4 : 1, cursor: pagerCur >= pagerPages ? 'not-allowed' : 'pointer' }}>
+              <button onClick={() => gotoPage(pagerCur + 1)} disabled={pagerCur >= pagerPages} aria-label={t.repoNextPage} style={{ ...navBtn, opacity: pagerCur >= pagerPages ? 0.4 : 1, cursor: pagerCur >= pagerPages ? 'not-allowed' : 'pointer' }}>
                 ›
               </button>
               <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginLeft: '8px' }}>
-                Hal. {pagerCur}/{pagerPages} · {pagerFrom}–{pagerTo} dari {pagerTotal}
+                {fill(t.repoPageInfo, { cur: pagerCur, pages: pagerPages, from: pagerFrom, to: pagerTo, total: pagerTotal })}
               </span>
               </div>
             )}
@@ -1926,13 +1926,13 @@ export default function LegalRepository() {
       {/* Centered PDF Modal for Pending Documents */}
       {viewPdfDoc && (
         <div className="modal-overlay" style={{ zIndex: 1100, padding: '24px' }}>
-          <div ref={pdfModalRef} role="dialog" aria-modal="true" aria-label="Pratinjau PDF dokumen" tabIndex={-1} className="modal-content" style={{ background: 'var(--bg-card)', width: '100%', maxWidth: '900px', height: '90vh', borderRadius: '12px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.5)' }}>
+          <div ref={pdfModalRef} role="dialog" aria-modal="true" aria-label={t.repoPdfPreviewAria} tabIndex={-1} className="modal-content" style={{ background: 'var(--bg-card)', width: '100%', maxWidth: '900px', height: '90vh', borderRadius: '12px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.5)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', background: 'var(--bg-base)', borderBottom: '1px solid var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warning-text)', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>Menunggu Konfirmasi</div>
+                <div style={{ background: 'rgba(245, 158, 11, 0.15)', color: 'var(--warning-text)', padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 600 }}>{t.stMenunggu}</div>
                 <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-primary)' }}>{viewPdfDoc.judul}</h3>
               </div>
-              <button onClick={() => { setViewPdfDoc(null); setPdfBlobUrl(null); }} aria-label="Tutup pratinjau PDF" style={{ background: 'var(--bg-element)', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button onClick={() => { setViewPdfDoc(null); setPdfBlobUrl(null); }} aria-label={t.repoPdfCloseAria} style={{ background: 'var(--bg-element)', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', padding: '8px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <X size={20} />
               </button>
             </div>
@@ -1940,13 +1940,13 @@ export default function LegalRepository() {
               {isPdfLoading ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
                   <File size={48} style={{ opacity: 0.5, marginBottom: '16px' }} />
-                  <p>Memuat PDF...</p>
+                  <p>{t.drawerPdfLoading}</p>
                 </div>
               ) : pdfBlobUrl ? (
-                <iframe src={pdfBlobUrl} title="Penampil PDF" style={{ width: '100%', height: '100%', border: 'none' }} />
+                <iframe src={pdfBlobUrl} title={t.drawerPdfViewerTitle} style={{ width: '100%', height: '100%', border: 'none' }} />
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--danger-text)' }}>
-                  <p>Gagal memuat PDF.</p>
+                  <p>{t.drawerPdfFailed}</p>
                 </div>
               )}
             </div>
@@ -1962,52 +1962,52 @@ export default function LegalRepository() {
       {/* Share Modal (FR-21 & FR-22) */}
       {showShareModal && (
         <div className="modal-overlay">
-          <div ref={shareModalRef} role="dialog" aria-modal="true" aria-label="Beri akses dokumen" tabIndex={-1} className="modal-content" style={{ background: 'var(--bg-card)', width: '90%', maxWidth: '500px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div ref={shareModalRef} role="dialog" aria-modal="true" aria-label={t.repoShareAria} tabIndex={-1} className="modal-content" style={{ background: 'var(--bg-card)', width: '90%', maxWidth: '500px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-              <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Beri Akses Dokumen</h3>
-              <button onClick={() => setShowShareModal(null)} aria-label="Tutup dialog" style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem' }}>{t.repoShareTitle}</h3>
+              <button onClick={() => setShowShareModal(null)} aria-label={t.repoCloseDialog} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
             </div>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-              Anda akan memberikan akses dokumen <strong>{showShareModal.judul}</strong> ({showShareModal.klasifikasi}).
+              {t.repoShareIntroPre} <strong>{showShareModal.judul}</strong> ({showShareModal.klasifikasi ? statusLabel(t, showShareModal.klasifikasi) : ''}).
             </p>
             <form onSubmit={handleShareSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label htmlFor="share-user" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Pilih Pengguna *</label>
+                <label htmlFor="share-user" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t.repoShareUserLabel}</label>
                 <input 
                   id="share-user"
                   required
                   list="users-list"
                   value={shareUser}
                   onChange={(e) => { setShareUser(e.target.value); setShareError(null); }}
-                  placeholder="Ketik ID, Username, atau Email..."
+                  placeholder={t.repoShareUserPh}
                   aria-invalid={shareError ? true : undefined}
                   aria-describedby={shareError ? 'share-user-error' : undefined}
                   style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)' }}
                 />
                 <datalist id="users-list">
                   {usersList.map(u => (
-                    <option key={u.id} value={u.id}>{u.username} - {u.email || 'Tanpa Email'} ({u.role})</option>
+                    <option key={u.id} value={u.id}>{u.username} - {u.email || t.repoNoEmail} ({u.role})</option>
                   ))}
                 </datalist>
                 {shareError && (
-                  <p id="share-user-error" role="alert" className="confirm-modal-error">{shareError}</p>
+                  <p id="share-user-error" role="alert" className="confirm-modal-error">{msg(t, shareError)}</p>
                 )}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label htmlFor="share-reason" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Alasan *</label>
+                <label htmlFor="share-reason" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t.repoShareReason}</label>
                 <textarea 
                   id="share-reason"
                   required
                   value={shareReason}
                   onChange={(e) => setShareReason(e.target.value)}
-                  placeholder="Alasan wajib diisi..."
+                  placeholder={t.repoShareReasonPh}
                   style={{ background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '10px', color: 'var(--text-primary)', height: '80px', resize: 'none' }}
                 />
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label htmlFor="share-expiry" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Batas Waktu (Opsional)</label>
+                <label htmlFor="share-expiry" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{t.repoShareExpiry}</label>
                 <input 
                   id="share-expiry"
                   type="date"
@@ -2023,7 +2023,7 @@ export default function LegalRepository() {
                 style={{ marginTop: '8px' }}
               >
                 {isSharing && <Loader2 size={14} className="admin-spin" aria-hidden="true" />}
-                {isSharing ? 'Memproses...' : 'Beri Akses'}
+                {isSharing ? t.repoWorking : t.repoGrant}
               </button>
             </form>
           </div>
@@ -2033,10 +2033,10 @@ export default function LegalRepository() {
       {/* Prompt Modal */}
       {showPromptModal && (
         <div className="modal-overlay">
-          <div ref={promptModalRef} role="dialog" aria-modal="true" aria-label="Buat dokumen dari template" tabIndex={-1} className="modal-content" style={{ background: 'var(--bg-card)', width: '90%', maxWidth: '700px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div ref={promptModalRef} role="dialog" aria-modal="true" aria-label={t.repoPromptAria} tabIndex={-1} className="modal-content" style={{ background: 'var(--bg-card)', width: '90%', maxWidth: '700px', borderRadius: '12px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-              <h3 style={{ margin: 0, fontSize: '1.2rem' }}>Buat Dokumen</h3>
-              <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} aria-label="Tutup dialog" style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem' }}>{t.repoPromptTitle}</h3>
+              <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} aria-label={t.repoCloseDialog} style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
                 <X size={20} />
               </button>
             </div>
@@ -2044,19 +2044,19 @@ export default function LegalRepository() {
             {!generatedDoc ? (
               <>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>
-                  Berikan instruksi untuk menyesuaikan template ini. Contoh: "Buat PKS untuk PT Bank Sumut mengenai pengadaan E-KYC."
+                  {t.repoPromptIntro}
                 </p>
                 <textarea 
                   value={promptInput}
                   onChange={(e) => setPromptInput(e.target.value)}
-                  placeholder="Masukkan instruksi kustomisasi dokumen..."
+                  placeholder={t.repoPromptPh}
                   style={{ width: '100%', height: '120px', background: 'var(--bg-base)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '12px', color: 'var(--text-primary)', fontSize: '0.95rem', resize: 'none' }}
                 />
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
-                  <button onClick={() => { setShowPromptModal(null); setPromptInput(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #475569', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Batal</button>
+                  <button onClick={() => { setShowPromptModal(null); setPromptInput(''); }} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #475569', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>{t.repoCancel}</button>
                   <button onClick={() => handleGenerateTemplate(showPromptModal)} disabled={isGenerating || !promptInput.trim()} className="btn btn-primary">
                     {isGenerating ? <Database size={16} className="animate-pulse" /> : <Zap size={16} />}
-                    {isGenerating ? 'Menyusun...' : 'Buat Dokumen'}
+                    {isGenerating ? t.repoComposing : t.repoPromptTitle}
                   </button>
                 </div>
               </>
@@ -2067,12 +2067,12 @@ export default function LegalRepository() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', flexWrap: 'wrap' }}>
                   <button onClick={() => navigator.clipboard.writeText(generatedDoc!)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #475569', background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                    Salin Teks
+                    {t.repoCopyText}
                   </button>
                   <button onClick={() => handleExportWord(generatedDoc!)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #3b82f6', background: 'rgba(59, 130, 246, 0.15)', color: 'var(--accent-hover)', cursor: 'pointer', fontWeight: 600 }}>
-                    ↓ Ekspor ke Word
+                    {t.repoExportWord}
                   </button>
-                  <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} className="btn btn-primary">Selesai</button>
+                  <button onClick={() => { setShowPromptModal(null); setGeneratedDoc(null); setPromptInput(''); }} className="btn btn-primary">{t.repoDone}</button>
                 </div>
               </>
             )}

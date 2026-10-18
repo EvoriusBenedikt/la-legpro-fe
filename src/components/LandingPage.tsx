@@ -1,22 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Scale, ShieldCheck, FileText, AlertTriangle, Upload, Search,
-  Eye, Download, Lock, Users, CheckCircle2, ArrowRight, Building2, Award,
+  Scale, ShieldCheck, FileText, AlertTriangle, Upload, Search, Eye,
+  Download, Lock, CheckCircle2, ArrowRight, Building2,
 } from 'lucide-react';
+import { setSetting } from '../settings';
+import { useLocale, useStrings } from '../i18n';
+import { FlagId, FlagUs } from './LangFlags';
 import './LandingPage.css';
 
 const TEAM_SIZES = ['1–10', '11–50', '51–200', '200+'];
 
-/* Watermelon-grammar restyle (2026-10-01, user-approved): the light
-   "blueprint-technical" variant of the watermelon.sh landing-01 template —
-   mono sheet labels, corner brackets, dot grids, crosshairs, bento spans,
-   sharp corners, staggered scroll reveals. Palette, copy, sections and the
-   demo form behavior stay exactly as before; only the visual grammar
-   changes. Reveals are IntersectionObserver + CSS (no motion dependency);
-   content is visible by default and the .lp-js gate only hides it once JS
-   is running, so no-JS and reduce-motion both degrade to a static page. */
 export default function LandingPage() {
+  const t = useStrings();
+  const locale = useLocale();
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
   const [teamSize, setTeamSize] = useState(TEAM_SIZES[1]);
@@ -30,361 +27,65 @@ export default function LandingPage() {
     root.classList.add('lp-js');
     const els = Array.from(root.querySelectorAll('.lp-reveal'));
     if (!('IntersectionObserver' in window)) {
-      els.forEach(el => el.classList.add('is-in'));
+      els.forEach((el) => el.classList.add('is-in'));
       return;
     }
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach(en => {
-        if (en.isIntersecting) {
-          en.target.classList.add('is-in');
-          io.unobserve(en.target);
-        }
-      });
-    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
-    els.forEach(el => io.observe(el));
+    const io = new IntersectionObserver((entries) => entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-in');
+        io.unobserve(entry.target);
+      }
+    }), { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+    els.forEach((el) => io.observe(el));
     return () => io.disconnect();
   }, []);
 
-  const handleDemoSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleDemoSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
     setFormError('');
     if (!name.trim() || !company.trim()) {
-      setFormError('Please fill in your name and company.');
+      setFormError(t.lpFormRequired);
       return;
     }
-    // TODO: POST to a demo-request endpoint when available, e.g.
-    // fetch(`${API_BASE}/api/demo-requests`, { method: 'POST', ... })
     setRequested(true);
   };
 
+  const nav = (key: 'lpCapabilities' | 'lpHow' | 'lpResults' | 'lpSecurity') => t[key];
+  const section = (tag: string, title: string, body: string) => (
+    <><div className="lp-rule" aria-hidden="true"><span className="lp-rule-tag">{tag}</span></div><h2>{title}</h2><p className="lp-sub">{body}</p></>
+  );
+
   return (
     <div className="lp" ref={rootRef}>
-      {/* ---------- nav ---------- */}
-      <header className="lp-nav">
-        <div className="lp-inner lp-nav-row">
-          <Link to="/" className="lp-brand">
-            <span className="lp-brand-mark"><Scale size={18} /></span>
-            Legal Analyzer
-          </Link>
-          <nav className="lp-links">
-            <a href="#capabilities">Capabilities</a>
-            <a href="#how">How it works</a>
-            <a href="#results">Results</a>
-            <a href="#security">Security</a>
-          </nav>
-          <Link to="/login" className="lp-btn lp-btn-ghost lp-btn-sm">Sign in</Link>
-          <a href="#demo" className="lp-btn lp-btn-primary lp-btn-sm">Request a demo</a>
+      <header className="lp-nav"><div className="lp-inner lp-nav-row">
+        <Link to="/" className="lp-brand"><span className="lp-brand-mark"><Scale size={18} /></span>Legal Analyzer</Link>
+        <nav className="lp-links"><a href="#capabilities">{nav('lpCapabilities')}</a><a href="#how">{nav('lpHow')}</a><a href="#results">{nav('lpResults')}</a><a href="#security">{nav('lpSecurity')}</a></nav>
+        <div className="auths-lang lp-lang" role="group" aria-label={t.secLanguage}>
+          <button type="button" className={`auths-lang-btn${locale === 'id' ? ' is-active' : ''}`} aria-pressed={locale === 'id'} aria-label="Bahasa Indonesia" onClick={() => setSetting('locale', 'id')}><FlagId /></button>
+          <button type="button" className={`auths-lang-btn${locale === 'en' ? ' is-active' : ''}`} aria-pressed={locale === 'en'} aria-label="English" onClick={() => setSetting('locale', 'en')}><FlagUs /></button>
         </div>
-      </header>
+        <Link to="/login" className="lp-btn lp-btn-ghost lp-btn-sm">{t.lpSignIn}</Link>
+        <a href="#demo" className="lp-btn lp-btn-primary lp-btn-sm">{t.lpRequestDemo}</a>
+      </div></header>
 
-      {/* ---------- 1. hero ---------- */}
-      <section className="lp-hero">
-        <div className="lp-inner lp-hero-grid">
-          <div>
-            <span className="lp-eyebrow">IN-HOUSE LEGAL COMPLIANCE</span>
-            <h1>Compliance, <span className="lp-accent">verified</span> before you sign.</h1>
-            <p className="lp-lede">
-              Legal Analyzer scans contracts and internal documents against
-              applicable laws and regulations — mapping every clause to its source
-              text and flagging gaps before they become liabilities.
-            </p>
-            <div className="lp-cta-row">
-              <a href="#demo" className="lp-btn lp-btn-primary">
-                Request a demo <ArrowRight size={16} />
-              </a>
-              <Link to="/login" className="lp-btn lp-btn-ghost">Sign in to the app</Link>
-            </div>
-            <div className="lp-trustline" aria-hidden="true">
-              <span>Trusted by in-house teams</span>
-            </div>
-            <div className="lp-stats">
-              <div className="lp-stat lp-reveal" style={{ '--i': 0 } as React.CSSProperties}><b>53,000+</b><span>regulatory clauses indexed</span></div>
-              <div className="lp-stat lp-reveal" style={{ '--i': 1 } as React.CSSProperties}><b>12+</b><span>regulatory bodies covered</span></div>
-              <div className="lp-stat lp-reveal" style={{ '--i': 2 } as React.CSSProperties}><b>1,000+</b><span>regulations catalogued</span></div>
-              <div className="lp-stat lp-reveal" style={{ '--i': 3 } as React.CSSProperties}><b>80%</b><span>review-time reduction target</span></div>
-            </div>
-          </div>
+      <section className="lp-hero"><div className="lp-inner lp-hero-grid"><div>
+        <span className="lp-eyebrow">{t.lpEyebrow}</span><h1>{t.lpHeroTitle} <span className="lp-accent">{t.lpHeroAccent}</span>.</h1><p className="lp-lede">{t.lpHeroBody}</p>
+        <div className="lp-cta-row"><a href="#demo" className="lp-btn lp-btn-primary">{t.lpRequestDemo} <ArrowRight size={16} /></a><Link to="/login" className="lp-btn lp-btn-ghost">{t.lpSignInApp}</Link></div>
+        <div className="lp-trustline" aria-hidden="true"><span>{t.lpTrusted}</span></div>
+        <div className="lp-stats">{[['53,000+', 'lpStatClauses'], ['12+', 'lpStatBodies'], ['1,000+', 'lpStatRegulations'], ['80%', 'lpStatReduction']].map(([value, key], index) => <div className="lp-stat lp-reveal" style={{ '--i': index } as React.CSSProperties} key={key}><b>{value}</b><span>{t[key as keyof typeof t] as string}</span></div>)}</div>
+      </div><div className="lp-mock lp-brackets lp-reveal" aria-hidden="true"><div className="lp-mock-bar"><span className="lp-dot" /><span className="lp-dot" /><span className="lp-dot" /><span className="lp-mock-title">PKS_Telekomunikasi_2026.pdf — {t.lpComplianceCheck}</span><span className="lp-mock-score">{t.lpScore}</span></div><div className="lp-mock-body"><div className="lp-clauses"><div className="lp-clause lp-ok"><b><span className="lp-pill">{t.lpCompliant}</span> Pasal 4 — Data protection</b>{t.lpClauseOk}</div><div className="lp-clause lp-warn"><b><span className="lp-pill">{t.lpAtRisk}</span> Pasal 9 — Liability cap</b>{t.lpClauseRisk}</div><div className="lp-clause lp-bad"><b><span className="lp-pill">{t.lpFatal}</span> Pasal 12 — Termination</b>{t.lpClauseFatal}</div></div><div className="lp-regpanel"><h4>{t.lpRegReference}</h4><div className="lp-reg"><b>POJK 10/POJK.05/2022</b><br />Pasal 31 — consumer protection obligations…</div><div className="lp-reg"><b>UU PDP No. 27/2022</b><br />Pasal 20 — consent requirements…</div></div></div><div className="lp-mock-foot"><span className="lp-count"><i style={{ background: '#10b981' }} /> 12 {t.lpCompliant}</span><span className="lp-count"><i style={{ background: '#f59e0b' }} /> 3 {t.lpAtRisk}</span><span className="lp-count"><i style={{ background: '#ef4444' }} /> 1 {t.lpFatal}</span></div></div></div></section>
 
-          {/* live analyzer preview (illustrative mock) */}
-          <div className="lp-mock lp-brackets lp-reveal" aria-hidden="true">
-            <div className="lp-mock-bar">
-              <span className="lp-dot" /><span className="lp-dot" /><span className="lp-dot" />
-              <span className="lp-mock-title">PKS_Telekomunikasi_2026.pdf — Compliance Check</span>
-              <span className="lp-mock-score">Score 87 · Needs review</span>
-            </div>
-            <div className="lp-mock-body">
-              <div className="lp-clauses">
-                <div className="lp-clause lp-ok">
-                  <b><span className="lp-pill">SESUAI</span> Pasal 4 — Data protection</b>
-                  Processing of customer data follows <mark>explicit consent</mark> procedures.
-                </div>
-                <div className="lp-clause lp-warn">
-                  <b><span className="lp-pill">BERESIKO</span> Pasal 9 — Liability cap</b>
-                  Cap set at <mark>1× annual fees</mark>; sector practice suggests review.
-                </div>
-                <div className="lp-clause lp-bad">
-                  <b><span className="lp-pill">FATAL</span> Pasal 12 — Termination</b>
-                  <mark>Missing mandatory 30-day cure period</mark> required by regulation.
-                </div>
-              </div>
-              <div className="lp-regpanel">
-                <h4>REGULATION REFERENCE</h4>
-                <div className="lp-reg"><b>POJK 10/POJK.05/2022</b><br />Pasal 31 — consumer protection obligations…</div>
-                <div className="lp-reg"><b>UU PDP No. 27/2022</b><br />Pasal 20 — consent requirements…</div>
-                <div className="lp-reg"><b>POJK 25/POJK.07/2024</b><br /> cure-period provisions…</div>
-              </div>
-            </div>
-            <div className="lp-mock-foot">
-              <span className="lp-count"><i style={{ background: '#10b981' }} /> 12 Sesuai</span>
-              <span className="lp-count"><i style={{ background: '#f59e0b' }} /> 3 Berisiko</span>
-              <span className="lp-count"><i style={{ background: '#ef4444' }} /> 1 Fatal</span>
-            </div>
-          </div>
-        </div>
-      </section>
+      <section className="lp-section" id="capabilities"><div className="lp-inner">{section(t.lpCapabilities, t.lpBuiltFor, t.lpCapabilitiesBody)}<div className="lp-bento">{[[Scale, t.lpComplianceTitle, t.lpComplianceBody, t.lpComplianceItems], [AlertTriangle, t.lpRiskTitle, t.lpRiskBody, t.lpRiskItems], [FileText, t.lpAuditTitle, t.lpAuditBody, t.lpAuditItems]].map(([Icon, title, body, items], index) => <div className="lp-card lp-brackets lp-reveal" style={{ '--i': index } as React.CSSProperties} key={title as string}><span className="lp-icon"><Icon size={20} /></span><h3>{title as string}</h3><p>{body as string}</p><ul>{(items as string).split('|').map((item) => <li key={item}>{item}</li>)}</ul></div>)}</div></div></section>
 
-      {/* ---------- 2. capabilities ---------- */}
-      <section className="lp-section" id="capabilities">
-        <div className="lp-inner">
-          <div className="lp-rule" aria-hidden="true"><span className="lp-rule-tag">Capabilities</span></div>
-          <h2>Built for the way <span className="lp-accent">in-house</span> teams work</h2>
-          <p className="lp-sub">Three goals, one analyzer — every finding traceable to the exact article it came from.</p>
-          <div className="lp-bento">
-            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 0 } as React.CSSProperties}>
-              <span className="lp-cardtag" aria-hidden="true">[ COMPLIANCE ]</span>
-              <span className="lp-icon"><Scale size={20} /></span>
-              <h3>Regulatory Compliance Check</h3>
-              <p>Map each clause to the laws and regulations that govern it — no more manual cross-referencing across fragmented PDFs.</p>
-              <ul>
-                <li>Clause-to-article mapping with exact citations</li>
-                <li>OJK, banking, ITE, PDP, and sectoral coverage</li>
-                <li>Per-clause verdicts: compliant, at-risk, non-compliant</li>
-              </ul>
-            </div>
-            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 1 } as React.CSSProperties}>
-              <span className="lp-cardtag" aria-hidden="true">[ RISK ]</span>
-              <span className="lp-icon"><AlertTriangle size={20} /></span>
-              <h3>Risk &amp; Gap Detection</h3>
-              <p>Surface what the draft is missing — outdated references, conflicting clauses, and absent protections — before counterparties do.</p>
-              <ul>
-                <li>Missing-clause detection against regulatory baselines</li>
-                <li>Outdated or revoked reference flagging</li>
-                <li>Actionable amendment recommendations</li>
-              </ul>
-            </div>
-            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 2 } as React.CSSProperties}>
-              <span className="lp-cardtag" aria-hidden="true">[ AUDIT ]</span>
-              <span className="lp-icon"><FileText size={20} /></span>
-              <h3>Audit Trail &amp; Reporting</h3>
-              <p>Export findings your auditors can actually follow — every flag linked back to source text, versioned and attributable.</p>
-              <ul>
-                <li>Exportable compliance reports per document</li>
-                <li>Full lifecycle history: upload, review, decision</li>
-                <li>Knowledge graph of regulation relationships</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
+      <section className="lp-section alt" id="how"><div className="lp-inner">{section(t.lpHow, t.lpStepsTitle, t.lpStepsBody)}<div className="lp-steps">{[[Upload, t.lpStepUploadTitle, t.lpStepUploadBody], [Search, t.lpStepScanTitle, t.lpStepScanBody], [Eye, t.lpStepReviewTitle, t.lpStepReviewBody], [Download, t.lpStepExportTitle, t.lpStepExportBody]].map(([Icon, title, body], index) => <div className="lp-step lp-reveal" style={{ '--i': index } as React.CSSProperties} key={index}><span className="lp-step-num">{index + 1}</span><h3><Icon size={15} style={{ verticalAlign: -2 }} /> {title as string}</h3><p>{body as string}</p></div>)}</div></div></section>
 
-      {/* ---------- 3. how it works ---------- */}
-      <section className="lp-section alt" id="how">
-        <div className="lp-inner">
-          <div className="lp-rule" aria-hidden="true"><span className="lp-rule-tag">How it works</span></div>
-          <h2>From upload to signed-off in <span className="lp-accent">four steps</span></h2>
-          <p className="lp-sub">No new workflow to learn — the analyzer slots into the review you already do.</p>
-          <div className="lp-steps">
-            <div className="lp-step lp-reveal" style={{ '--i': 0 } as React.CSSProperties}>
-              <span className="lp-step-num">1</span>
-              <h3><Upload size={15} style={{ verticalAlign: -2 }} /> Upload</h3>
-              <p>Drop in contracts or policies — PDF, Word, Excel, even scanned images with OCR fallback.</p>
-            </div>
-            <div className="lp-step lp-reveal" style={{ '--i': 1 } as React.CSSProperties}>
-              <span className="lp-step-num">2</span>
-              <h3><Search size={15} style={{ verticalAlign: -2 }} /> Scan</h3>
-              <p>Each clause is extracted and checked against the live regulatory knowledge base.</p>
-            </div>
-            <div className="lp-step lp-reveal" style={{ '--i': 2 } as React.CSSProperties}>
-              <span className="lp-step-num">3</span>
-              <h3><Eye size={15} style={{ verticalAlign: -2 }} /> Review findings</h3>
-              <p>Work the flagged list: green passes, amber needs judgment, red needs action — all cited.</p>
-            </div>
-            <div className="lp-step lp-reveal" style={{ '--i': 3 } as React.CSSProperties}>
-              <span className="lp-step-num">4</span>
-              <h3><Download size={15} style={{ verticalAlign: -2 }} /> Export report</h3>
-              <p>Generate the audit-ready report and archive the decision trail for the file.</p>
-            </div>
-          </div>
-        </div>
-      </section>
+      <section className="lp-section" id="results"><div className="lp-inner">{section(t.lpResults, t.lpResultsTitle, t.lpResultsBody)}<div className="lp-grid-3">{[[Building2, t.lpVendorTitle, t.lpVendorBody], [ShieldCheck, t.lpPolicyTitle, t.lpPolicyBody], [CheckCircle2, t.lpAuditReadyTitle, t.lpAuditReadyBody]].map(([Icon, title, body], index) => <div className="lp-card lp-brackets lp-reveal" style={{ '--i': index } as React.CSSProperties} key={title as string}><span className="lp-icon"><Icon size={20} /></span><h3>{title as string}</h3><p>{body as string}</p></div>)}</div><p className="lp-fineprint">{t.lpFineprint}</p></div></section>
 
-      {/* ---------- 4. team ---------- */}
-      <section className="lp-section" id="team">
-        <div className="lp-inner">
-          <div className="lp-rule" aria-hidden="true"><span className="lp-rule-tag">Team &amp; credentials</span></div>
-          <h2>Built with legal <span className="lp-accent">rigor</span>, engineered for scale</h2>
-          <p className="lp-sub">A combined bench of legal practitioners and platform engineers — organized by what each group is accountable for.</p>
-          <div className="lp-grid-3">
-            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 0 } as React.CSSProperties}>
-              <span className="lp-cardtag" aria-hidden="true">[ COUNSEL ]</span>
-              <span className="lp-avatar"><Scale size={20} /></span>
-              <h3>Legal &amp; Compliance Advisors</h3>
-              <p>Practitioners who define what "correct" means: review methodology, regulatory coverage priorities, and citation standards.</p>
-              <div className="lp-tagrow">
-                <span className="lp-tag">OJK / POJK practice</span>
-                <span className="lp-tag">Contract drafting &amp; review</span>
-                <span className="lp-tag">GCG &amp; corporate secretarial</span>
-              </div>
-            </div>
-            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 1 } as React.CSSProperties}>
-              <span className="lp-cardtag" aria-hidden="true">[ BUILD ]</span>
-              <span className="lp-avatar"><Users size={20} /></span>
-              <h3>Product &amp; Engineering</h3>
-              <p>Platform engineers behind the retrieval pipeline, document understanding, and the review interfaces your team touches daily.</p>
-              <div className="lp-tagrow">
-                <span className="lp-tag">Applied NLP / RAG systems</span>
-                <span className="lp-tag">Secure SaaS architecture</span>
-                <span className="lp-tag">Enterprise integrations</span>
-              </div>
-            </div>
-            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 2 } as React.CSSProperties}>
-              <span className="lp-cardtag" aria-hidden="true">[ GUARD ]</span>
-              <span className="lp-avatar"><Award size={20} /></span>
-              <h3>Data &amp; Security</h3>
-              <p>Custodians of the knowledge base and access controls — currency of regulations, integrity of evidence, confidentiality of your documents.</p>
-              <div className="lp-tagrow">
-                <span className="lp-tag">Regulatory data curation</span>
-                <span className="lp-tag">Access control &amp; auditability</span>
-                <span className="lp-tag">Secure deployment practices</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      <section className="lp-section" id="security"><div className="lp-inner">{section(t.lpSecurity, t.lpSecurityTitle, t.lpSecurityBody)}<div className="lp-sec-grid"><div className="lp-card lp-brackets lp-reveal" style={{ gap: 14 }}>{[[Lock, t.lpNeedToKnow], [ShieldCheck, t.lpShortSessions], [Eye, t.lpAuditability], [Upload, t.lpGuardrails], [FileText, t.lpDataOwnership]].map(([Icon, copy]) => <div className="lp-check" key={copy as string}><Icon size={16} /><span>{copy as string}</span></div>)}</div><div className="lp-perimeter lp-brackets lp-reveal"><h3>{t.lpPerimeterTitle}</h3><p>{t.lpPerimeterBody}</p></div></div></div></section>
 
-      {/* ---------- 5. use cases ---------- */}
-      <section className="lp-section alt" id="results">
-        <div className="lp-inner">
-          <div className="lp-rule" aria-hidden="true"><span className="lp-rule-tag">Use cases</span></div>
-          <h2>Where in-house teams feel it <span className="lp-accent">first</span></h2>
-          <p className="lp-sub">Typical engagements and the shape of the improvement — measured per pilot, reported with evidence.</p>
-          <div className="lp-grid-3">
-            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 0 } as React.CSSProperties}>
-              <span className="lp-cardtag" aria-hidden="true">[ VENDOR ]</span>
-              <span className="lp-icon"><Building2 size={20} /></span>
-              <h3>Vendor agreement review</h3>
-              <div className="lp-beforeafter">
-                <div className="lp-ba lp-ba-before"><b>BEFORE</b><span>Multi-day manual read-through; issues surface during negotiation or after signing.</span></div>
-                <div className="lp-ba lp-ba-after"><b>AFTER</b><span>Same-day flagged draft with cited risks; negotiation starts from evidence.</span></div>
-              </div>
-            </div>
-            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 1 } as React.CSSProperties}>
-              <span className="lp-cardtag" aria-hidden="true">[ POLICY ]</span>
-              <span className="lp-icon"><ShieldCheck size={20} /></span>
-              <h3>Policy harmonization</h3>
-              <div className="lp-beforeafter">
-                <div className="lp-ba lp-ba-before"><b>BEFORE</b><span>New regulation lands; nobody knows which internal policies it invalidates.</span></div>
-                <div className="lp-ba lp-ba-after"><b>AFTER</b><span>Knowledge graph shows affected policies the day the rule changes.</span></div>
-              </div>
-            </div>
-            <div className="lp-card lp-brackets lp-reveal" style={{ '--i': 2 } as React.CSSProperties}>
-              <span className="lp-cardtag" aria-hidden="true">[ AUDIT ]</span>
-              <span className="lp-icon"><CheckCircle2 size={20} /></span>
-              <h3>Audit readiness</h3>
-              <div className="lp-beforeafter">
-                <div className="lp-ba lp-ba-before"><b>BEFORE</b><span>Weeks assembling scattered files and reconstructing decisions.</span></div>
-                <div className="lp-ba lp-ba-after"><b>AFTER</b><span>One export per document: findings, sources, and decision history.</span></div>
-              </div>
-            </div>
-          </div>
-          <p className="lp-fineprint">Illustrative scenarios based on common engagements — request a pilot for measured, team-specific results.</p>
-        </div>
-      </section>
+      <section className="lp-section alt" id="demo"><div className="lp-inner lp-demo-grid"><div>{section(t.lpDemo, t.lpDemoTitle, t.lpDemoBody)}<div className="lp-tagrow"><span className="lp-tag">{t.lpDemoTagLive}</span><span className="lp-tag">{t.lpDemoTagCoverage}</span><span className="lp-tag">{t.lpDemoTagSecurity}</span></div></div><div className="lp-form lp-brackets lp-reveal">{requested ? <div className="lp-form-ok"><b>{t.lpRequestReceived}</b><br />{t.lpThankYou.replace('{name}', name.trim()).replace('{company}', company.trim())}</div> : <form onSubmit={handleDemoSubmit} style={{ display: 'contents' }}><div className="lp-field"><label htmlFor="lp-name">{t.lpFullName}</label><input id="lp-name" type="text" placeholder={t.lpNamePlaceholder} value={name} onChange={(event) => setName(event.target.value)} /></div><div className="lp-field"><label htmlFor="lp-company">{t.lpCompany}</label><input id="lp-company" type="text" placeholder={t.lpCompanyPlaceholder} value={company} onChange={(event) => setCompany(event.target.value)} /></div><div className="lp-field"><label htmlFor="lp-size">{t.lpTeamSize}</label><select id="lp-size" value={teamSize} onChange={(event) => setTeamSize(event.target.value)}>{TEAM_SIZES.map((size) => <option key={size} value={size}>{size} {t.lpPeople}</option>)}</select></div>{formError && <div className="lp-form-err">{formError}</div>}<button type="submit" className="lp-btn lp-btn-primary" style={{ justifyContent: 'center' }}>{t.lpRequestDemo} <ArrowRight size={16} /></button></form>}</div></div></section>
 
-      {/* ---------- 6. security ---------- */}
-      <section className="lp-section" id="security">
-        <div className="lp-inner">
-          <div className="lp-rule" aria-hidden="true"><span className="lp-rule-tag">Security &amp; trust</span></div>
-          <h2>Confidential by <span className="lp-accent">architecture</span>, not by promise</h2>
-          <p className="lp-sub">In-house teams entrust us with their most sensitive documents. Here is how that trust is enforced technically.</p>
-          <div className="lp-sec-grid">
-            <div className="lp-card lp-brackets lp-reveal" style={{ gap: 14, '--i': 0 } as React.CSSProperties}>
-              <div className="lp-check"><Lock size={16} /><span><b>Need-to-know access.</b> Role-based controls gate every module; classified documents are filtered per user clearance.</span></div>
-              <div className="lp-check"><ShieldCheck size={16} /><span><b>Short-lived sessions.</b> Signed tokens expire within 24 hours; registration can never self-grant elevated roles.</span></div>
-              <div className="lp-check"><Eye size={16} /><span><b>Full auditability.</b> Uploads, reviews, approvals, and exports are logged with actor and timestamp.</span></div>
-              <div className="lp-check"><Upload size={16} /><span><b>Upload guardrails.</b> Strict file-type and size limits protect the pipeline from malformed or hostile inputs.</span></div>
-              <div className="lp-check"><FileText size={16} /><span><b>Your data stays yours.</b> Documents are processed for your matters only — never used to train shared models.</span></div>
-            </div>
-            <div className="lp-perimeter lp-brackets lp-reveal" style={{ '--i': 1 } as React.CSSProperties}>
-              <span className="lp-cardtag lp-cardtag-light" aria-hidden="true">[ PERIMETER ]</span>
-              <h3>Deploys inside your perimeter</h3>
-              <p>Containerized services run in your infrastructure or approved cloud — data, vectors, and audit logs never need to leave your boundary. Detailed architecture and data-flow documentation available under NDA during evaluation.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ---------- 7. demo ---------- */}
-      <section className="lp-section alt" id="demo">
-        <div className="lp-inner lp-demo-grid">
-          <div>
-            <div className="lp-rule" aria-hidden="true"><span className="lp-rule-tag">Request a demo</span></div>
-            <h2>See your own contract, analyzed <span className="lp-accent">live</span></h2>
-            <p className="lp-sub">A 30-minute working session: we run one of your agreements through the analyzer and walk the findings together. No slideware.</p>
-            <div className="lp-tagrow">
-              <span className="lp-tag">Live clause walkthrough</span>
-              <span className="lp-tag">Coverage Q&amp;A</span>
-              <span className="lp-tag">Security review pack</span>
-            </div>
-          </div>
-          <div className="lp-form lp-brackets lp-reveal">
-            {requested ? (
-              <div className="lp-form-ok">
-                <b>Request received.</b><br />
-                Thank you, {name.trim()} — our team will contact {company.trim()} shortly to schedule your session.
-              </div>
-            ) : (
-              <form onSubmit={handleDemoSubmit} style={{ display: 'contents' }}>
-                <div className="lp-field">
-                  <label htmlFor="lp-name">Full name</label>
-                  <input id="lp-name" type="text" placeholder="e.g. Andini Pratiwi" value={name} onChange={(e) => setName(e.target.value)} />
-                </div>
-                <div className="lp-field">
-                  <label htmlFor="lp-company">Company</label>
-                  <input id="lp-company" type="text" placeholder="e.g. PT Contoh Finansial" value={company} onChange={(e) => setCompany(e.target.value)} />
-                </div>
-                <div className="lp-field">
-                  <label htmlFor="lp-size">Legal team size</label>
-                  <select id="lp-size" value={teamSize} onChange={(e) => setTeamSize(e.target.value)}>
-                    {TEAM_SIZES.map((s) => <option key={s} value={s}>{s} people</option>)}
-                  </select>
-                </div>
-                {formError && <div className="lp-form-err">{formError}</div>}
-                <button type="submit" className="lp-btn lp-btn-primary" style={{ justifyContent: 'center' }}>
-                  Request a demo <ArrowRight size={16} />
-                </button>
-              </form>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* ---------- footer ---------- */}
-      <footer className="lp-footer">
-        <div className="lp-inner lp-footer-row">
-          <Link to="/" className="lp-brand" style={{ fontSize: '0.9rem' }}>
-            <span className="lp-brand-mark" style={{ width: 26, height: 26 }}><Scale size={14} /></span>
-            Legal Analyzer
-          </Link>
-          <span>Compliance, verified before you sign.</span>
-          <nav>
-            <a href="#capabilities">Capabilities</a>
-            <a href="#security">Security</a>
-            <a href="#demo">Demo</a>
-            <Link to="/login">Sign in</Link>
-          </nav>
-        </div>
-      </footer>
+      <footer className="lp-footer"><div className="lp-inner lp-footer-row"><Link to="/" className="lp-brand" style={{ fontSize: '0.9rem' }}><span className="lp-brand-mark" style={{ width: 26, height: 26 }}><Scale size={14} /></span>Legal Analyzer</Link><span>{t.lpFooterTagline}</span><nav><a href="#capabilities">{t.lpCapabilities}</a><a href="#security">{t.lpSecurity}</a><a href="#demo">{t.lpDemo}</a><Link to="/login">{t.lpSignIn}</Link></nav></div></footer>
     </div>
   );
 }

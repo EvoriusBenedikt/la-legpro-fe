@@ -10,6 +10,7 @@ import './SystemMonitoring.css';
 
 import api from '../services/api';
 import { useDateFormatters } from '../format';
+import { useStrings, fill, plural, msg, formatDuration, formatAgo, type Msg, type StringKey } from '../i18n';
 import LoadingOrb from './LoadingOrb';
 import DocumentDrawer from './DocumentDrawer';
 import ProcessingQueue, { type QueueData, type QueueTask } from './ProcessingQueue';
@@ -126,8 +127,8 @@ const getOrSkipHttpError = (url: string) =>
   });
 
 /* Server hardware inventory (GET /api/engineer/hardware). The backend returns
-   locale-free data — byte counts and nullable strings — and the Indonesian
-   fallbacks live here. Provenance: on a Linux deployment the container shares
+   locale-free data — byte counts and nullable strings — and the localized
+   fallbacks (mon* keys) live here. Provenance: on a Linux deployment the container shares
    the host kernel, so these values ARE the server's real hardware (CPU model,
    RAM totals, GPU if any); on Docker Desktop dev they describe the desktop VM,
    which is why runtime_scope is displayed alongside them. */
@@ -167,21 +168,24 @@ type ChipTone = 'success' | 'warn' | 'danger' | 'info' | 'neutral';
 /* Machine statuses -> the Fixed Vocabulary (DESIGN.md): Gagal / Selesai / Memproses /
    Menunggu, never the raw enum. Tones follow the house chip doctrine: in-flight
    machine work is info blue, queued is neutral, outcomes ride the verdict triad. */
-const STATUS_VOCAB: Record<string, { label: string; tone: ChipTone }> = {
-  FAILED: { label: 'Gagal', tone: 'danger' },
-  ERROR: { label: 'Gagal', tone: 'danger' },
-  COMPLETED: { label: 'Selesai', tone: 'success' },
-  SUCCESS: { label: 'Selesai', tone: 'success' },
-  DONE: { label: 'Selesai', tone: 'success' },
-  RUNNING: { label: 'Memproses', tone: 'info' },
-  PROCESSING: { label: 'Memproses', tone: 'info' },
-  STARTED: { label: 'Memproses', tone: 'info' },
-  PENDING: { label: 'Menunggu', tone: 'neutral' },
-  QUEUED: { label: 'Menunggu', tone: 'neutral' },
+const STATUS_VOCAB: Record<string, { labelKey: StringKey; tone: ChipTone }> = {
+  FAILED: { labelKey: 'stGagal', tone: 'danger' },
+  ERROR: { labelKey: 'stGagal', tone: 'danger' },
+  COMPLETED: { labelKey: 'stCompleted', tone: 'success' },
+  SUCCESS: { labelKey: 'stCompleted', tone: 'success' },
+  DONE: { labelKey: 'stCompleted', tone: 'success' },
+  RUNNING: { labelKey: 'stMemproses', tone: 'info' },
+  PROCESSING: { labelKey: 'stMemproses', tone: 'info' },
+  STARTED: { labelKey: 'stMemproses', tone: 'info' },
+  PENDING: { labelKey: 'stQueued', tone: 'neutral' },
+  QUEUED: { labelKey: 'stQueued', tone: 'neutral' },
 };
 
-function statusVocab(status: string): { label: string; tone: ChipTone } {
-  return STATUS_VOCAB[status?.toUpperCase()] ?? { label: status || '—', tone: 'neutral' };
+/* Returns a label KEY (resolved with t[...] at render) or, for an unknown
+   status, the raw backend text to show as-is. */
+function statusVocab(status: string): { labelKey: StringKey | null; raw: string; tone: ChipTone } {
+  const hit = STATUS_VOCAB[status?.toUpperCase()];
+  return hit ? { ...hit, raw: status } : { labelKey: null, raw: status || '—', tone: 'neutral' };
 }
 
 /* Audit action -> chip tone, following the admin audit-log doctrine in DESIGN.md
@@ -230,8 +234,9 @@ const CHART_TOOLTIP_STYLE = {
 
 const TrendChart = memo(function TrendChart({ data }: { data: MetricPointData[] }) {
   const { formatTime, formatDateTime } = useDateFormatters();
+  const t = useStrings();
   if (data.length === 0) {
-    return <div className="empty-state"><BarChart2 size={24} aria-hidden="true" /><span>Belum ada data metrik.</span></div>;
+    return <div className="empty-state"><BarChart2 size={24} aria-hidden="true" /><span>{t.monNoMetrics}</span></div>;
   }
   return (
     <>
@@ -239,7 +244,7 @@ const TrendChart = memo(function TrendChart({ data }: { data: MetricPointData[] 
         <span className="chart-legend-item"><span className="chart-swatch series-cpu" aria-hidden="true" />CPU (%)</span>
         <span className="chart-legend-item"><span className="chart-swatch series-ram" aria-hidden="true" />RAM (%)</span>
       </div>
-      <div className="chart-body" role="img" aria-label="Grafik garis tren penggunaan CPU dan RAM dari waktu ke waktu">
+      <div className="chart-body" role="img" aria-label={t.monTrendAria}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid className="chart-grid" strokeDasharray="3 3" />
@@ -261,15 +266,16 @@ const TrendChart = memo(function TrendChart({ data }: { data: MetricPointData[] 
 
 const DbChart = memo(function DbChart({ data }: { data: MetricPointData[] }) {
   const { formatTime, formatDateTime } = useDateFormatters();
+  const t = useStrings();
   if (data.length === 0) {
-    return <div className="empty-state"><Database size={24} aria-hidden="true" /><span>Belum ada data metrik.</span></div>;
+    return <div className="empty-state"><Database size={24} aria-hidden="true" /><span>{t.monNoMetrics}</span></div>;
   }
   return (
     <>
       <div className="chart-legend">
-        <span className="chart-legend-item"><span className="chart-swatch series-db" aria-hidden="true" />Metadata Graf (MB)</span>
+        <span className="chart-legend-item"><span className="chart-swatch series-db" aria-hidden="true" />{t.monLegendDb}</span>
       </div>
-      <div className="chart-body" role="img" aria-label="Grafik area pertumbuhan ukuran basis data metadata dari waktu ke waktu">
+      <div className="chart-body" role="img" aria-label={t.monDbAria}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid className="chart-grid" strokeDasharray="3 3" />
@@ -280,7 +286,7 @@ const DbChart = memo(function DbChart({ data }: { data: MetricPointData[] }) {
               labelFormatter={(v) => formatDateTime(String(v))}
               cursor={{ stroke: 'currentColor', strokeOpacity: 0.2 }}
             />
-            <Area className="series-db" type="monotone" dataKey="metadata_db_mb" name="Metadata Graf (MB)" stroke="currentColor" fill="currentColor" fillOpacity={0.14} isAnimationActive={false} />
+            <Area className="series-db" type="monotone" dataKey="metadata_db_mb" name={t.monLegendDb} stroke="currentColor" fill="currentColor" fillOpacity={0.14} isAnimationActive={false} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -290,7 +296,8 @@ const DbChart = memo(function DbChart({ data }: { data: MetricPointData[] }) {
 
 export default function SystemMonitoring() {
   const { token } = useAuth();
-  const { formatDateTime, formatTime } = useDateFormatters();
+  const { formatDateTime, formatTime, formatNumber } = useDateFormatters();
+  const t = useStrings();
 
   /* Polled state — every slice sits behind the JSON-diff guard (useStableState)
      so an unchanged poll commits nothing and re-renders nothing. */
@@ -352,11 +359,13 @@ export default function SystemMonitoring() {
      app-wide toast context to join). Replaces native alert(): feedback now
      wears product vocabulary instead of leaking raw exceptions (critique P1). */
   const toastIdRef = useRef(0);
-  const [toasts, setToasts] = useState<{ id: number; kind: 'success' | 'error' | 'info'; message: string }[]>([]);
+  const [toasts, setToasts] = useState<{ id: number; kind: 'success' | 'error' | 'info'; message: Msg }[]>([]);
   const dismissToast = useCallback((id: number) => {
     setToasts(prev => prev.filter(x => x.id !== id));
   }, []);
-  const pushToast = useCallback((kind: 'success' | 'error' | 'info', message: string, ttl = 8000) => {
+  /* Toasts hold a Msg (key + params), never translated text, so a toast that is
+     still on screen when the language flips re-renders in the new language. */
+  const pushToast = useCallback((kind: 'success' | 'error' | 'info', message: Msg, ttl = 8000) => {
     const id = ++toastIdRef.current;
     setToasts(prev => [...prev, { id, kind, message }]);
     window.setTimeout(() => dismissToast(id), ttl);
@@ -399,20 +408,28 @@ export default function SystemMonitoring() {
       if (!res) return;
       const d = res.data as QueueData;
       const fresh: QueueTask[] = [];
-      for (const t of d.tasks) {
-        if (t.status !== 'FAILED') continue;
-        const key = `${t.id}:${t.attempts}`;
+      for (const task of d.tasks) {
+        if (task.status !== 'FAILED') continue;
+        const key = `${task.id}:${task.attempts}`;
         if (notifiedFailures.current.has(key)) continue;
         notifiedFailures.current.add(key);
-        if (queueSeeded.current) fresh.push(t);
+        if (queueSeeded.current) fresh.push(task);
       }
       queueSeeded.current = true;
       if (fresh.length > 3) {
-        pushToast('error', `${fresh.length} tugas pemrosesan gagal. Lihat Antrean Pemrosesan.`, 12000);
+        pushToast('error', { key: 'monToastTasksFailed', params: { n: fresh.length } }, 12000);
       } else {
-        for (const t of fresh) {
-          const reason = t.error ? ` — ${t.error.length > 90 ? `${t.error.slice(0, 90)}…` : t.error}` : '';
-          pushToast('error', `Pemrosesan gagal: ${t.filename || t.name}${reason}${t.next_retry_at ? ' (dicoba ulang otomatis)' : ''}`, 12000);
+        for (const task of fresh) {
+          // task.error is dynamic backend text: passed through as-is.
+          const reason = task.error ? ` — ${task.error.length > 90 ? `${task.error.slice(0, 90)}…` : task.error}` : '';
+          pushToast('error', {
+            key: 'monToastTaskFailed',
+            params: {
+              name: task.filename || task.name || task.id,
+              reason,
+              retry: task.next_retry_at ? { key: 'monAutoRetry' } : '',
+            },
+          }, 12000);
         }
       }
       setQueue(d);
@@ -432,12 +449,12 @@ export default function SystemMonitoring() {
       const res = await api.get('/api/repository');
       const doc = (res.data?.documents ?? []).find((d: { id: string | number }) => String(d.id) === String(docId));
       if (!doc) {
-        pushToast('info', 'Dokumen belum ada di repositori (masih diproses, menunggu konfirmasi, atau gagal), atau tidak dapat diakses dengan akun Anda.');
+        pushToast('info', { key: 'monToastDocMissing' });
         return;
       }
       setDrawerDoc({ ...doc, status: doc.status ?? undefined, filename: doc.filename ?? undefined });
     } catch {
-      pushToast('error', 'Gagal memuat dokumen. Periksa koneksi Anda lalu coba lagi.');
+      pushToast('error', { key: 'monToastDocFail' });
     }
   }, [pushToast]);
 
@@ -604,7 +621,7 @@ export default function SystemMonitoring() {
        backend (critique P1). The panel now closes only on success. */
     const retention = parseInt(configDraft.retentionInput, 10);
     if (!Number.isFinite(retention) || retention < 1 || retention > 30) {
-      pushToast('error', 'Retensi harus berupa angka antara 1 dan 30.');
+      pushToast('error', { key: 'monToastRetention' });
       return;
     }
     setSavingBackupConfig(true);
@@ -616,14 +633,14 @@ export default function SystemMonitoring() {
       });
       if (res) {
         setBackupConfig(payload);
-        pushToast('success', 'Konfigurasi jadwal backup disimpan.');
+        pushToast('success', { key: 'monToastCfgSaved' });
         setShowBackupConfig(false);
         setConfigDraft(null);
       } else {
-        pushToast('error', 'Gagal menyimpan konfigurasi jadwal.');
+        pushToast('error', { key: 'monToastCfgFail' });
       }
     } catch {
-      pushToast('error', 'Gagal menyimpan konfigurasi jadwal.');
+      pushToast('error', { key: 'monToastCfgFail' });
     }
     setSavingBackupConfig(false);
   };
@@ -636,13 +653,13 @@ export default function SystemMonitoring() {
         return null;
       });
       if (res) {
-        pushToast('success', 'Backup berhasil dibuat.');
+        pushToast('success', { key: 'monToastBackupOk' });
         await fetchSlow(); // show the new file at once instead of a row appearing 60 s later
       } else {
-        pushToast('error', 'Gagal membuat backup. Pastikan backend aktif.');
+        pushToast('error', { key: 'monToastBackupFail' });
       }
     } catch {
-      pushToast('error', 'Gagal membuat backup. Pastikan backend aktif.');
+      pushToast('error', { key: 'monToastBackupFail' });
     }
     setLoadingBackup(false);
     setConfirmBackup(false);
@@ -652,32 +669,20 @@ export default function SystemMonitoring() {
     const gb = bytes / (1024 * 1024 * 1024);
     return gb >= 1 ? `${gb.toFixed(2)} GB` : `${Math.round(bytes / (1024 * 1024))} MB`;
   };
-  const formatUptime = (sec: number) => {
-    const d = Math.floor(sec / (3600 * 24));
-    const h = Math.floor(sec % (3600 * 24) / 3600);
-    const m = Math.floor(sec % 3600 / 60);
-    if (d > 0) return `${d} hari ${h} jam`;
-    if (h > 0) return `${h} jam ${m} menit`;
-    return `${m} menit`;
-  };
+  const formatUptime = (sec: number) => formatDuration(t, sec);
   const timeAgo = (ts: string) => {
     const diff = Math.floor((now - new Date(ts).getTime()) / 1000);
     if (!Number.isFinite(diff)) return '—';
-    if (diff < 60) return `${diff} dtk lalu`;
-    if (diff < 3600) return `${Math.floor(diff / 60)} mnt lalu`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)} jam lalu`;
-    return `${Math.floor(diff / 86400)} hari lalu`;
+    return formatAgo(t, diff);
   };
 
-  /* ── Load gate ── the old early-return rendered a permanent English
-     "Loading…" dead end when the backend was down; the page now shows the orb
-     only while the first fetch is in flight, then an Indonesian danger state
-     with a working retry (critique P1, harden). */
+  /* ── Load gate ── the page shows the orb only while the first fetch is in
+     flight, then a localized danger state with a working retry. */
   if (!health) {
     if (loading) {
       return (
         <div className="monitoring-container">
-          <LoadingOrb label="Memuat metrik sistem…" className="loading-orb--padded" />
+          <LoadingOrb label={t.monLoading} className="loading-orb--padded" />
         </div>
       );
     }
@@ -685,10 +690,10 @@ export default function SystemMonitoring() {
       <div className="monitoring-container">
         <div className="monitoring-deadend" role="alert">
           <ShieldAlert size={36} aria-hidden="true" />
-          <h2>Metrik tidak terjangkau</h2>
-          <p>Data kesehatan sistem tidak dapat dimuat. Pastikan backend aktif, lalu muat ulang.</p>
+          <h2>{t.monDeadTitle}</h2>
+          <p>{t.monDeadBody}</p>
           <button type="button" className="btn btn-primary" onClick={retryLoad}>
-            <RefreshCw size={15} aria-hidden="true" /> Coba lagi
+            <RefreshCw size={15} aria-hidden="true" /> {t.monRetry}
           </button>
         </div>
       </div>
@@ -704,21 +709,21 @@ export default function SystemMonitoring() {
      headline that the modules below then explain. The graded, actionable copy
      from the old alert banners is preserved verbatim inside the detail rows. */
   const issues: { level: 'warn' | 'critical'; text: string }[] = [];
-  if (cpuLevel === 'critical') issues.push({ level: 'critical', text: `Beban CPU melebihi 90% (${health.cpu}%). Segera periksa proses yang berjalan.` });
-  else if (cpuLevel === 'warn') issues.push({ level: 'warn', text: `Beban CPU melebihi 70% (${health.cpu}%).` });
-  if (memLevel === 'critical') issues.push({ level: 'critical', text: `Penggunaan RAM melebihi 90% (${health.memory.percent}%).` });
-  else if (memLevel === 'warn') issues.push({ level: 'warn', text: `Penggunaan RAM melebihi 75% (${health.memory.percent}%).` });
-  if (diskLevel === 'critical') issues.push({ level: 'critical', text: `Penyimpanan disk hampir penuh (${health.disk.percent}%). Docker dan aplikasi bisa crash.` });
-  else if (diskLevel === 'warn') issues.push({ level: 'warn', text: `Penggunaan disk melebihi 80% (${health.disk.percent}%).` });
+  if (cpuLevel === 'critical') issues.push({ level: 'critical', text: fill(t.monIssueCpuCrit, { v: formatNumber(health.cpu) }) });
+  else if (cpuLevel === 'warn') issues.push({ level: 'warn', text: fill(t.monIssueCpuWarn, { v: formatNumber(health.cpu) }) });
+  if (memLevel === 'critical') issues.push({ level: 'critical', text: fill(t.monIssueRamCrit, { v: formatNumber(health.memory.percent) }) });
+  else if (memLevel === 'warn') issues.push({ level: 'warn', text: fill(t.monIssueRamWarn, { v: formatNumber(health.memory.percent) }) });
+  if (diskLevel === 'critical') issues.push({ level: 'critical', text: fill(t.monIssueDiskCrit, { v: formatNumber(health.disk.percent) }) });
+  else if (diskLevel === 'warn') issues.push({ level: 'warn', text: fill(t.monIssueDiskWarn, { v: formatNumber(health.disk.percent) }) });
   const failedTasks = queue.counts.FAILED;
-  if (failedTasks > 0) issues.push({ level: 'warn', text: `${failedTasks} tugas pemrosesan gagal — periksa antrean di bawah.` });
+  if (failedTasks > 0) issues.push({ level: 'warn', text: plural(t, 'monIssueTasks', failedTasks, { n: formatNumber(failedTasks) }) });
 
   const verdictLevel: 'ok' | 'warn' | 'critical' =
     issues.some(i => i.level === 'critical') ? 'critical' : issues.length > 0 ? 'warn' : 'ok';
   const verdictTitle =
-    verdictLevel === 'ok' ? 'Semua sistem normal'
-      : verdictLevel === 'critical' ? `Kritis — ${issues.length} masalah terdeteksi`
-        : `${issues.length} peringatan terdeteksi`;
+    verdictLevel === 'ok' ? t.monVerdictOk
+      : verdictLevel === 'critical' ? plural(t, 'monVerdictCritical', issues.length, { n: formatNumber(issues.length) })
+        : plural(t, 'monVerdictWarn', issues.length, { n: formatNumber(issues.length) });
 
   /* Error-rate merge: the standalone "Error Rate Dashboard" duplicated the API
      stats table (critique, distill); its one unique column — the last error
@@ -729,21 +734,21 @@ export default function SystemMonitoring() {
     <div className="monitoring-container">
       <div className="monitoring-header">
         <div>
-          <h1>Kesehatan Sistem</h1>
-          <p>Pemantauan infrastruktur, antrean pemrosesan, dan audit platform.</p>
+          <h1>{t.monTitle}</h1>
+          <p>{t.monSubtitle}</p>
         </div>
         <div className="live-controls">
-          <span className="live-stamp" title="Metrik utama diperbarui otomatis setiap 10 detik; data historis setiap 60 detik.">
+          <span className="live-stamp" title={t.monLiveTitle}>
             <span className={`live-dot${paused ? ' is-paused' : ''}`} aria-hidden="true" />
             {paused
-              ? `Dijeda${lastUpdate ? ` • data per ${formatTime(new Date(lastUpdate))}` : ''}`
-              : lastUpdate ? `Diperbarui ${formatTime(new Date(lastUpdate))}` : 'Menghubungkan…'}
+              ? (lastUpdate ? fill(t.monPausedAsOf, { time: formatTime(new Date(lastUpdate)) }) : t.monPaused)
+              : lastUpdate ? fill(t.monUpdatedAt, { time: formatTime(new Date(lastUpdate)) }) : t.monConnecting}
           </span>
           <button type="button" className="module-btn quiet" onClick={() => setPaused(p => !p)} aria-pressed={paused}>
-            {paused ? <><Play size={13} aria-hidden="true" /> Lanjutkan</> : <><Pause size={13} aria-hidden="true" /> Jeda</>}
+            {paused ? <><Play size={13} aria-hidden="true" /> {t.monResume}</> : <><Pause size={13} aria-hidden="true" /> {t.monPause}</>}
           </button>
           <button type="button" className="module-btn quiet" onClick={refreshNow} disabled={refreshing}>
-            <RefreshCw size={13} className={refreshing ? 'admin-spin' : undefined} aria-hidden="true" /> Muat ulang
+            <RefreshCw size={13} className={refreshing ? 'admin-spin' : undefined} aria-hidden="true" /> {t.monReload}
           </button>
         </div>
       </div>
@@ -751,7 +756,7 @@ export default function SystemMonitoring() {
       {feedError && (
         <div className="error-banner" role="alert">
           <AlertTriangle size={18} aria-hidden="true" />
-          <span>Gagal mengambil data terbaru{lastUpdate ? ` — menampilkan data per ${formatTime(new Date(lastUpdate))}` : ''}. Pastikan backend aktif.</span>
+          <span>{lastUpdate ? fill(t.monFeedErrAsOf, { time: formatTime(new Date(lastUpdate)) }) : t.monFeedErr}</span>
         </div>
       )}
 
@@ -763,75 +768,75 @@ export default function SystemMonitoring() {
         <div className="verdict-body">
           <h2 id="verdict-title" className="verdict-title" aria-live="polite">{verdictTitle}</h2>
           {verdictLevel === 'ok' ? (
-            <p className="verdict-sub">CPU, memori, dan disk dalam batas aman — tidak ada tugas pemrosesan yang gagal.</p>
+            <p className="verdict-sub">{t.monVerdictOkSub}</p>
           ) : (
             <ul className="verdict-issues">
               {issues.map(i => <li key={i.text} className={`level-${i.level}`}>{i.text}</li>)}
             </ul>
           )}
         </div>
-        <span className="verdict-meta">Waktu aktif runtime: {formatUptime(health.uptime_seconds)}</span>
+        <span className="verdict-meta">{fill(t.monUptime, { value: formatUptime(health.uptime_seconds) })}</span>
       </section>
 
-      {/* ── KESEHATAN ─────────────────────────────────────────────── */}
-      <section className="monitoring-section" aria-label="Kesehatan">
-        <h2 className="section-title">Kesehatan</h2>
+      {/* ── HEALTH ────────────────────────────────────────────────── */}
+      <section className="monitoring-section" aria-label={t.monSecHealth}>
+        <h2 className="section-title">{t.monSecHealth}</h2>
 
         <div className="kpi-grid">
           <div className={`kpi-card level-${cpuLevel}`}>
             <div className="kpi-header">
               <div>
-                <p className="kpi-title">Beban CPU</p>
+                <p className="kpi-title">{t.monKpiCpu}</p>
                 <h3 className="kpi-value">{health.cpu}%</h3>
               </div>
               <span className={`kpi-icon tone-${cpuLevel === 'ok' ? 'info' : cpuLevel === 'warn' ? 'warn' : 'danger'}`} aria-hidden="true"><Cpu size={22} /></span>
             </div>
-            <div className="progress-track" role="progressbar" aria-label="Beban CPU" aria-valuenow={health.cpu} aria-valuemin={0} aria-valuemax={100}>
+            <div className="progress-track" role="progressbar" aria-label={t.monKpiCpu} aria-valuenow={health.cpu} aria-valuemin={0} aria-valuemax={100}>
               <div className={`progress-fill level-${cpuLevel}`} style={{ transform: `scaleX(${health.cpu / 100})` }} />
             </div>
-            <p className="kpi-threshold">Batas: peringatan &gt;70%, kritis &gt;90%</p>
+            <p className="kpi-threshold">{fill(t.monLimits, { w: 70, c: 90 })}</p>
           </div>
 
           <div className={`kpi-card level-${memLevel}`}>
             <div className="kpi-header">
               <div>
-                <p className="kpi-title">Penggunaan RAM</p>
+                <p className="kpi-title">{t.monKpiRam}</p>
                 <h3 className="kpi-value">{health.memory.percent}%</h3>
-                <p className="kpi-subtext">{formatBytes(health.memory.used)} dari {formatBytes(health.memory.total)}</p>
+                <p className="kpi-subtext">{fill(t.monOfTotal, { used: formatBytes(health.memory.used), total: formatBytes(health.memory.total) })}</p>
               </div>
               <span className={`kpi-icon tone-${memLevel === 'ok' ? 'info' : memLevel === 'warn' ? 'warn' : 'danger'}`} aria-hidden="true"><Server size={22} /></span>
             </div>
-            <div className="progress-track" role="progressbar" aria-label="Penggunaan RAM" aria-valuenow={health.memory.percent} aria-valuemin={0} aria-valuemax={100}>
+            <div className="progress-track" role="progressbar" aria-label={t.monKpiRam} aria-valuenow={health.memory.percent} aria-valuemin={0} aria-valuemax={100}>
               <div className={`progress-fill level-${memLevel}`} style={{ transform: `scaleX(${health.memory.percent / 100})` }} />
             </div>
-            <p className="kpi-threshold">Batas: peringatan &gt;75%, kritis &gt;90%</p>
+            <p className="kpi-threshold">{fill(t.monLimits, { w: 75, c: 90 })}</p>
           </div>
 
           <div className={`kpi-card level-${diskLevel}`}>
             <div className="kpi-header">
               <div>
-                <p className="kpi-title">Penyimpanan Disk</p>
+                <p className="kpi-title">{t.monKpiDisk}</p>
                 <h3 className="kpi-value">{health.disk.percent}%</h3>
-                <p className="kpi-subtext">{formatBytes(health.disk.used)} dari {formatBytes(health.disk.total)}</p>
+                <p className="kpi-subtext">{fill(t.monOfTotal, { used: formatBytes(health.disk.used), total: formatBytes(health.disk.total) })}</p>
               </div>
               <span className={`kpi-icon tone-${diskLevel === 'ok' ? 'info' : diskLevel === 'warn' ? 'warn' : 'danger'}`} aria-hidden="true"><HardDrive size={22} /></span>
             </div>
-            <div className="progress-track" role="progressbar" aria-label="Penggunaan disk" aria-valuenow={health.disk.percent} aria-valuemin={0} aria-valuemax={100}>
+            <div className="progress-track" role="progressbar" aria-label={t.monDiskAria} aria-valuenow={health.disk.percent} aria-valuemin={0} aria-valuemax={100}>
               <div className={`progress-fill level-${diskLevel}`} style={{ transform: `scaleX(${health.disk.percent / 100})` }} />
             </div>
-            <p className="kpi-threshold">Batas: peringatan &gt;80%, kritis &gt;95%</p>
+            <p className="kpi-threshold">{fill(t.monLimits, { w: 80, c: 95 })}</p>
           </div>
 
           <div className="kpi-card">
             <div className="kpi-header">
               <div>
-                <p className="kpi-title">Ukuran Basis Data</p>
+                <p className="kpi-title">{t.monKpiDb}</p>
               </div>
               <span className="kpi-icon tone-info" aria-hidden="true"><Database size={22} /></span>
             </div>
             <div className="db-rows">
-              <div className="db-row"><span>Metadata Graf</span><span>{health.database.metadata_db_mb} MB</span></div>
-              <div className="db-row"><span>Basis Data Pengguna</span><span>{health.database.users_db_mb} MB</span></div>
+              <div className="db-row"><span>{t.monDbGraph}</span><span>{health.database.metadata_db_mb} MB</span></div>
+              <div className="db-row"><span>{t.monDbUsers}</span><span>{health.database.users_db_mb} MB</span></div>
             </div>
           </div>
         </div>
@@ -840,7 +845,10 @@ export default function SystemMonitoring() {
             container-runtime CPU/RAM are never read as host hardware, and the
             disk card names the volume it actually measures (bug 2026-10-12). */}
         <p className="kpi-provenance">
-          CPU &amp; RAM diukur dari runtime backend ({health.runtime_scope === 'container' ? 'kontainer Docker' : 'host server'}); disk diukur dari volume data backend{health.disk.path ? ` (${health.disk.path})` : ''}.
+          {fill(t.monProvenance, {
+            scope: health.runtime_scope === 'container' ? t.monScopeContainer : t.monScopeHost,
+            path: health.disk.path ? ` (${health.disk.path})` : '',
+          })}
         </p>
 
         {/* Server hardware card — full inspection of the machine the backend
@@ -850,56 +858,56 @@ export default function SystemMonitoring() {
             Desktop VM case so the numbers are never misattributed. */}
         <div className="module-card">
           <div className="module-header">
-            <h3 className="module-title"><Server size={18} aria-hidden="true" /> Spesifikasi Server</h3>
-            {hardware && <span className="module-badge" title="Nama host runtime backend">{hardware.hostname}</span>}
+            <h3 className="module-title"><Server size={18} aria-hidden="true" /> {t.monHwTitle}</h3>
+            {hardware && <span className="module-badge" title={t.monHwHostTitle}>{hardware.hostname}</span>}
           </div>
           {hardwareError ? (
-            <div className="empty-state"><Server size={24} aria-hidden="true" /><span>Spesifikasi server tidak dapat dibaca.</span></div>
+            <div className="empty-state"><Server size={24} aria-hidden="true" /><span>{t.monHwError}</span></div>
           ) : hardware ? (
             <div className="spec-tiles">
-              <div className="stat-tile" title="Model CPU yang terlihat oleh runtime backend">
+              <div className="stat-tile" title={t.monHwCpuTitle}>
                 <span className="stat-tile-label">CPU</span>
-                <span className="spec-tile-value">{hardware.cpu.model || 'Tidak dilaporkan'}</span>
+                <span className="spec-tile-value">{hardware.cpu.model || t.monHwNA}</span>
               </div>
-              <div className="stat-tile" title={`Arsitektur: ${hardware.cpu.arch || 'tidak dilaporkan'}`}>
-                <span className="stat-tile-label">Core CPU</span>
+              <div className="stat-tile" title={fill(t.monHwArch, { arch: hardware.cpu.arch || t.monHwNA })}>
+                <span className="stat-tile-label">{t.monHwCores}</span>
                 <span className="spec-tile-value">
                   {hardware.cpu.logical_cores != null
-                    ? `${hardware.cpu.logical_cores} logis${hardware.cpu.physical_cores != null ? ` · ${hardware.cpu.physical_cores} fisik` : ''}`
-                    : 'Tidak dilaporkan'}
+                    ? hardware.cpu.physical_cores != null
+                      ? fill(t.monHwCoresBoth, { logical: hardware.cpu.logical_cores, physical: hardware.cpu.physical_cores })
+                      : fill(t.monHwCoresLogical, { logical: hardware.cpu.logical_cores })
+                    : t.monHwNA}
                 </span>
               </div>
-              <div className="stat-tile" title={`Tersedia: ${formatBytes(hardware.memory.available)}`}>
-                <span className="stat-tile-label">RAM (terpakai / total)</span>
+              <div className="stat-tile" title={fill(t.monHwAvail, { value: formatBytes(hardware.memory.available) })}>
+                <span className="stat-tile-label">{t.monHwRam}</span>
                 <span className="spec-tile-value">{formatBytes(hardware.memory.used)} / {formatBytes(hardware.memory.total)}</span>
               </div>
-              <div className="stat-tile" title="Diperiksa lewat nvidia-smi, lspci, lalu sysfs DRM — server atau VM headless biasanya memang tanpa GPU">
+              <div className="stat-tile" title={t.monHwGpuTitle}>
                 <span className="stat-tile-label">GPU</span>
-                <span className="spec-tile-value">{hardware.gpus.length > 0 ? hardware.gpus.join(', ') : 'Tidak terdeteksi'}</span>
+                <span className="spec-tile-value">{hardware.gpus.length > 0 ? hardware.gpus.join(', ') : t.monHwNone}</span>
               </div>
-              <div className="stat-tile" title="Kernel yang dipakai runtime — di deployment Linux ini kernel host sesungguhnya">
+              <div className="stat-tile" title={t.monHwKernelTitle}>
                 <span className="stat-tile-label">Kernel</span>
-                <span className="spec-tile-value">{hardware.kernel || 'Tidak dilaporkan'}</span>
+                <span className="spec-tile-value">{hardware.kernel || t.monHwNA}</span>
               </div>
-              <div className="stat-tile" title="Sistem operasi userspace runtime backend (image kontainer pada deployment Docker)">
-                <span className="stat-tile-label">OS Runtime</span>
-                <span className="spec-tile-value">{hardware.os || 'Tidak dilaporkan'}</span>
+              <div className="stat-tile" title={t.monHwOsTitle}>
+                <span className="stat-tile-label">{t.monHwOs}</span>
+                <span className="spec-tile-value">{hardware.os || t.monHwNA}</span>
               </div>
             </div>
           ) : (
-            <div className="empty-state"><Server size={24} aria-hidden="true" /><span>Membaca spesifikasi server…</span></div>
+            <div className="empty-state"><Server size={24} aria-hidden="true" /><span>{t.monHwLoading}</span></div>
           )}
           <p className="table-footnote">
-            {hardware?.runtime_scope === 'container'
-              ? 'Dibaca dari dalam kontainer Docker: di deployment Linux angka ini adalah hardware server sesungguhnya (kontainer berbagi kernel host); di dev Docker Desktop angka ini milik VM Docker — bukan RAM perangkat Anda.'
-              : 'Dibaca langsung dari host server.'}
+            {hardware?.runtime_scope === 'container' ? t.monHwNoteContainer : t.monHwNoteHost}
           </p>
         </div>
 
         <div className="modules-grid">
           <div className="module-card">
             <div className="module-header">
-              <h3 className="module-title"><BarChart2 size={18} aria-hidden="true" /> Tren CPU &amp; RAM</h3>
+              <h3 className="module-title"><BarChart2 size={18} aria-hidden="true" /> {t.monChartTrend}</h3>
             </div>
             <div className="module-content chart-content">
               <TrendChart data={metricsHistory} />
@@ -908,7 +916,7 @@ export default function SystemMonitoring() {
 
           <div className="module-card">
             <div className="module-header">
-              <h3 className="module-title"><Database size={18} aria-hidden="true" /> Pertumbuhan Basis Data</h3>
+              <h3 className="module-title"><Database size={18} aria-hidden="true" /> {t.monChartDb}</h3>
             </div>
             <div className="module-content chart-content">
               <DbChart data={metricsHistory} />
@@ -918,8 +926,8 @@ export default function SystemMonitoring() {
       </section>
 
       {/* ── AKTIVITAS ─────────────────────────────────────────────── */}
-      <section className="monitoring-section" aria-label="Aktivitas">
-        <h2 className="section-title">Aktivitas</h2>
+      <section className="monitoring-section" aria-label={t.monSecActivity}>
+        <h2 className="section-title">{t.monSecActivity}</h2>
 
         <div className="modules-grid">
           <ProcessingQueue
@@ -934,12 +942,12 @@ export default function SystemMonitoring() {
 
           <div className="module-card">
             <div className="module-header">
-              <h3 className="module-title"><UserCheck size={18} aria-hidden="true" /> Sesi Aktif</h3>
-              <span className="module-badge">{sessions.length} pengguna</span>
+              <h3 className="module-title"><UserCheck size={18} aria-hidden="true" /> {t.monSessions}</h3>
+              <span className="module-badge">{plural(t, 'monSessionsBadge', sessions.length, { n: formatNumber(sessions.length) })}</span>
             </div>
             <div className="module-content" tabIndex={0}>
               {sessions.length === 0 ? (
-                <div className="empty-state"><Users size={24} aria-hidden="true" /><span>Tidak ada pengguna aktif saat ini.</span></div>
+                <div className="empty-state"><Users size={24} aria-hidden="true" /><span>{t.monNoSessions}</span></div>
               ) : (
                 <ul className="session-list">
                   {sessions.map(s => (
@@ -947,7 +955,7 @@ export default function SystemMonitoring() {
                       <span className="session-avatar" aria-hidden="true">{s.username?.[0]?.toUpperCase() || '?'}</span>
                       <span className="session-id">
                         <span className="session-name">{s.username}</span>
-                        <span className="session-ip">{s.ip_address && s.ip_address !== 'N/A' ? s.ip_address : 'IP tidak tersedia'}</span>
+                        <span className="session-ip">{s.ip_address && s.ip_address !== 'N/A' ? s.ip_address : t.monNoIp}</span>
                       </span>
                       <span className="session-meta">
                         <span className="role-chip">{s.role}</span>
@@ -964,45 +972,45 @@ export default function SystemMonitoring() {
         <div className="modules-grid">
           <div className="module-card">
             <div className="module-header">
-              <h3 className="module-title"><Save size={18} aria-hidden="true" /> Manajemen Backup</h3>
+              <h3 className="module-title"><Save size={18} aria-hidden="true" /> {t.monBackupTitle}</h3>
               <div className="module-actions">
                 {!confirmBackup ? (
                   <>
                     <button type="button" className="module-btn quiet" onClick={openBackupConfig}>
-                      <Settings size={13} aria-hidden="true" /> Jadwal
+                      <Settings size={13} aria-hidden="true" /> {t.monBackupSchedule}
                     </button>
                     <button type="button" className="module-btn primary" onClick={() => setConfirmBackup(true)} disabled={loadingBackup}>
-                      Backup manual
+                      {t.monBackupManual}
                     </button>
                   </>
                 ) : (
-                  <div className="backup-confirm" role="group" aria-label="Konfirmasi backup manual">
-                    <span className="backup-confirm-note">Backup terlama dapat terhapus mengikuti retensi.</span>
+                  <div className="backup-confirm" role="group" aria-label={t.monBackupConfirmAria}>
+                    <span className="backup-confirm-note">{t.monBackupConfirmNote}</span>
                     <button type="button" className="module-btn danger" onClick={triggerBackup} disabled={loadingBackup}>
-                      {loadingBackup ? 'Memproses…' : 'Ya, jalankan'}
+                      {loadingBackup ? t.monProcessing : t.monBackupYes}
                     </button>
-                    <button type="button" className="module-btn quiet" onClick={() => setConfirmBackup(false)} disabled={loadingBackup}>Batal</button>
+                    <button type="button" className="module-btn quiet" onClick={() => setConfirmBackup(false)} disabled={loadingBackup}>{t.monCancel}</button>
                   </div>
                 )}
               </div>
             </div>
             {showBackupConfig && configDraft && (
               <div className="backup-config">
-                <h4>Konfigurasi Jadwal Backup</h4>
+                <h4>{t.monBackupCfgTitle}</h4>
                 <div className="backup-config-fields">
                   <label className="field">
-                    <span className="field-label">Frekuensi</span>
+                    <span className="field-label">{t.monFrequency}</span>
                     <select
                       className="monitoring-select"
                       value={configDraft.frequency}
                       onChange={e => setConfigDraft({ ...configDraft, frequency: e.target.value })}
                     >
-                      <option value="daily">Harian</option>
-                      <option value="weekly">Mingguan</option>
+                      <option value="daily">{t.monDaily}</option>
+                      <option value="weekly">{t.monWeekly}</option>
                     </select>
                   </label>
                   <label className="field">
-                    <span className="field-label">Waktu</span>
+                    <span className="field-label">{t.monTime}</span>
                     <input
                       type="time"
                       className="monitoring-input"
@@ -1011,7 +1019,7 @@ export default function SystemMonitoring() {
                     />
                   </label>
                   <label className="field">
-                    <span className="field-label">Retensi (jumlah file)</span>
+                    <span className="field-label">{t.monRetention}</span>
                     <input
                       type="number"
                       className="monitoring-input monitoring-input-narrow"
@@ -1024,20 +1032,20 @@ export default function SystemMonitoring() {
                 </div>
                 <div className="backup-config-actions">
                   <button type="button" className="module-btn primary" onClick={saveBackupConfig} disabled={savingBackupConfig}>
-                    {savingBackupConfig ? 'Menyimpan…' : 'Simpan jadwal'}
+                    {savingBackupConfig ? t.monSaving : t.monSaveSchedule}
                   </button>
                   <button type="button" className="module-btn quiet" onClick={() => { setShowBackupConfig(false); setConfigDraft(null); }} disabled={savingBackupConfig}>
-                    Batal
+                    {t.monCancel}
                   </button>
                 </div>
               </div>
             )}
             <div className="module-content" tabIndex={0}>
               {backups.length === 0 ? (
-                <div className="empty-state"><Save size={24} aria-hidden="true" /><span>Belum ada backup yang dibuat.</span></div>
+                <div className="empty-state"><Save size={24} aria-hidden="true" /><span>{t.monNoBackups}</span></div>
               ) : (
                 <table className="monitoring-table">
-                  <thead><tr><th scope="col">Nama File</th><th scope="col">Ukuran</th><th scope="col">Dibuat Pada</th></tr></thead>
+                  <thead><tr><th scope="col">{t.monColFile}</th><th scope="col">{t.monColSize}</th><th scope="col">{t.monColCreated}</th></tr></thead>
                   <tbody>
                     {backups.map(b => (
                       <tr key={b.filename}>
@@ -1054,16 +1062,16 @@ export default function SystemMonitoring() {
 
           <div className="module-card">
             <div className="module-header">
-              <h3 className="module-title"><Wifi size={18} aria-hidden="true" /> Kesehatan Endpoint API</h3>
-              <span className="module-badge" title="Dihitung sejak backend terakhir dimulai">Sejak restart terakhir</span>
+              <h3 className="module-title"><Wifi size={18} aria-hidden="true" /> {t.monApiTitle}</h3>
+              <span className="module-badge" title={t.monApiBadgeTitle}>{t.monApiBadge}</span>
             </div>
             <div className="module-content" tabIndex={0}>
               {apiStats.length === 0 ? (
-                <div className="empty-state"><Wifi size={24} aria-hidden="true" /><span>Belum ada permintaan tercatat.</span></div>
+                <div className="empty-state"><Wifi size={24} aria-hidden="true" /><span>{t.monApiEmpty}</span></div>
               ) : (
                 <>
                   <table className="monitoring-table">
-                    <thead><tr><th scope="col">Endpoint</th><th scope="col">Total</th><th scope="col">Error</th><th scope="col">Laju Error</th><th scope="col">Error Terakhir</th></tr></thead>
+                    <thead><tr><th scope="col">Endpoint</th><th scope="col">{t.monApiColTotal}</th><th scope="col">{t.monApiColErrors}</th><th scope="col">{t.monApiColRate}</th><th scope="col">{t.monApiColLast}</th></tr></thead>
                     <tbody>
                       {apiStats.map(s => {
                         const rateLevel = s.error_rate_pct >= 5 ? 'danger' : s.error_rate_pct >= 1 ? 'warn' : 'ok';
@@ -1073,14 +1081,14 @@ export default function SystemMonitoring() {
                             <td className="cell-route" title={s.route}>{s.route}</td>
                             <td className="cell-num">{s.total_requests}</td>
                             <td className={`cell-num${s.error_count > 0 ? ' has-errors' : ''}`}>{s.error_count}</td>
-                            <td><span className={`rate-pill ${rateLevel}`} title="Ambang: ≥1% perlu perhatian, ≥5% kritis">{s.error_rate_pct}%</span></td>
+                            <td><span className={`rate-pill ${rateLevel}`} title={t.monApiRateTitle}>{s.error_rate_pct}%</span></td>
                             <td className="cell-time">{lastErr ? formatTime(lastErr) : '—'}</td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
-                  <p className="table-footnote">Laju error ≥1% ditandai, ≥5% kritis — gabungan statistik endpoint dan pantauan error.</p>
+                  <p className="table-footnote">{t.monApiFoot}</p>
                 </>
               )}
             </div>
@@ -1089,8 +1097,8 @@ export default function SystemMonitoring() {
 
         <div className="module-card">
           <div className="module-header">
-            <h3 className="module-title"><FileText size={18} aria-hidden="true" /> Log Audit</h3>
-            <span className="module-badge">{auditTotal.toLocaleString('id-ID')} entri</span>
+            <h3 className="module-title"><FileText size={18} aria-hidden="true" /> {t.monAuditTitle}</h3>
+            <span className="module-badge">{plural(t, 'monAuditCount', auditTotal, { n: formatNumber(auditTotal) })}</span>
           </div>
           <div className="audit-toolbar">
             <div className="audit-search">
@@ -1100,33 +1108,33 @@ export default function SystemMonitoring() {
                 type="search"
                 value={auditSearch}
                 onChange={e => setAuditSearch(e.target.value)}
-                placeholder="Cari pengguna, resource, atau detail…"
-                aria-label="Cari log audit"
+                placeholder={t.monAuditSearchPh}
+                aria-label={t.monAuditSearchAria}
               />
             </div>
             <select
               className="monitoring-select"
               value={auditAction}
               onChange={e => { setAuditAction(e.target.value); setAuditPage(0); }}
-              aria-label="Saring berdasarkan jenis aksi"
+              aria-label={t.monAuditActionAria}
             >
-              <option value="">Semua Aksi</option>
+              <option value="">{t.monAuditAllActions}</option>
               {auditActionTypes.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
           {auditError && (
             <div className="audit-error" role="alert">
               <AlertTriangle size={14} aria-hidden="true" />
-              <span>Gagal memuat log audit.</span>
-              <button type="button" className="link-btn" onClick={fetchAuditLogs}>Coba lagi</button>
+              <span>{t.monAuditLoadFail}</span>
+              <button type="button" className="link-btn" onClick={fetchAuditLogs}>{t.monRetry}</button>
             </div>
           )}
           <div className="module-content" tabIndex={0}>
             {auditLogs.length === 0 ? (
-              <div className="empty-state"><Search size={24} aria-hidden="true" /><span>Tidak ada log yang ditemukan.</span></div>
+              <div className="empty-state"><Search size={24} aria-hidden="true" /><span>{t.monAuditEmpty}</span></div>
             ) : (
               <table className="monitoring-table">
-                <thead><tr><th scope="col">Waktu</th><th scope="col">Pengguna</th><th scope="col">Aksi</th><th scope="col">Resource</th><th scope="col">Detail</th></tr></thead>
+                <thead><tr><th scope="col">{t.monTime}</th><th scope="col">{t.monColUser}</th><th scope="col">{t.monColAction}</th><th scope="col">{t.monColResource}</th><th scope="col">{t.monColDetails}</th></tr></thead>
                 <tbody>
                   {auditLogs.map(log => (
                     <tr key={log.id}>
@@ -1144,13 +1152,17 @@ export default function SystemMonitoring() {
           <div className="audit-pager">
             {auditTotal > 0 && (
               <span className="pager-range">
-                {auditPage * AUDIT_PAGE_SIZE + 1}–{Math.min((auditPage + 1) * AUDIT_PAGE_SIZE, auditTotal)} dari {auditTotal.toLocaleString('id-ID')}
+                {fill(t.monPagerRange, {
+                  from: formatNumber(auditPage * AUDIT_PAGE_SIZE + 1),
+                  to: formatNumber(Math.min((auditPage + 1) * AUDIT_PAGE_SIZE, auditTotal)),
+                  total: formatNumber(auditTotal),
+                })}
               </span>
             )}
-            <button type="button" className="pager-btn" onClick={() => setAuditPage(p => Math.max(0, p - 1))} disabled={auditPage === 0} aria-label="Halaman sebelumnya">
+            <button type="button" className="pager-btn" onClick={() => setAuditPage(p => Math.max(0, p - 1))} disabled={auditPage === 0} aria-label={t.monPrevPage}>
               <ChevronLeft size={14} aria-hidden="true" />
             </button>
-            <button type="button" className="pager-btn" onClick={() => setAuditPage(p => p + 1)} disabled={(auditPage + 1) * AUDIT_PAGE_SIZE >= auditTotal} aria-label="Halaman berikutnya">
+            <button type="button" className="pager-btn" onClick={() => setAuditPage(p => p + 1)} disabled={(auditPage + 1) * AUDIT_PAGE_SIZE >= auditTotal} aria-label={t.monNextPage}>
               <ChevronRight size={14} aria-hidden="true" />
             </button>
           </div>
@@ -1159,16 +1171,16 @@ export default function SystemMonitoring() {
 
       {/* ── ANALITIK — collapsed by default; its endpoints fetch only while
           open, so the default page never pays for them (distill + optimize) ── */}
-      <section className="monitoring-section" aria-label="Analitik">
+      <section className="monitoring-section" aria-label={t.monSecAnalytics}>
         <h2 className="section-title">
           <button
             type="button"
             className="section-toggle"
             aria-expanded={analyticsOpen}
             onClick={() => setAnalyticsOpen(o => !o)}
-            title="Statistik aktivitas pengguna, metrik panggilan AI, dan riwayat rekonstruksi graf pengetahuan"
+            title={t.monAnToggleTitle}
           >
-            Analitik
+            {t.monSecAnalytics}
             <ChevronDown size={18} className={analyticsOpen ? 'chevron-open' : undefined} aria-hidden="true" />
           </button>
         </h2>
@@ -1176,14 +1188,14 @@ export default function SystemMonitoring() {
           <div className="modules-grid">
             <div className="module-card">
               <div className="module-header">
-                <h3 className="module-title"><Users size={18} aria-hidden="true" /> Statistik Aktivitas Pengguna</h3>
+                <h3 className="module-title"><Users size={18} aria-hidden="true" /> {t.monUserStatsTitle}</h3>
               </div>
               <div className="module-content" tabIndex={0}>
                 {userStats.length === 0 ? (
-                  <div className="empty-state"><Users size={24} aria-hidden="true" /><span>Belum ada data aktivitas.</span></div>
+                  <div className="empty-state"><Users size={24} aria-hidden="true" /><span>{t.monUserStatsEmpty}</span></div>
                 ) : (
                   <table className="monitoring-table">
-                    <thead><tr><th scope="col">ID Pengguna</th><th scope="col">Total Aksi</th><th scope="col">Rincian</th></tr></thead>
+                    <thead><tr><th scope="col">{t.monColUserId}</th><th scope="col">{t.monColTotalActions}</th><th scope="col">{t.monColBreakdown}</th></tr></thead>
                     <tbody>
                       {userStats.map(stat => (
                         <tr key={stat.user_id}>
@@ -1200,28 +1212,28 @@ export default function SystemMonitoring() {
 
             <div className="module-card">
               <div className="module-header">
-                <h3 className="module-title"><Cpu size={18} aria-hidden="true" /> Metrik Panggilan AI</h3>
+                <h3 className="module-title"><Cpu size={18} aria-hidden="true" /> {t.monLlmTitle}</h3>
               </div>
               <div className="module-content" tabIndex={0}>
                 <div className="stat-tiles">
-                  <div className="stat-tile" title="Jumlah total panggilan model AI sejak pencatatan dimulai">
-                    <span className="stat-tile-label">Total Panggilan</span>
+                  <div className="stat-tile" title={t.monLlmCallsTitle}>
+                    <span className="stat-tile-label">{t.monLlmCalls}</span>
                     <span className="stat-tile-value">{llmMetrics.aggregate?.total_calls ?? 0}</span>
                   </div>
-                  <div className="stat-tile" title="Rata-rata waktu respons panggilan AI">
-                    <span className="stat-tile-label">Rata-rata Latensi</span>
+                  <div className="stat-tile" title={t.monLlmLatencyTitle}>
+                    <span className="stat-tile-label">{t.monLlmLatency}</span>
                     <span className="stat-tile-value">{Math.round(llmMetrics.aggregate?.avg_latency_ms ?? 0)} ms</span>
                   </div>
-                  <div className="stat-tile" title="Estimasi biaya kumulatif pemakaian model AI">
-                    <span className="stat-tile-label">Estimasi Biaya</span>
+                  <div className="stat-tile" title={t.monLlmCostTitle}>
+                    <span className="stat-tile-label">{t.monLlmCost}</span>
                     <span className="stat-tile-value">${(llmMetrics.aggregate?.total_cost ?? 0).toFixed(4)}</span>
                   </div>
                 </div>
                 {(llmMetrics.recent || []).length === 0 ? (
-                  <div className="empty-state"><Cpu size={24} aria-hidden="true" /><span>Belum ada panggilan AI tercatat.</span></div>
+                  <div className="empty-state"><Cpu size={24} aria-hidden="true" /><span>{t.monLlmEmpty}</span></div>
                 ) : (
                   <table className="monitoring-table">
-                    <thead><tr><th scope="col">Waktu</th><th scope="col">Endpoint</th><th scope="col">Latensi</th><th scope="col">Token</th></tr></thead>
+                    <thead><tr><th scope="col">{t.monTime}</th><th scope="col">Endpoint</th><th scope="col">{t.monColLatency}</th><th scope="col">{t.monColTokens}</th></tr></thead>
                     <tbody>
                       {(llmMetrics.recent || []).slice(0, 5).map((m, idx) => (
                         <tr key={`${m.timestamp}-${m.endpoint}-${idx}`}>
@@ -1239,28 +1251,31 @@ export default function SystemMonitoring() {
 
             <div className="module-card">
               <div className="module-header">
-                <h3 className="module-title"><Database size={18} aria-hidden="true" /> Riwayat Rekonstruksi Graf Pengetahuan</h3>
+                <h3 className="module-title"><Database size={18} aria-hidden="true" /> {t.monKgTitle}</h3>
               </div>
               <div className="module-content" tabIndex={0}>
                 {kgHistory.length === 0 ? (
-                  <div className="empty-state"><Database size={24} aria-hidden="true" /><span>Belum ada riwayat rekonstruksi graf.</span></div>
+                  <div className="empty-state"><Database size={24} aria-hidden="true" /><span>{t.monKgEmpty}</span></div>
                 ) : (
                   <table className="monitoring-table">
-                    <thead><tr><th scope="col">Waktu Mulai</th><th scope="col">Durasi</th><th scope="col">Status</th><th scope="col">Perubahan</th></tr></thead>
+                    <thead><tr><th scope="col">{t.monColStart}</th><th scope="col">{t.monColDuration}</th><th scope="col">Status</th><th scope="col">{t.monColChanges}</th></tr></thead>
                     <tbody>
                       {kgHistory.map((h, idx) => {
                         const vocab = statusVocab(h.status);
                         return (
                           <tr key={`${h.start_time}-${idx}`}>
                             <td><span className="time-cell"><Clock size={12} aria-hidden="true" /> {formatDateTime(h.start_time)}</span></td>
-                            <td className="cell-num">{h.duration_s != null ? `${h.duration_s} dtk` : '—'}</td>
+                            <td className="cell-num">{h.duration_s != null ? fill(t.monSeconds, { n: h.duration_s }) : '—'}</td>
                             <td>
                               <span className={`status-pill ${vocab.tone}`}>
-                                {vocab.tone === 'success' ? <CheckCircle size={12} aria-hidden="true" /> : vocab.tone === 'danger' ? <AlertTriangle size={12} aria-hidden="true" /> : <Clock size={12} aria-hidden="true" />} {vocab.label}
+                                {vocab.tone === 'success' ? <CheckCircle size={12} aria-hidden="true" /> : vocab.tone === 'danger' ? <AlertTriangle size={12} aria-hidden="true" /> : <Clock size={12} aria-hidden="true" />} {vocab.labelKey ? t[vocab.labelKey] : vocab.raw}
                               </span>
                             </td>
                             <td className="cell-num">
-                              {(h.nodes_changed ?? 0) > 0 ? '+' : ''}{h.nodes_changed ?? 0} node · {(h.edges_changed ?? 0) > 0 ? '+' : ''}{h.edges_changed ?? 0} edge
+                              {fill(t.monNodesEdges, {
+                                nodes: `${(h.nodes_changed ?? 0) > 0 ? '+' : ''}${h.nodes_changed ?? 0}`,
+                                edges: `${(h.edges_changed ?? 0) > 0 ? '+' : ''}${h.edges_changed ?? 0}`,
+                              })}
                             </td>
                           </tr>
                         );
@@ -1284,8 +1299,8 @@ export default function SystemMonitoring() {
           {toasts.map(tt => (
             <div key={tt.id} className={`upload-toast upload-toast--${tt.kind}`} role={tt.kind === 'error' ? 'alert' : 'status'}>
               {tt.kind === 'success' ? <CheckCircle size={16} /> : tt.kind === 'error' ? <AlertTriangle size={16} /> : <Info size={16} />}
-              <span>{tt.message}</span>
-              <button type="button" className="upload-toast-close" onClick={() => dismissToast(tt.id)} aria-label="Tutup notifikasi">
+              <span>{msg(t, tt.message)}</span>
+              <button type="button" className="upload-toast-close" onClick={() => dismissToast(tt.id)} aria-label={t.notifClose}>
                 <X size={14} />
               </button>
             </div>
