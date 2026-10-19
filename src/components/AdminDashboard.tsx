@@ -5,7 +5,7 @@ import {
   Clock, Users, Server, Eye, Lock, XCircle, RefreshCw,
   X, Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
   ArrowUp, ArrowDown, ArrowUpDown, Download, UserX, UserCheck, Loader2,
-  MoreHorizontal, LogOut, KeyRound, Info, MailCheck, MailX
+  MoreHorizontal, ChevronDown, LogOut, KeyRound, Info, MailCheck, MailX
 } from 'lucide-react';
 import { HighchartsReact } from 'highcharts-react-official';
 import Highcharts from 'highcharts';
@@ -18,6 +18,7 @@ import { useStrings, fill, msg, plural, statusLabel, LocalizedError, type Msg, t
 import { useAuth } from '../hooks/useAuth';
 import { useDialogA11y } from '../hooks/useDialogA11y';
 import LoadingOrb from './LoadingOrb';
+import AdminAccessGrants from './AdminAccessGrants';
 
 interface StatusDoc {
   id: number;
@@ -33,7 +34,7 @@ interface AuditLog {
   id: number;
   timestamp: string;
   user_id: string;
-  /** LEFT JOIN users — NULL when the account no longer exists; the viewer
+  /** LEFT JOIN users � NULL when the account no longer exists; the viewer
       falls back to the UUID prefix. */
   username: string | null;
   action_type: string;
@@ -47,7 +48,7 @@ interface DashboardData {
   doc_by_jenis: { jenis: string; count: number }[];
   active_grants: number;
   /** audit_logs moved to GET /api/admin/audit-logs (server pagination,
-      date range, username join, export — 2026-10-06 critique P1). */
+      date range, username join, export � 2026-10-06 critique P1). */
   /** Legacy key names ("sqlite"/"chromadb") are a frozen API contract;
       both have probed PostgreSQL since Migration M3. */
   system_health: { sqlite: boolean; chromadb: boolean };
@@ -67,17 +68,17 @@ interface ManagedUser {
   role: string;
   is_active: boolean;
   created_at: string;
-  last_login: string | null;    // migration 010 — null until first login after upgrade
-  email_verified: boolean;       // migration 010 — false by default
+  last_login: string | null;    // migration 010 � null until first login after upgrade
+  email_verified: boolean;       // migration 010 � false by default
   /** Server-computed: target strictly below the actor's role level and not
-      the actor. Presentation only — every mutation re-checks server-side. */
+      the actor. Presentation only � every mutation re-checks server-side. */
   manageable: boolean;
   is_self: boolean;
 }
 
 type Tone = 'success' | 'warning' | 'danger';
 
-/** Sortable users-table columns (client-side — the directory is fetched
+/** Sortable users-table columns (client-side � the directory is fetched
     whole, so sorting is a view concern). [sort key, header label]. */
 type UserSortKey = 'username' | 'email' | 'role' | 'status' | 'created' | 'last_login';
 const USER_SORT_COLUMNS: [UserSortKey, StringKey][] = [
@@ -112,7 +113,7 @@ interface ConfirmState {
   /** 'danger' (default) for destructive acts; 'primary' for reversible ones
       (reactivating an account, changing a role). */
   confirmTone?: 'danger' | 'primary';
-  /** Resolves → dialog closes. Rejects → dialog stays open with the error
+  /** Resolves ? dialog closes. Rejects ? dialog stays open with the error
       inline, so the admin can retry or cancel with full context. */
   onConfirm: () => Promise<void>;
 }
@@ -121,7 +122,7 @@ interface ConfirmState {
 const DOC_DETAILS_LIMIT = 100;
 const AUDIT_PAGE_SIZE = 20;
 
-/** Role ladder — must match ROLE_LEVELS in la-legpro-be/api/auth.py. */
+/** Role ladder � must match ROLE_LEVELS in la-legpro-be/api/auth.py. */
 const ROLE_LEVELS: Record<string, number> = {
   pengguna: 1,
   manajer: 2,
@@ -129,7 +130,7 @@ const ROLE_LEVELS: Record<string, number> = {
   admin: 4,
   'sekretaris perusahaan': 5,
   'insinyur ti': 6,
-  dewa: 7, // unofficial developer role — unassignable via the level filter below
+  dewa: 7, // unofficial developer role � unassignable via the level filter below
 };
 
 /** Label keys for the stored (lowercase) role values. */
@@ -173,9 +174,9 @@ const failMsg = (key: StringKey, e: unknown, user: string): Msg => ({
     rows; CHANGE_ROLE / ACTIVATE_USER / DEACTIVATE_USER are logged by the
     admin user-management endpoints (2026-10-06); CREATE_TAXONOMY /
     RENAME_TAXONOMY / ACTIVATE_TAXONOMY / DEACTIVATE_TAXONOMY /
-    DELETE_TAXONOMY by the taxonomy endpoints (2026-10-08 — cascade
-    rename + audit trail, critique Issues 1–2). Replaces the hardcoded
-    #7e22ce/#be123c map — forbidden purple, rose double duty with
+    DELETE_TAXONOMY by the taxonomy endpoints (2026-10-08 � cascade
+    rename + audit trail, critique Issues 1�2). Replaces the hardcoded
+    #7e22ce/#be123c map � forbidden purple, rose double duty with
     "Terbatas", and 1.98:1 in dark theme. */
 const ACTION_CHIP: Record<string, string> = {
   SEARCH: 'status-chip--neutral',
@@ -277,9 +278,9 @@ const StatusCard = ({ id, labelKey, value, tone, icon, docs, totalDocs }: Status
             <p className="admin-list-empty">
               {q
                 ? (capped
-                  // Cap-owning copy (critique P1·3): a zero-match here only
+                  // Cap-owning copy (critique P1�3): a zero-match here only
                   // proves absence from the loaded preview, never from the
-                  // corpus — with 889 live Berlaku docs vs a 100-doc preview
+                  // corpus � with 889 live Berlaku docs vs a 100-doc preview
                   // the old "no documents match" was a confident false
                   // negative. FR-24 bars admins from the repository, so the
                   // copy owns the limit instead of routing to a denied page.
@@ -310,8 +311,8 @@ const ConfirmDialog = ({ state, onClose }: { state: ConfirmState; onClose: () =>
   const [error, setError] = useState<Msg | null>(null);
 
   // Mounted only while open, so `open` is a constant true. While a mutation
-  // is in flight Escape gets a no-op handler — the dialog cannot vanish
-  // mid-action — and the backdrop mousedown below ignores clicks for the
+  // is in flight Escape gets a no-op handler � the dialog cannot vanish
+  // mid-action � and the backdrop mousedown below ignores clicks for the
   // same reason. The hook restores focus to the trigger on unmount.
   useDialogA11y(true, pending ? () => undefined : onClose, dialogRef);
 
@@ -365,10 +366,10 @@ const ConfirmDialog = ({ state, onClose }: { state: ConfirmState; onClose: () =>
   );
 };
 
-/** Fixed-position tooltip portal for hint cells (2026-10-13 critique P2·4).
+/** Fixed-position tooltip portal for hint cells (2026-10-13 critique P2�4).
     The old CSS ::after hint painted inside `.compliance-table-wrap`
     (`overflow-y: auto`), so lower-row tooltips clipped or spawned stray
-    scrollbars — live-verified. Portaling to body with a viewport-aware
+    scrollbars � live-verified. Portaling to body with a viewport-aware
     flip/clamp means they can never be clipped again.
     `focusable` cells (hint-only content: full UUIDs, permission-denial
     justifications) keep tabIndex=0 and gain a visually-hidden
@@ -380,7 +381,7 @@ const HINT_GAP = 8;
 const HintTooltip = ({ anchor, text }: { anchor: DOMRect; text: string }) => {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  // Height estimate for the flip decision (0.75rem/1.45 ≈ 18px lines, ~38
+  // Height estimate for the flip decision (0.75rem/1.45 � 18px lines, ~38
   // chars per 260px content width). The tooltip is transient; a measurement
   // pass would be overkill.
   const estH = Math.ceil(text.length / 38) * 18 + 18;
@@ -422,8 +423,8 @@ const HintCell = ({ hint, focusable = false, children }: {
   );
 };
 
-// ── Klasifikasi pie chart ─────────────────────────────────────────────────
-// Highcharts 3-D pie — the side-effect import of 'highcharts/highcharts-3d'
+// -- Klasifikasi pie chart -------------------------------------------------
+// Highcharts 3-D pie � the side-effect import of 'highcharts/highcharts-3d'
 // above registers the 3D module via its compose() calls. CSS variables are
 // resolved at render time so the chart matches the app's light/dark theme.
 
@@ -476,10 +477,10 @@ const KlasifikasiPieChart = ({ data, totalDocs }: KlasPieProps) => {
       itemStyle: { color: subColor, fontSize: '0.78rem', fontWeight: '400' },
       itemHoverStyle: { color: textColor },
       symbolRadius: 4,
-      // Each legend item shows "Name — N docs"
+      // Each legend item shows "Name � N docs"
       labelFormatter(this: Highcharts.Point | Highcharts.Series) {
         const y = 'y' in this ? this.y : undefined;
-        return `${this.name} — <b>${y}</b>`;
+        return `${this.name} � <b>${y}</b>`;
       },
     },
     tooltip: {
@@ -494,7 +495,7 @@ const KlasifikasiPieChart = ({ data, totalDocs }: KlasPieProps) => {
       pointFormatter(this: Highcharts.Point) {
         const pct = totalDocs > 0
           ? ((( this.y ?? 0) / totalDocs) * 100).toFixed(1)
-          : '—';
+          : '�';
         return `<span style="font-size:0.78rem;font-weight:600;color:#ffffff">${this.name}</span><br/>`
           + `<span style="color:${this.color as string}">\u25CF</span> `
           + `<span style="color:#ffffff">${this.series.name}: <b>${plural(t, 'admDocCount', this.y ?? 0)}</b> (${pct}%)</span><br/>`;
@@ -534,6 +535,7 @@ export default function AdminDashboard() {
   const { user } = useAuth();
 
   const [data, setData] = useState<DashboardData | null>(null);
+  const [grantsExpanded, setGrantsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -548,11 +550,11 @@ export default function AdminDashboard() {
   const [addingExclusion, setAddingExclusion] = useState(false);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
-  /* Local toast strip (house pattern from KnowledgeGraph/SystemMonitoring —
+  /* Local toast strip (house pattern from KnowledgeGraph/SystemMonitoring �
      there is no app-wide toast context to join). Mutation/export feedback
      used to be a banner at page top, which could render thousands of px
-     above the viewport while the action happened down-page (critique P1·1:
-     export success live-verified at top −3034 px). The bottom-right fixed
+     above the viewport while the action happened down-page (critique P1�1:
+     export success live-verified at top -3034 px). The bottom-right fixed
      stack is always in view. */
   const toastIdRef = useRef(0);
   const [toasts, setToasts] = useState<{ id: number; kind: 'success' | 'error'; msg: Msg }[]>([]);
@@ -563,12 +565,12 @@ export default function AdminDashboard() {
     const id = ++toastIdRef.current;
     setToasts(prev => [...prev, { id, kind, msg: message }]);
     // Successes auto-dismiss so they don't stack up during a batch of edits;
-    // errors persist until dismissed (2026-10-06 critique P2 — preserved in
+    // errors persist until dismissed (2026-10-06 critique P2 � preserved in
     // toast form) so a failed destructive action can never vanish unread.
     if (kind === 'success') window.setTimeout(() => dismissToast(id), 8000);
   }, [dismissToast]);
 
-  // User management (critique P0) — exact-role admin only; the BE re-checks
+  // User management (critique P0) � exact-role admin only; the BE re-checks
   // every guard, the FE gate is presentation.
   const isAdminRole = ['admin', 'dewa'].includes((user?.role || '').toLowerCase());
   const actorLevel = ROLE_LEVELS[(user?.role || '').toLowerCase()] ?? 1;
@@ -586,9 +588,9 @@ export default function AdminDashboard() {
   // Temp password shown after reset (one-time display)
   const [tempPwdInfo, setTempPwdInfo] = useState<{ username: string; pwd: string } | null>(null);
 
-  // Audit viewer (critique P1) — server-side pagination/filtering; auditQuery
+  // Audit viewer (critique P1) � server-side pagination/filtering; auditQuery
   // is the debounced copy of auditSearch that actually hits the API. Filter
-  // and page state seed from and sync to URL search params (critique P2·5):
+  // and page state seed from and sync to URL search params (critique P2�5):
   // a built audit view survives F5, can be bookmarked, and can be handed to
   // a colleague.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -607,7 +609,7 @@ export default function AdminDashboard() {
   const [auditLoading, setAuditLoading] = useState(true); // first fetch is in flight on mount
   const [auditError, setAuditError] = useState(false);
   const [exporting, setExporting] = useState<'csv' | 'json' | null>(null);
-  // Page-jump scratch value (critique P2·5) — committed on Enter; the
+  // Page-jump scratch value (critique P2�5) � committed on Enter; the
   // placeholder shows "current/total" while empty.
   const [pageJump, setPageJump] = useState('');
 
@@ -615,14 +617,14 @@ export default function AdminDashboard() {
       null; later pulls keep the (stale) view, spin the hero button, and
       surface failures as an inline alert instead of a content vacuum. */
   const runFetch = useCallback(async () => {
-    // Parallel round-trips (critique P2·5): three sequential awaits made
-    // every hero refresh ~3× slower than the slowest single endpoint.
-    // Per-call catches keep the partial-failure contract — one dead
+    // Parallel round-trips (critique P2�5): three sequential awaits made
+    // every hero refresh ~3� slower than the slowest single endpoint.
+    // Per-call catches keep the partial-failure contract � one dead
     // endpoint still lets the others load.
     const [res, excRes, usersRes] = await Promise.all([
       api.get('/api/admin/dashboard').catch((e) => { console.error('Dashboard fetch error:', e); return null; }),
       api.get('/api/admin/kg-exclusions').catch((e) => { console.error('KG exclusions fetch error:', e); return null; }),
-      // User management is exact-role admin only (the BE would 403 anyway —
+      // User management is exact-role admin only (the BE would 403 anyway �
       // skipping the call keeps sekretaris perusahaan's network tab clean).
       isAdminRole
         ? api.get('/api/admin/users').catch((e) => { console.error('Users fetch error:', e); return null; })
@@ -668,26 +670,29 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     // Initial load: `loading` already starts true, so the effect needs no
-    // synchronous setState (react-hooks/set-state-in-effect) — the async
+    // synchronous setState (react-hooks/set-state-in-effect) � the async
     // block clears the flag once the fetch settles.
     (async () => {
       try { await runFetch(); } finally { setLoading(false); }
     })();
   }, [runFetch]);
 
+  // Lazy: AdminAccessGrants fetches on first expand; the dashboard only owns the toggle.
+  const toggleGrants = () => setGrantsExpanded(expanded => !expanded);
+
   // Abort + sequence refs for the audit race guard (see fetchAudit below).
   const auditAbortRef = useRef<AbortController | null>(null);
   const auditSeqRef = useRef(0);
 
-  /** Audit viewer (critique P1): its own endpoint, its own error state —
+  /** Audit viewer (critique P1): its own endpoint, its own error state �
       filter/page changes refetch without touching the rest of the view.
       No setState before the first await: the busy flag is raised by the
       event handlers/debounce timeout that trigger a refetch, so the
       fetching effect stays free of synchronous renders
-      (react-hooks/set-state-in-effect — same contract as
+      (react-hooks/set-state-in-effect � same contract as
       SystemMonitoring.fetchAuditLogs). */
   const fetchAudit = useCallback(async () => {
-    // Race guard (critique P1·2; the 2026-10-12 functional scan confirmed
+    // Race guard (critique P1�2; the 2026-10-12 functional scan confirmed
     // out-of-order responses at API level): a newer fetch aborts the
     // in-flight one, and a sequence number fences whatever still resolves,
     // so a stale response can never paint rows contradicting the visible
@@ -707,7 +712,7 @@ export default function AdminDashboard() {
       },
       signal: ctrl.signal,
     }).catch((e) => {
-      // An aborted request was superseded by a newer fetch — not an error.
+      // An aborted request was superseded by a newer fetch � not an error.
       if (!ctrl.signal.aborted) console.error('Audit fetch error:', e);
       return null;
     });
@@ -724,7 +729,7 @@ export default function AdminDashboard() {
   }, [auditQuery, auditAction, auditFrom, auditTo, auditPage]);
 
   useEffect(() => {
-    // Awaited IIFE — the same shape as the initial-load effect above: every
+    // Awaited IIFE � the same shape as the initial-load effect above: every
     // setState in fetchAudit lands after its await, so the effect body
     // triggers no synchronous render (react-hooks/set-state-in-effect).
     (async () => { await fetchAudit(); })();
@@ -734,7 +739,7 @@ export default function AdminDashboard() {
   useEffect(() => () => auditAbortRef.current?.abort(), []);
 
   // Debounce the search field (350 ms) into the server query and restart at
-  // page 1 — inside the timeout, not the effect body (set-state-in-effect).
+  // page 1 � inside the timeout, not the effect body (set-state-in-effect).
   // The busy flag is only raised when the query really changes, so typing
   // back to the settled value never strands the viewer in a loading state.
   useEffect(() => {
@@ -748,7 +753,7 @@ export default function AdminDashboard() {
     return () => window.clearTimeout(t);
   }, [auditSearch, auditQuery]);
 
-  // One-way state → URL sync (critique P2·5). replace-not-push: filter
+  // One-way state ? URL sync (critique P2�5). replace-not-push: filter
   // typing must not flood the history stack (and with no intermediate
   // entries, back-navigation can never strand the viewer on a rewritten
   // URL). The string comparison keeps a no-op replace from re-triggering.
@@ -836,7 +841,7 @@ export default function AdminDashboard() {
     // Blast-radius preview (critique P2): count what the delete will destroy
     // BEFORE the admin commits, using the same match rule the BE delete uses
     // (admin.py GET /kg-exclusions/preview). A failed preview must not block
-    // the action — the dialog then says the count could not be fetched.
+    // the action � the dialog then says the count could not be fetched.
     let body: Msg;
     try {
       const res = await api.get('/api/admin/kg-exclusions/preview', { params: { entity_name: name } });
@@ -883,7 +888,7 @@ export default function AdminDashboard() {
     });
   };
 
-  // ── User management mutations (critique P0) ─────────────────────────────
+  // -- User management mutations (critique P0) -----------------------------
   // Every failure rethrows so the ConfirmDialog stays open with the reason
   // inline; successes refresh the directory (and the audit feed, since each
   // mutation is audit-logged server-side).
@@ -965,7 +970,7 @@ export default function AdminDashboard() {
     ? tr.admRangeZero
     : fill(tr.admRange, { a: (auditPage - 1) * AUDIT_PAGE_SIZE + 1, b: Math.min(auditPage * AUDIT_PAGE_SIZE, auditTotal), total: auditTotal });
 
-  // "Reset Filter" (critique P2·5): auditHasFilters used to power only the
+  // "Reset Filter" (critique P2�5): auditHasFilters used to power only the
   // empty-state copy; now it gates a real control. Whenever resettable, at
   // least one settled fetch dep (a filter value or the page) differs from
   // its reset value, so the refetch effect is guaranteed to fire and the
@@ -1011,7 +1016,7 @@ export default function AdminDashboard() {
         (u.email || '').toLowerCase().includes(q)));
   }, [managedUsers, userSearch, userRoleFilter]);
 
-  // ── Bulk account actions (critique P2·5) ────────────────────────────────
+  // -- Bulk account actions (critique P2�5) --------------------------------
   // Row checkboxes + a selection bar. Same guard rails as the single-row
   // flow: only manageable non-self rows are selectable, and the BE re-checks
   // every row anyway. The selection is a set of ids; selectedManaged
@@ -1048,8 +1053,8 @@ export default function AdminDashboard() {
   };
 
   /** Sequential per-row mutation with one result-summary toast (critique
-      P2·5; also answers Riley's "batches have no summary" flag). Partial
-      failure closes the dialog — the persistent error toast carries the
+      P2�5; also answers Riley's "batches have no summary" flag). Partial
+      failure closes the dialog � the persistent error toast carries the
       per-account detail, and a dialog hovering over a half-finished batch
       helps nobody. Directory + audit feed refresh once, not per row. */
   const bulkSetActive = async (targets: ManagedUser[], nextActive: boolean) => {
@@ -1097,7 +1102,7 @@ export default function AdminDashboard() {
     });
   };
 
-  // ── Users-table column sorting (critique P2·5) ──────────────────────────
+  // -- Users-table column sorting (critique P2�5) --------------------------
   // null = the server's directory order (default). First click sorts asc,
   // second desc; the th carries aria-sort for screen readers.
   const [userSort, setUserSort] = useState<{ key: UserSortKey; dir: 'asc' | 'desc' } | null>(null);
@@ -1137,7 +1142,7 @@ export default function AdminDashboard() {
     ? tr.admUsersRangeZero
     : fill(tr.admRange, { a: (usersPageClamped - 1) * USERS_PAGE_SIZE + 1, b: Math.min(usersPageClamped * USERS_PAGE_SIZE, sortedUsers.length), total: sortedUsers.length });
 
-  // ── New user management mutations ───────────────────────────────────────
+  // -- New user management mutations ---------------------------------------
 
   const forceLogout = async (target: ManagedUser) => {
     try {
@@ -1227,7 +1232,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="view-container admin-view">
-      {/* Hero — the shared navy brand surface (.hero-banner), not a
+      {/* Hero � the shared navy brand surface (.hero-banner), not a
           one-off gradient (the old purple tint violated DESIGN.md's
           forbidden-hue rule). */}
       <div className="hero-banner">
@@ -1281,9 +1286,9 @@ export default function AdminDashboard() {
           )}
 
           {/* Mutation + export feedback now rides the bottom-right toast
-              strip (house pattern — rendered at the end of this component):
+              strip (house pattern � rendered at the end of this component):
               the old screen-global banner sat at page top, up to thousands
-              of px above the actions that produced it (critique P1·1). */}
+              of px above the actions that produced it (critique P1�1). */}
 
           {/* System health + counters */}
           <div className="admin-health-grid">
@@ -1302,14 +1307,21 @@ export default function AdminDashboard() {
               </div>
             ))}
 
-            <div className="admin-health-tile">
+            <button
+              type="button"
+              className="admin-health-tile admin-grants-trigger"
+              aria-expanded={grantsExpanded}
+              aria-controls="admin-active-grants"
+              aria-label={tr.admGrantsToggleAria}
+              onClick={toggleGrants}
+            >
               <span className="admin-health-icon accent" aria-hidden="true"><Users size={18} /></span>
-              <div>
-                <div className="admin-tile-label">{tr.admGrants}</div>
-                <div className="admin-tile-value accent">{data.active_grants}</div>
-              </div>
-            </div>
-
+              <span className="admin-grants-text">
+                <span className="admin-tile-label">{tr.admGrants}</span>
+                <span className="admin-tile-value accent">{data.active_grants}</span>
+              </span>
+              <ChevronDown size={16} className="admin-grants-chevron" aria-hidden="true" />
+            </button>
             <div className="admin-health-tile">
               <span className="admin-health-icon accent" aria-hidden="true"><FileText size={18} /></span>
               <div>
@@ -1319,6 +1331,15 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+          <div id="admin-active-grants" className="admin-grants-panel" hidden={!grantsExpanded}>
+            <AdminAccessGrants
+              expanded={grantsExpanded}
+              onChanged={() => { void fetchAll(true); }}
+              requestConfirm={setConfirmState}
+              pushToast={pushToast}
+            />
+          </div>
+
           {/* Document status cards with per-status browsers */}
           <div className="admin-status-grid">
             {statusCards.map(card => (
@@ -1326,8 +1347,8 @@ export default function AdminDashboard() {
             ))}
           </div>
 
-          {/* Volume by Klasifikasi & Jenis. Panel titles are h2 (page h1 →
-              panel h2 → dialog h3): the skipped tier broke SR heading
+          {/* Volume by Klasifikasi & Jenis. Panel titles are h2 (page h1 ?
+              panel h2 ? dialog h3): the skipped tier broke SR heading
               navigation (detector: skipped-heading). */}
           <div className="admin-panels-2col">
             <section className="admin-panel" aria-labelledby="admin-klas-title">
@@ -1381,7 +1402,7 @@ export default function AdminDashboard() {
             </section>
           </div>
 
-          {/* User & role management (critique P0 — PRODUCT.md defines this
+          {/* User & role management (critique P0 � PRODUCT.md defines this
               as the admin role's job). Exact-role admin only; every guard
               is re-checked server-side (admin.py). */}
           {isAdminRole && (
@@ -1719,7 +1740,7 @@ export default function AdminDashboard() {
             )}
           </section>
 
-          {/* Audit logs — server-side pagination, search, action + date-range
+          {/* Audit logs � server-side pagination, search, action + date-range
               filters, username join, and CSV/JSON export of the FULL filtered
               set (critique P1; GET /api/admin/audit-logs + /export). */}
           <section className="admin-panel" aria-labelledby="admin-audit-title" aria-busy={auditLoading}>
@@ -1834,7 +1855,7 @@ export default function AdminDashboard() {
                           {/* Pengguna: username join; the full UUID is
                               hint-only content, so the cell stays focusable
                               and carries an aria-describedby twin
-                              (critique P2·4). Deleted accounts fall back to
+                              (critique P2�4). Deleted accounts fall back to
                               the UUID prefix (critique P1). */}
                           <td className="admin-cell-secondary">
                             {log.username ? (
@@ -1853,9 +1874,9 @@ export default function AdminDashboard() {
                             </span>
                           </td>
                           {/* Truncated cells: the full text stays in the DOM
-                              for screen readers, so the hint is hover-only —
+                              for screen readers, so the hint is hover-only �
                               these cells are no longer tab stops
-                              (critique P2·4: ~40 extra stops per page). */}
+                              (critique P2�4: ~40 extra stops per page). */}
                           <td className="admin-cell-secondary">
                             {log.resource_id
                               ? (
@@ -1886,8 +1907,8 @@ export default function AdminDashboard() {
                 </div>
                 <div className="admin-pagination">
                   {/* role="status": the new range is announced after every
-                      refetch — the visible counterpart of aria-busy
-                      (critique P1·2 / Sam's silent-update flag). */}
+                      refetch � the visible counterpart of aria-busy
+                      (critique P1�2 / Sam's silent-update flag). */}
                   <span className="admin-page-info" role="status">{rangeLabel}</span>
                   <button
                     type="button"
@@ -1955,7 +1976,7 @@ export default function AdminDashboard() {
         <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
       )}
 
-      {/* Per-row action dropdown menu — portaled so it escapes table overflow */}
+      {/* Per-row action dropdown menu � portaled so it escapes table overflow */}
       {rowMenu && createPortal((() => {
         const target = managedUsers.find(u => u.id === rowMenu.userId);
         if (!target) return null;
@@ -2017,7 +2038,7 @@ export default function AdminDashboard() {
               <div className="admin-drawer-section">
                 <div className="admin-drawer-grid">
                   <span className="admin-drawer-label">{tr.admColEmail}</span>
-                  <span className="admin-drawer-value">{drawerUser.email || '—'}</span>
+                  <span className="admin-drawer-value">{drawerUser.email || '�'}</span>
 
                   <span className="admin-drawer-label">{tr.admColRole}</span>
                   <span className="admin-drawer-value">{roleLabel(tr, drawerUser.role)}</span>
@@ -2114,11 +2135,11 @@ export default function AdminDashboard() {
         document.body
       )}
 
-      {/* Local toast strip — reuses the UploadProvider's .upload-toast
+      {/* Local toast strip � reuses the UploadProvider's .upload-toast
           grammar (components.css); the house pattern for pages without the
           upload context (KnowledgeGraph, SystemMonitoring do the same). The
           container is always mounted so the live region pre-exists its
-          first announcement (critique P1·1). */}
+          first announcement (critique P1�1). */}
       <div className="upload-toast-container" aria-live="polite">
         {toasts.map(toast => (
           <div key={toast.id} className={`upload-toast upload-toast--${toast.kind}`} role={toast.kind === 'error' ? 'alert' : 'status'}>

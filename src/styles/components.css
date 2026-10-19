@@ -1,4 +1,4 @@
-/* === components.css - base + component/page styles =============
+﻿/* === components.css - base + component/page styles =============
    Original index.css order preserved. Moved verbatim from index.css
    lines 38-2909 (base, layout, all component sections) + lines
    3118-3228 (corporate footer). Phase 5, 2026-09-24. */
@@ -5008,6 +5008,74 @@ select::placeholder {
 .admin-tile-value.down { color: var(--danger-text); }
 .admin-tile-value.accent { color: var(--accent-hover); }
 
+/* Active access tile: a button styled as a sibling tile (same box, padding,
+   icon/label/value alignment). The account list is a separate full-width
+   panel after the grid, so it never changes the tile row's height. */
+button.admin-grants-trigger {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.admin-grants-text { display: block; min-width: 0; }
+.admin-grants-text > span { display: block; }
+.admin-grants-chevron {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: transform 0.15s ease;
+}
+.admin-grants-trigger[aria-expanded="true"] .admin-grants-chevron { transform: rotate(180deg); }
+.admin-grants-trigger:hover { background: var(--bg-element); border-color: var(--accent-color); }
+.admin-grants-trigger:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+.admin-grants-panel[hidden] { display: none; }
+.admin-grants-panel {
+  margin: -8px 0 24px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px 20px;
+  background: var(--bg-card);
+}
+@media (prefers-reduced-motion: reduce) { .admin-grants-chevron { transition: none; } }
+.admin-grants-panel h3 {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+}
+.admin-grants-status { margin: 0; color: var(--text-secondary); font-size: 0.85rem; }
+.admin-grants-status--error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--danger-text);
+}
+.admin-grants-status--error .btn { flex-shrink: 0; padding: 7px 10px; font-size: 0.8rem; }
+.admin-grants-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.admin-grant-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) auto;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+.admin-grant-item:first-child { padding-top: 0; border-top: 0; }
+.admin-grant-account,
+.admin-grant-document { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.admin-grant-account strong,
+.admin-grant-document span { overflow-wrap: anywhere; }
+.admin-grant-account span,
+.admin-grant-document small,
+.admin-grant-expiry { color: var(--text-secondary); font-size: 0.78rem; overflow-wrap: anywhere; }
+.admin-grant-expiry { text-align: right; white-space: nowrap; }
+@media (max-width: 767px) {
+  .admin-grant-item { grid-template-columns: 1fr; gap: 5px; }
+  .admin-grant-expiry { text-align: left; white-space: normal; }
+  .admin-grants-status--error { align-items: flex-start; flex-direction: column; }
+}
+
 /* Per-status document cards. Tone modifiers pin the AA-hardened text
    token + border/track tints per theme; the fill rides the text token
    (deep in light, bright tint in dark) so bars keep >=3:1 everywhere. */
@@ -6238,4 +6306,60 @@ button.status-chip.tax-chip:focus-visible {
 .attach-lightbox-x:focus-visible {
   outline: 2px solid var(--accent-color);
   outline-offset: 2px;
+}
+
+/* ── Admin access-grants panel (migration 012). Existing tokens only; the
+   panel reuses admin-toolbar / admin-bulk-bar / compliance-table / status-chip. ── */
+.admin-ag-title { outline: none; }
+.admin-ag-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+.admin-ag-tab {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.admin-ag-tab:hover { color: var(--text-primary); }
+.admin-ag-tab[aria-selected="true"] { color: var(--accent-color); border-bottom-color: var(--accent-color); }
+.admin-ag-tab:focus-visible { outline: 2px solid var(--accent-color); outline-offset: -2px; border-radius: 4px; }
+.admin-ag-toolbar { flex-wrap: wrap; margin-bottom: 8px; }
+.admin-ag-toolbar .admin-select { flex: 0 1 auto; max-width: 100%; }
+.admin-ag-count { margin: 0 0 8px; min-height: 1.2em; font-size: 0.8rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.admin-ag-badge { display: inline-flex; align-items: center; gap: 4px; }
+.admin-ag-row-actions { white-space: nowrap; text-align: right; }
+.admin-ag-row-actions .btn { padding: 5px 10px; font-size: 0.8rem; }
+.admin-ag-row-actions .btn + .btn { margin-left: 6px; }
+.admin-ag-editor-row > td { background: var(--bg-element); }
+.admin-ag-editor { display: grid; gap: 14px; padding: 6px 2px; }
+.admin-ag-fieldset { border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; margin: 0; min-width: 0; }
+.admin-ag-fieldset legend { padding: 0 6px; font-size: 0.8rem; font-weight: 600; }
+.admin-ag-choices { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.admin-ag-choice { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; }
+.admin-ag-choice input:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+.admin-ag-date { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.admin-ag-error { color: var(--danger-text); font-size: 0.8rem; }
+.admin-ag-hint { color: var(--text-secondary); font-size: 0.78rem; }
+.admin-ag-actions { display: flex; gap: 8px; margin-top: 10px; }
+.admin-ag-actions .btn { padding: 6px 12px; font-size: 0.82rem; }
+.admin-ag-field { display: grid; gap: 6px; min-width: 0; }
+.admin-ag-field > label:first-child, .admin-ag-field-label { font-size: 0.8rem; font-weight: 600; }
+.admin-ag-reason { margin: 0; font-size: 0.85rem; overflow-wrap: anywhere; }
+.admin-ag-reason-hidden { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.admin-ag-reason-hidden .btn { padding: 5px 10px; font-size: 0.8rem; }
+.admin-ag-bulk-note { margin-left: 4px; }
+@media (max-width: 767px) {
+  .admin-ag-toolbar .admin-input, .admin-ag-toolbar .admin-select, .admin-ag-toolbar .admin-date { flex: 1 1 100%; min-width: 0; }
+  .admin-ag-tab { flex: 1; }
+  .admin-ag-row-actions { white-space: normal; }
 }
