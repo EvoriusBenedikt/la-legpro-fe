@@ -48,6 +48,7 @@ export function buildNav(role: string): NavModel {
   const isAdmin = role === 'admin';
   const isEngineer = role === 'insinyur ti';
   const isSekretaris = role === 'sekretaris perusahaan';
+  const isDeveloper = role === 'developer';
   const isDewa = role === 'dewa';
 
   const opinion: NavItem = { id: 'opinion', to: '/opinion', icon: Scale, labelKey: 'navOpinion' };
@@ -87,6 +88,12 @@ export function buildNav(role: string): NavModel {
             ? [{
                 id: 'repo-pending', to: '/repository', tab: 'pending',
                 labelKey: 'sbChildPending' as StringKey, badge: 'pending' as const,
+              }]
+            : []),
+          ...(level >= 5 || isDeveloper
+            ? [{
+                id: 'repo-scraping', to: '/repository/scraping',
+                labelKey: 'sbChildScraping' as StringKey,
               }]
             : []),
           { id: 'repo-history', to: '/repository', tab: 'history', labelKey: 'sbChildHistory' as StringKey },

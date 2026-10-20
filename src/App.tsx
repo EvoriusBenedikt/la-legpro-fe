@@ -22,6 +22,7 @@ const AdminDashboard = React.lazy(() => import('./components/AdminDashboard'));
 const KnowledgeGraph = React.lazy(() => import('./components/KnowledgeGraph'));
 const SystemMonitoring = React.lazy(() => import('./components/SystemMonitoring'));
 const TaxonomyManager = React.lazy(() => import('./components/TaxonomyManager'));
+const ScraperConfig = React.lazy(() => import('./components/ScraperConfig'));
 const LandingPage = React.lazy(() => import('./components/LandingPage'));
 const AuthLegacy = React.lazy(() => import('./components/AuthLegacy'));
 
@@ -72,6 +73,7 @@ function App() {
 
   const isITAdmin = role === 'admin';
   const isSekretaris = role === 'sekretaris perusahaan';
+  const isDeveloper = role === 'developer';
   const isEngineer = role === 'insinyur ti';
   // Unofficial developer role (2026-10-07): union of every route group below.
   const isDewa = role === 'dewa';
@@ -176,7 +178,16 @@ function App() {
                     <>
                       <Route path="/admin" element={<AdminDashboard />} />
                       <Route path="/taxonomy" element={<TaxonomyManager />} />
+                      <Route path="/repository/scraping" element={<ScraperConfig />} />
                       {/* They also get access to regular routes below */}
+                    </>
+                  )}
+
+                  {/* Literal developer role: scraper configuration only. */}
+                  {isDeveloper && (
+                    <>
+                      <Route path="/repository/scraping" element={<ScraperConfig />} />
+                      <Route path="*" element={<Navigate to="/repository/scraping" replace />} />
                     </>
                   )}
 
@@ -187,6 +198,7 @@ function App() {
                       <Route path="/monitoring" element={<SystemMonitoring />} />
                       <Route path="/admin" element={<AdminDashboard />} />
                       <Route path="/taxonomy" element={<TaxonomyManager />} />
+                      <Route path="/repository/scraping" element={<ScraperConfig />} />
                       <Route path="/repository" element={<LegalRepository />} />
                       <Route path="/opinion" element={<LegalOpinion />} />
                       <Route path="/contracts" element={<ContractMonitor />} />
@@ -196,7 +208,7 @@ function App() {
                   )}
 
                   {/* Regular Routes (available to Regular and Sekretaris) */}
-                  {(!isITAdmin && !isEngineer && !isDewa) && (
+                  {(!isITAdmin && !isEngineer && !isDeveloper && !isDewa) && (
                     <>
                       <Route path="/repository" element={<LegalRepository />} />
                       <Route path="/opinion" element={<LegalOpinion />} />
