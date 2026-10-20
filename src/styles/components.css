@@ -6125,10 +6125,54 @@ button.status-chip.tax-chip:focus-visible {
   gap: 12px;
 }
 
-/* ── Chat attachments (2026-10-12) ───────────────────────────────────────
+/* Scraper configuration: compact rows remain readable and wrap their
+   controls on narrow screens without changing the shared admin shell. */
+.scraper-view { max-width: 900px; }
+.scraper-list { display: grid; gap: 10px; margin-top: 24px; }
+.scraper-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+.scraper-name { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.scraper-toggle { display: inline-flex; align-items: center; flex: 0 0 auto; cursor: pointer; }
+.scraper-toggle input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.scraper-toggle span {
+  display: block; width: 42px; height: 24px; border-radius: 999px;
+  background: var(--bg-element); border: 1px solid var(--border-color); position: relative;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.scraper-toggle span::after {
+  content: ''; position: absolute; width: 18px; height: 18px; top: 2px; left: 2px;
+  border-radius: 50%; background: var(--text-secondary);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.scraper-toggle input:checked + span { background: var(--success-bg); border-color: var(--success-text); }
+.scraper-toggle input:checked + span::after { transform: translateX(18px); background: var(--success-text); }
+.scraper-toggle input:focus-visible + span { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+.scraper-feedback {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 16px 0 0; padding: 12px 14px; border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm); color: var(--text-secondary);
+}
+.scraper-feedback--success { color: var(--success-text); border-color: var(--success-border); }
+.scraper-feedback--error { color: var(--danger-text); border-color: var(--danger-border); }
+@media (max-width: 520px) {
+  .scraper-row { align-items: flex-start; flex-wrap: wrap; }
+  .scraper-name { flex-basis: calc(100% - 58px); }
+  .scraper-row .status-chip { margin-right: auto; }
+  .scraper-view .tax-head { align-items: flex-start; }
+  .scraper-feedback { align-items: flex-start; flex-direction: column; }
+}
+
+/* ── Chat attachments (2026-10-12, Task 6) ───────────────────────────────
    Composer chip grammar: glass-element surface, --radius-sm corners,
-   0.8rem text — the shared chip material. Task 6's history-side chips
-   reuse these rules inside the message bubble. */
+   0.8rem text — the shared chip material. */
 .attach-chip-row {
   display: flex;
   flex-wrap: wrap;
