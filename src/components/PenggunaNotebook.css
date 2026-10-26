@@ -1,0 +1,703 @@
+/* === PenggunaNotebook.css — FEAT phase-2b (2026-10-24) ======================
+   Notebook detail page for pengguna (contract card click-through), matching
+   the approved Notebookly reference: left document-repository "Reference
+   base" panel, middle uploaded-document list, right summary preview panel.
+   Chrome lives in PenggunaShell.css; page styles scoped .nb-*. Production
+   tokens only — except the decorative paper/file-icon faces (fixed decor
+   colors, same convention as the home cover art). */
+
+.nb-main {
+  width: 100%;
+  flex: 1;
+}
+
+.nb-loading { padding: 64px 24px; }
+
+/* ── three-column layout ── */
+.nb-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 360px;
+  align-items: start;
+}
+
+/* ── left: repository reference base ── */
+.nb-sidebar {
+  position: sticky;
+  top: 64px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: calc(100vh - 64px);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: 32px clamp(16px, 1.6vw, 28px) 22px;
+  border-right: 1px solid var(--border-color);
+}
+.nb-sidebar-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.nb-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-color);
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.15em;
+}
+/* Kicker + mobile back arrow on one line (the arrow is CSS-hidden on
+   desktop, so the row renders exactly as before there). */
+.nb-kicker-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.nb-sidebar-heading h1 {
+  margin: 8px 0 0;
+  font-size: 1.45rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+.nb-total {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.nb-sidebar-sub {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.nb-upload-btn { justify-content: center; width: 100%; }
+.nb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 11px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+.nb-btn--primary {
+  background: var(--gradient-brand);
+  color: #fff;
+}
+.nb-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+}
+.nb-btn--ghost:hover { color: var(--text-primary); border-color: var(--border-highlight); }
+.nb-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.nb-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  background: var(--bg-element);
+  color: var(--text-secondary);
+  transition: border-color 0.2s ease;
+}
+.nb-search:focus-within { border-color: var(--border-highlight); }
+.nb-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.82rem;
+  outline: none;
+}
+.nb-search input::placeholder { color: var(--text-secondary); opacity: 0.8; }
+.nb-clear {
+  display: inline-flex;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 6px;
+}
+.nb-clear:hover { color: var(--text-primary); }
+
+.nb-repo-fail {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.nb-cats { display: flex; flex-direction: column; margin-top: 2px; }
+.nb-cats-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 2px 8px;
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.nb-cat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.nb-cat input { position: absolute; opacity: 0; pointer-events: none; }
+.nb-cat-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--bg-element);
+  color: transparent;
+  flex: 0 0 auto;
+}
+.nb-cat input:checked + .nb-cat-box {
+  color: #fff;
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+}
+.nb-cat:focus-within .nb-cat-box { outline: 2px solid var(--border-highlight); outline-offset: 2px; }
+.nb-cat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-cat:hover { color: var(--text-primary); }
+.nb-cat small { margin-left: auto; color: var(--text-secondary); font-size: 0.68rem; }
+
+/* Scroll area (B2): the slice(0,5) cap is gone, so the full reference list
+   scrolls instead of overflowing the sidebar. */
+.nb-repo-list { display: flex; flex-direction: column; gap: 7px; max-height: 340px; overflow-y: auto; }
+.nb-repo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-card);
+  cursor: pointer;
+}
+.nb-repo-item:hover { border-color: var(--border-highlight); }
+.nb-repo-check { margin-top: 1px; }
+.nb-repo-item-body { min-width: 0; flex: 1 1 auto; }
+.nb-ref-selectall {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 0.64rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.nb-repo-item-top { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+.nb-repo-item strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  font-weight: 650;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nb-repo-item-top span { flex: 0 0 auto; color: var(--success-color, var(--accent-color)); font-size: 0.58rem; font-weight: 600; }
+.nb-repo-item small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 0.64rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nb-note {
+  display: flex;
+  gap: 9px;
+  margin-top: auto;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+.nb-note svg { flex: 0 0 auto; color: var(--accent-color); }
+.nb-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+}
+.nb-foot-right { display: inline-flex; align-items: center; gap: 6px; }
+.nb-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent-color);
+}
+
+/* ── middle: uploaded document list ── */
+.nb-docs {
+  min-width: 0;
+  padding: 38px 34px 30px;
+}
+.nb-docs-heading h2 {
+  margin: 9px 0 7px;
+  font-size: clamp(26px, 2.6vw, 38px);
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  color: var(--text-primary);
+}
+.nb-docs-heading p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+.nb-docs-brief {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-top: 18px;
+  min-width: 0;
+}
+.nb-docs-brief strong {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+.nb-docs-brief span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nb-docs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 22px 0 0;
+}
+.nb-count strong { color: var(--text-primary); font-size: 0.84rem; font-weight: 650; }
+.nb-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.nb-add-btn:hover { border-color: var(--border-highlight); }
+.nb-docs-toolbar .nb-search--small { width: clamp(190px, 22vw, 270px); margin-left: auto; }
+.nb-docs-toolbar .nb-search--small input { font-size: 0.78rem; }
+
+.nb-list {
+  margin-top: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 13px;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+.nb-list-head,
+.nb-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 2.4fr) minmax(160px, 1.4fr) minmax(110px, 0.9fr) minmax(90px, 0.7fr);
+  gap: 14px;
+  align-items: center;
+}
+.nb-list-head {
+  display: grid;
+  grid-template-columns: minmax(240px, 2.4fr) minmax(160px, 1.4fr) minmax(110px, 0.9fr) minmax(90px, 0.7fr);
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+.nb-row:not(:first-child) { border-top: 1px solid var(--border-color); }
+.nb-select { width: 16px; height: 16px; accent-color: var(--accent-color); cursor: pointer; flex: 0 0 auto; }
+.nb-select:focus-visible { outline: 2px solid var(--border-highlight); outline-offset: 2px; }
+.nb-row {
+  width: 100%;
+  min-height: 74px;
+  padding: 12px 16px;
+  border: none;
+  border-top: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.74rem;
+  text-align: left;
+  cursor: default;
+}
+.nb-row:first-child { border-top: none; }
+.nb-row.selected, .nb-row:hover {
+  background: var(--bg-element);
+  color: var(--text-primary);
+}
+.nb-row.selected { box-shadow: inset 2px 0 0 var(--accent-color); }
+.nb-row-name { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.nb-row-title { min-width: 0; }
+.nb-row-title strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 570;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nb-row-title small {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nb-file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 33px;
+  height: 35px;
+  border-radius: 8px;
+  flex: 0 0 auto;
+}
+.nb-file-icon.red { color: #e07b7b; background: rgba(235, 87, 87, 0.14); }
+.nb-file-icon.blue { color: #7d9de8; background: rgba(70, 132, 226, 0.15); }
+.nb-file-icon.slate { color: var(--text-secondary); background: var(--bg-element); }
+.nb-file-icon.green { color: #77b896; background: rgba(70, 164, 116, 0.14); }
+.nb-file-icon.amber { color: #d3a15c; background: rgba(208, 147, 56, 0.14); }
+.nb-pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nb-type-cell { display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 0.72rem; }
+.nb-type-cell svg { color: var(--accent-color); }
+
+/* phase-2c: the old inline "Lihat Analisis" toggle (.nb-full-wrap/.nb-full)
+   was removed — the analysis lives embedded in the document workspace. */
+
+/* ── right: summary preview (real analysis results) ── */
+.nb-insight {
+  position: sticky;
+  top: 64px;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 34px clamp(18px, 1.8vw, 30px) 28px;
+  border-left: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--bg-card) 55%, transparent);
+}
+.nb-insight-heading h2 {
+  margin: 9px 0 0;
+  max-width: 250px;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 1.18rem;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nb-selected {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-card);
+}
+.nb-selected-copy { min-width: 0; }
+.nb-selected strong {
+  display: block;
+  overflow: hidden;
+  font-size: 0.8rem;
+  font-weight: 570;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+.nb-selected span { display: block; margin-top: 4px; color: var(--text-secondary); font-size: 0.68rem; }
+.nb-preview-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+.nb-preview-toolbar span { display: inline-flex; align-items: center; gap: 7px; }
+
+/* The decorative paper: fixed warm-white face in both themes (same
+   convention as the home cover art gradients). */
+.nb-paper {
+  position: relative;
+  min-height: 320px;
+  overflow: hidden;
+  padding: 21px 22px 30px;
+  border-radius: 10px;
+  background: #f7f4ec;
+  color: #29272b;
+  box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.08);
+}
+.nb-paper-top {
+  display: flex;
+  justify-content: space-between;
+  color: #8a8181;
+  font-size: 0.5rem;
+  letter-spacing: 0.13em;
+  font-weight: 750;
+}
+.nb-paper h3 {
+  max-width: 210px;
+  margin: 26px 0 12px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.1rem;
+  line-height: 1.12;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+.nb-rule { width: 44px; height: 3px; border-radius: 2px; background: #d9534f; }
+.nb-paper p {
+  max-width: 280px;
+  margin: 14px 0 0;
+  color: #625c62;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+.nb-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 10px;
+  margin-top: 16px;
+}
+.nb-grid span {
+  display: block;
+  margin-bottom: 4px;
+  color: #8a8181;
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.nb-grid strong {
+  display: block;
+  overflow: hidden;
+  color: #29272b;
+  font-size: 0.7rem;
+  font-weight: 550;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.nb-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 18px;
+}
+.nb-lines span { height: 5px; border-radius: 3px; background: rgba(41, 39, 43, 0.1); }
+.nb-lines span:nth-child(1) { width: 92%; }
+.nb-lines span:nth-child(2) { width: 78%; }
+.nb-lines span:nth-child(3) { width: 86%; }
+.nb-lines span:nth-child(4) { width: 60%; }
+.nb-lines span:nth-child(5) { width: 70%; }
+.nb-page-number {
+  position: absolute;
+  right: 20px;
+  bottom: 14px;
+  color: #8a8181;
+  font-size: 0.56rem;
+  letter-spacing: 0.1em;
+}
+.nb-caption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+.nb-caption svg { flex: 0 0 auto; color: var(--accent-color); }
+
+/* FEAT grouped notebooks (user report 2026-10-24: switching rows felt like a
+   page refresh): the page stays MOUNTED on selection changes now; only the
+   right preview panel dims while the newly selected document's detail and
+   source file are in flight. */
+.nb-insight {
+  transition: opacity 0.16s ease;
+}
+
+.nb-insight--switching {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Real source preview: the stored PDF rendered from a blob URL, replacing
+   the summary-paper fallback. */
+.nb-frame {
+  width: 100%;
+  height: 520px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: #fff;
+}
+.nb-photo-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 320px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+
+/* ── state panels ── */
+.nb-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  padding: 56px 24px;
+}
+.nb-panel svg { color: var(--text-secondary); }
+.nb-panel h3 { margin: 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; }
+.nb-panel p {
+  margin: 0;
+  max-width: 440px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+/* ── responsive ── */
+@media (max-width: 1440px) {
+  .nb-layout { grid-template-columns: 272px minmax(0, 1fr) 330px; }
+}
+@media (max-width: 1180px) {
+  .nb-layout { grid-template-columns: 272px minmax(0, 1fr); }
+  .nb-insight {
+    position: static;
+    align-self: auto;
+    grid-column: 1 / -1;
+    border-left: none;
+    border-top: 1px solid var(--border-color);
+  }
+}
+/* minmax(0,1fr) — plain `1fr` has an implicit min:auto that let nowrap repo
+   titles (wide font overrides) force the 320px viewport wider (2026-10-26). */
+@media (max-width: 880px) {
+  .nb-layout { grid-template-columns: minmax(0, 1fr); }
+  .nb-sidebar {
+    position: static;
+    order: 2;
+    min-height: 0;
+    max-height: none;
+    border-right: none;
+    border-top: 1px solid var(--border-color);
+  }
+  .nb-docs { order: 1; padding: 30px 20px 24px; }
+  .nb-insight { order: 3; }
+}
+/* Phones (2026-10-26 mobile pass, refined to the NotebookLM card style):
+   the 4-column document row's min widths (~674px) cannot fit a 390px
+   viewport — each row becomes a standalone rounded card: name on top
+   (full width), type pill + date below; the type column and the header row
+   are dropped as redundant. Bottom clearance reserves the dock's height. */
+@media (max-width: 680px) {
+  .nb-docs { padding: 26px 14px 22px; }
+  .nb-layout { padding-bottom: 88px; }
+  .nb-list-head { display: none; }
+  .nb-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
+  }
+  .nb-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 10px;
+    min-height: 0;
+    padding: 14px 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    background: var(--bg-card);
+  }
+  .nb-row-name { grid-column: 1 / -1; }
+  .nb-row-title strong { font-size: 0.88rem; }
+  .nb-row-chip { justify-self: start; }
+  .nb-row-cell { font-size: 0.68rem; }
+  .nb-type-cell { display: none; }
+  /* 320px phones + wide font overrides: the brief row must wrap. */
+  .nb-docs-brief { flex-wrap: wrap; gap: 6px 12px; }
+  .nb-docs-brief span { min-width: 0; flex: 1 140px; }
+  /* The dock pill owns the "analyze another document" action on phones; the
+     full-width sidebar button stacked right under the list collides with the
+     fixed dock visually (user screenshot, 2026-10-26). */
+  .nb-upload-btn { display: none; }
+}
