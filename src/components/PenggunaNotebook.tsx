@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, BookOpen, Check, CheckCircle2, Eye, FileText, Inbox,
@@ -7,6 +7,7 @@ import {
 import PenggunaShell, { PenggunaBackButton } from './PenggunaShell';
 import LoadingOrb from './LoadingOrb';
 import ContractUploadModal from './ContractUploadModal';
+import InternalRefUploadModal from './InternalRefUploadModal';
 import { type ComplianceSummary, type ComplianceResult } from './ComplianceResultsViewer';
 import { useContractUpload } from '../hooks/useContractUpload';
 import { useStrings, fill, msg, type Msg } from '../i18n';
@@ -109,6 +110,10 @@ export default function PenggunaNotebook() {
   const selectAllRef = useRef<HTMLInputElement>(null);
 
   const [uploadOpen, setUploadOpen] = useState(false);
+  // B3: the LEFT "Add reference" button opens its own internal-reference upload
+  // modal (POSTs to /api/upload-internal with this workspace), distinct from the
+  // MIDDLE "Analyze another document" contract flow.
+  const [refUploadOpen, setRefUploadOpen] = useState(false);
   /* FEAT phase-2b: real source preview. The backend stores the uploaded
      file (uploaded right after the report is saved); PDFs render in an
      iframe from a blob URL — anything else (or missing storage) keeps the
@@ -167,24 +172,26 @@ export default function PenggunaNotebook() {
 
   /* Reference base: the shared document repository (klasifikasi-filtered
      server-side by role; failures leave a small honest note). */
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await api.get('/api/rag-sources/list');
-        if (!cancelled) {
-          const rows: RepoRow[] = res.data.documents ?? res.data ?? [];
-          setRepo(rows);
-          // Backend is the source of truth: seed from `active`.
-          setCheckedRefs(new Set(rows.filter((r) => r.active).map((r) => r.source_ref)));
-          setRepoFailed(false);
-        }
-      } catch {
-        if (!cancelled) setRepoFailed(true);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  // B3: the list is workspace-scoped — pass this notebook's reportId so the
+  // LEFT list shows this workspace's internal refs (plus global public regs and
+  // any legacy-unscoped refs). A ref uploaded via the LEFT button refetches here.
+  const refetchRefList = useCallback(async () => {
+    try {
+      const res = await api.get('/api/rag-sources/list', { params: { report_id: reportId } });
+      const rows: RepoRow[] = res.data.documents ?? res.data ?? [];
+      setRepo(rows);
+      // Backend is the source of truth: seed from `active`.
+      setCheckedRefs(new Set(rows.filter((r) => r.active).map((r) => r.source_ref)));
+      setRepoFailed(false);
+    } catch {
+      setRepoFailed(true);
+    }
+  }, [reportId]);
+
+  // Awaited IIFE (react-hooks/set-state-in-effect): every setState in
+  // refetchRefList lands after its await, so the effect body triggers no
+  // synchronous render — same shape as AdminDashboard's fetch effects.
+  useEffect(() => { (async () => { await refetchRefList(); })(); }, [refetchRefList]);
 
   /* Refresh when an analysis job finishes while this page is open. Uploads
      started here passed this notebook's id, so the new document ARRIVES in
@@ -366,7 +373,7 @@ export default function PenggunaNotebook() {
               <span className="nb-total">{t ? formatNumber(repo.length) : ''}</span>
               </div>
               <p className="nb-sidebar-sub">{t.nbRefSub}</p>
-              <button className="nb-btn nb-btn--primary nb-upload-btn" type="button" onClick={() => setUploadOpen(true)}>
+              <button className="nb-btn nb-btn--primary nb-upload-btn" type="button" onClick={() => setRefUploadOpen(true)}>
                 <Upload size={16} aria-hidden="true" /> {t.nbAddReference}
               </button>
               <label className="nb-search">
@@ -601,6 +608,13 @@ export default function PenggunaNotebook() {
 
       {uploadOpen && (
         <ContractUploadModal onClose={() => setUploadOpen(false)} notebookId={reportId} />
+      )}
+      {refUploadOpen && (
+        <InternalRefUploadModal
+          reportId={reportId}
+          onClose={() => setRefUploadOpen(false)}
+          onUploaded={refetchRefList}
+        />
       )}
     </PenggunaShell>
   );

@@ -26,7 +26,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [toasts, setToasts] = useState<UploadToast[]>([]);
   const listenersRef = useRef<Set<(job: UploadJob) => void>>(new Set());
   const toastIdRef = useRef(0);
-  const fileRefs = useRef<Map<string, { file: File; useOCR: boolean }>>(new Map());
+  const fileRefs = useRef<Map<string, { file: File; useOCR: boolean; notebookId?: string }>>(new Map());
 
   const { addJob, updateJob } = useJobStatus();
 
@@ -72,13 +72,19 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   /** The analyze → save pipeline for one job id. The job record must already
-      exist in state (startUpload/retryJob put it there as 'processing'). */
-  const runJob = (id: string, filename: string, file: File, useOCR: boolean) => {
+      exist in state (startUpload/retryJob put it there as 'processing').
+      notebookId: set when the upload was started inside a notebook so the
+      new document JOINS that notebook's document list (grouped notebooks). */
+  const runJob = (id: string, filename: string, file: File, useOCR: boolean, notebookId?: string) => {
     (async () => {
       try {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('use_ocr', useOCR.toString());
+        // B3: a contract analyzed inside a workspace checks its clauses against
+        // THAT workspace's internal refs + global public law; a top-level
+        // analysis (no notebookId) omits it -> global behavior.
+        if (notebookId) formData.append('report_id', notebookId);
 
         // axios sets the multipart boundary for FormData automatically
         const response = await api.post('/api/check-compliance', formData).catch((e) => {
@@ -88,20 +94,35 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const results = data.report;
         const summary = data.summary || null;
 
-        await api.post('/api/compliance-history', {
+        const saved = await api.post('/api/compliance-history', {
           filename,
           company_name: summary?.pihak_pertama && summary?.pihak_kedua
             ? `${summary.pihak_pertama} & ${summary.pihak_kedua}`
             : summary?.pihak_pertama || summary?.pihak_kedua || null,
           expiration_date: summary?.tanggal_berakhir || null,
           results: { summary, results },
+          notebook_id: notebookId ?? null,
         }).catch((e) => {
           throw new LocalizedError({ key: isHttpError(e) ? 'errSaveAnalysis' : 'errNetwork' });
         });
 
+        // FEAT phase-2b (2026-10-24): persist the original document bytes so
+        // the pengguna notebook preview can render the real file (the
+        // analyze endpoint deleted its temp copy). Best-effort: a failed
+        // source-file storage only drops the pdf preview — the report row
+        // and every other feature keep working with the summary card.
+        const savedReportId = saved?.data?.report_id;
+        if (savedReportId) {
+          const fileForm = new FormData();
+          fileForm.append('file', file);
+          await api.post(`/api/compliance-history/${savedReportId}/file`, fileForm)
+            .catch(() => { /* non-fatal: preview falls back to the summary card */ });
+        }
+
         // Spread onto the record so createdAt survives for retention aging;
-        // error: undefined clears a stale retry-failure message.
-        const doneJob: UploadJob = { id, filename, status: 'done', error: undefined };
+        // error: undefined clears a stale retry-failure message. reportId
+        // lets subscribers (notebook page) follow the NEW document.
+        const doneJob: UploadJob = { id, filename, status: 'done', error: undefined, reportId: savedReportId };
         fileRefs.current.delete(id);
         setJobs(prev => prev.map(j => (j.id === id ? { ...j, ...doneJob } : j)));
         pushToast('success', { key: 'ucDone', params: { filename } }, 8000);
@@ -122,14 +143,15 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     })();
   };
 
-  const startUpload = (file: File, useOCR: boolean) => {
+  const startUpload = (file: File, useOCR: boolean, notebookId?: string) => {
     const id = `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const filename = file.name;
-    fileRefs.current.set(id, { file, useOCR });
+    // The notebook context must survive a retry: keep it beside the file ref.
+    fileRefs.current.set(id, { file, useOCR, notebookId });
     setJobs(prev => [...prev, { id, filename, status: 'processing' as const, createdAt: Date.now() }].slice(-MAX_JOBS));
     pushToast('info', { key: 'ucRunning', params: { filename } }, 5000);
     addJob(id, 'uploading', filename, 'contract');
-    runJob(id, filename, file, useOCR);
+    runJob(id, filename, file, useOCR, notebookId);
   };
 
   const retryJob = (id: string) => {
@@ -147,7 +169,7 @@ export const UploadProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setJobs(prev => prev.map(j => (j.id === id ? { ...j, status: 'processing' as const, error: undefined } : j)));
     pushToast('info', { key: 'ucRetrying', params: { filename: job.filename } }, 5000);
     addJob(id, 'uploading', job.filename, 'contract');
-    runJob(id, job.filename, ref.file, ref.useOCR);
+    runJob(id, job.filename, ref.file, ref.useOCR, ref.notebookId);
   };
 
   const clearJobs = () => {
