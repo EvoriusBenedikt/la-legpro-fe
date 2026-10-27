@@ -7,6 +7,10 @@ import { useStrings, msg, type Msg } from '../i18n';
 interface ContractUploadModalProps {
   /** Close the modal (close button, overlay click, Escape) */
   onClose: () => void;
+  /** Grouped notebooks: when the modal is opened from inside a notebook,
+      the new document joins THAT notebook's document list instead of
+      rooting a separate one. Undefined = a fresh top-level contract. */
+  notebookId?: string;
 }
 
 /* Mirrors the BE limit (PRODUCT.md: PDF/DOCX/XLSX/PPTX/images ≤ 50 MB).
@@ -22,7 +26,7 @@ const ALLOWED_EXT = /\.(pdf|docx|xlsx|pptx|jpe?g|png|txt)$/i;
    background job (survives route changes, toasts on completion, listed in
    the page's Riwayat Analisis panel) — the modal closes immediately.
    One consistent term: "Upload Dokumen". */
-export default function ContractUploadModal({ onClose }: ContractUploadModalProps) {
+export default function ContractUploadModal({ onClose, notebookId }: ContractUploadModalProps) {
   const { startUpload } = useContractUpload();
   const t = useStrings();
   const [file, setFile] = useState<File | null>(null);
@@ -74,7 +78,7 @@ export default function ContractUploadModal({ onClose }: ContractUploadModalProp
 
   const handleSubmit = () => {
     if (!file) return;
-    startUpload(file, useOCR);
+    startUpload(file, useOCR, notebookId);
     onClose();
   };
 

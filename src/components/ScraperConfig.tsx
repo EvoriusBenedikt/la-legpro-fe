@@ -3,6 +3,7 @@ import api, { isHttpError } from '../services/api';
 import { apiErrorMsg } from '../apiErrors';
 import { useStrings, fill, msg, type Msg } from '../i18n';
 import LoadingOrb from './LoadingOrb';
+import { useScraperRun } from '../hooks/useScraperRun';
 
 interface Scraper {
   id: string;
@@ -29,6 +30,7 @@ export default function ScraperConfig() {
   const [saveRetry, setSaveRetry] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const scraperRun = useScraperRun();
 
   const load = useCallback(async () => {
     setState('loading');
@@ -114,6 +116,14 @@ export default function ScraperConfig() {
         <button type="button" className="btn btn-primary" disabled={!dirty || saving} onClick={() => { void save(); }}>
           {saving ? t.taxWorking : t.scrSave}
         </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={dirty || saving || scraperRun.starting || scraperRun.state === 'running' || !scrapers.some(scraper => scraper.active)}
+          onClick={() => { void scraperRun.run(); }}
+        >
+          {scraperRun.starting || scraperRun.state === 'running' ? t.scrRunning : t.scrRun}
+        </button>
       </div>
 
       {saveError && (
@@ -123,6 +133,22 @@ export default function ScraperConfig() {
         </div>
       )}
       {saved && <p className="scraper-feedback scraper-feedback--success" role="status">{t.scrSaved}</p>}
+      {dirty && <p className="scraper-feedback" role="status">{t.scrRunSaveFirst}</p>}
+      {!dirty && draft.length > 0 && !draft.some(scraper => scraper.active) && <p className="scraper-feedback" role="status">{t.scrRunNoActive}</p>}
+      {scraperRun.error && <p className="scraper-feedback scraper-feedback--error" role="alert">{msg(t, scraperRun.error)}</p>}
+      {scraperRun.state === 'completed' && <p className="scraper-feedback scraper-feedback--success" role="status">{t.scrRunDone}</p>}
+      {scraperRun.results.length > 0 && (
+        <div className="scraper-results" aria-label={t.scrRunDone}>
+          {scraperRun.results.map(result => (
+            <div className="scraper-row" key={result.id}>
+              <div className="scraper-name">{result.label}</div>
+              <span className={`status-chip ${result.status === 'OK' ? 'status-chip--success' : result.status === 'SKIPPED' ? 'status-chip--neutral' : 'status-chip--danger'}`}>
+                {result.status === 'OK' ? t.scrRunResultOk : result.status === 'SKIPPED' ? t.scrRunResultSkipped : t.scrRunResultError}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {draft.length === 0 ? <p className="scraper-feedback" role="status">{t.scrEmpty}</p> : (
         <div className="scraper-list">

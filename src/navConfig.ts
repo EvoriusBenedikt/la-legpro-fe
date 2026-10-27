@@ -5,7 +5,7 @@
    components so the collapsed rail and the expanded rows share one
    source of truth. Adding/removing a destination = editing this file. */
 import {
-  BarChart2, CalendarClock, Database, FolderTree, Network, Scale,
+  BarChart2, CalendarClock, Database, FolderTree, LayoutDashboard, Network, Scale,
   ShieldCheck, User, type LucideIcon,
 } from 'lucide-react';
 import type { StringKey } from './i18n';
@@ -72,7 +72,12 @@ export function buildNav(role: string): NavModel {
   else if (isEngineer) primary = [monitoring];
   else if (isAdmin) primary = [admin];
   else if (isSekretaris) primary = [admin, ...regularPrimary];
-  else primary = regularPrimary;
+  /* FEAT phase-1 (2026-10-23): pengguna gets the home dashboard as the
+     first nav row; manajer/direktur keep the classic order (no /home
+     route exists for them). */
+  else primary = role === 'pengguna'
+    ? [{ id: 'home', to: '/home', icon: LayoutDashboard, labelKey: 'navHome' }, ...regularPrimary]
+    : regularPrimary;
 
   /* Content group: Repository parent + indented children deep-linking
      into the Repository's URL-persisted tabs (?tab=pending|history).

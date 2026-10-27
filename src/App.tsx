@@ -25,7 +25,19 @@ const TaxonomyManager = React.lazy(() => import('./components/TaxonomyManager'))
 const ScraperConfig = React.lazy(() => import('./components/ScraperConfig'));
 const LandingPage = React.lazy(() => import('./components/LandingPage'));
 const AuthLegacy = React.lazy(() => import('./components/AuthLegacy'));
-
+/* FEAT phase-1 (2026-10-23): pengguna-only home dashboard; other roles
+   never import it. */
+const PenggunaHome = React.lazy(() => import('./components/PenggunaHome'));
+/* FEAT phase-2 (2026-10-24): pengguna-only contracts page inside the
+   standalone shell. Other roles' /contracts routes are untouched. */
+const PenggunaContracts = React.lazy(() => import('./components/PenggunaContracts'));
+/* FEAT phase-2b (2026-10-24): pengguna-only notebook detail page for
+   /contracts/{id} — opened when a contract card is clicked. */
+const PenggunaNotebook = React.lazy(() => import('./components/PenggunaNotebook'));
+/* FEAT phase-2c (2026-10-24): pengguna-only document workspace opened by
+   double-clicking the uploaded document on the notebook page. */
+const PenggunaWorkspace = React.lazy(() => import('./components/PenggunaWorkspace'));
+const PenggunaOpinion = React.lazy(() => import('./components/PenggunaOpinion'));
 function App() {
   const { isAuthenticated, user } = useAuth();
   const role = user?.role?.toLowerCase() || '';
@@ -77,6 +89,28 @@ function App() {
   const isEngineer = role === 'insinyur ti';
   // Unofficial developer role (2026-10-07): union of every route group below.
   const isDewa = role === 'dewa';
+  /* FEAT phase-1 (2026-10-23) / phase-2 (2026-10-24) / phase-3 (2026-10-25):
+     pengguna home, contracts and the Legal Opinion chat render as their own
+     full-bleed shell (glass topbar, hero, cover cards) matching the approved
+     Notebookly reference — outside the classic Sidebar/TopBar chrome, and
+     only for the pengguna role. Every other role keeps today's shell and
+     defaults, including the classic /contracts and /opinion routes below. */
+  const isPengguna = role === 'pengguna';
+
+  if (isAuthenticated && isPengguna && (location.pathname === '/home' || location.pathname === '/contracts' || location.pathname === '/opinion' || location.pathname.startsWith('/contracts/'))) {
+    return (
+      <JobStatusProvider userId={user!.id}>
+        <UploadProvider>
+          <Suspense fallback={<div style={{ padding: '48px', textAlign: 'center' }}>{t.appLoading}</div>}>
+            {location.pathname === '/home' && <PenggunaHome />}
+            {location.pathname === '/contracts' && <PenggunaContracts />}
+            {location.pathname === '/opinion' && <PenggunaOpinion />}
+            {location.pathname.startsWith('/contracts/') && (/\/workspace$/.test(location.pathname) ? <PenggunaWorkspace /> : <PenggunaNotebook />)}
+          </Suspense>
+        </UploadProvider>
+      </JobStatusProvider>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
@@ -145,6 +179,7 @@ function App() {
                       isEngineer ? "/monitoring" :
                       isITAdmin ? "/admin" :
                       isSekretaris ? "/admin" :
+                      isPengguna ? "/home" :
                       "/opinion"
                     } replace />
                   } />
@@ -210,11 +245,15 @@ function App() {
                   {/* Regular Routes (available to Regular and Sekretaris) */}
                   {(!isITAdmin && !isEngineer && !isDeveloper && !isDewa) && (
                     <>
+                      {/* FEAT phase-1: pengguna's /home renders as its own
+                          standalone shell (branch above), so it has no route
+                          here; unknown paths for pengguna still fall back to
+                          /home via the wildcard below. */}
                       <Route path="/repository" element={<LegalRepository />} />
                       <Route path="/opinion" element={<LegalOpinion />} />
                       <Route path="/contracts" element={<ContractMonitor />} />
                       <Route path="/graph" element={<KnowledgeGraph />} />
-                      <Route path="*" element={<Navigate to="/opinion" replace />} />
+                      <Route path="*" element={<Navigate to={isPengguna ? "/home" : "/opinion"} replace />} />
                     </>
                   )}
                 </Routes>

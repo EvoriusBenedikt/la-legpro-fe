@@ -1,0 +1,300 @@
+/* === PenggunaWorkspace.css — FEAT phase-2c (2026-10-24) =====================
+   Document workspace page (double-click on the notebook's uploaded
+   document): left document card + tools column, main column with the
+   filename hero, the real PDF viewer panel (stored file → iframe) and the
+   embedded compliance analysis. Chrome in PenggunaShell.css; notebook-side
+   styles (nb-panel/nb-btn/nb-paper/…) reuse PenggunaNotebook.css. Tokens
+   only; the dark pdf toolbar is fixed decor like the paper card. */
+
+.nws-main {
+  width: 100%;
+  flex: 1;
+}
+
+.nws-grid {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  align-items: start;
+}
+
+/* ── left column ── */
+.nws-side {
+  position: sticky;
+  top: 64px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: 28px clamp(16px, 1.6vw, 28px) 22px;
+  background: color-mix(in srgb, var(--bg-card) 40%, transparent);
+}
+.nws-back {
+  display: inline-flex;  align-items: center;
+  gap: 7px;
+  align-self: flex-start;
+  padding: 4px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+.nws-back:hover { color: var(--text-primary); }
+
+.nws-doc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 15px;
+  background: var(--bg-card);
+}
+.nws-doc-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  color: #e07b7b;
+  background: rgba(235, 87, 87, 0.14);
+}
+.nws-doc-card strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 1.02rem;
+  font-weight: 620;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.nws-doc-meta { color: var(--text-secondary); font-size: 0.74rem; }
+.nws-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+.nws-chip svg { color: var(--accent-color); }
+
+.nws-tools-kicker { padding-left: 1px; }
+.nws-tools { display: flex; flex-direction: column; gap: 8px; }
+.nws-tool {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 13px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+}
+.nws-tool:hover { border-color: var(--border-highlight); }
+.nws-tool > svg:last-child { color: var(--text-secondary); flex: 0 0 auto; }
+.nws-tool-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: var(--bg-element);
+  color: var(--accent-color);
+  flex: 0 0 auto;
+}
+.nws-tool-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.nws-tool-copy strong { font-size: 0.84rem; font-weight: 620; }
+.nws-tool-copy small { color: var(--text-secondary); font-size: 0.72rem; }
+
+.nws-ctx {
+  display: flex;
+  gap: 9px;
+  margin-top: auto;
+  padding: 13px;
+  border: 1px solid var(--border-highlight);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent-glow) 60%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+.nws-ctx svg { flex: 0 0 auto; color: var(--accent-color); }
+
+/* ── main column ── */
+.nws-body {
+  min-width: 0;
+  padding: 38px clamp(22px, 3vw, 58px) 30px;
+}
+.nws-body > .nb-kicker { display: inline-flex; }
+.nws-body h1 {
+  margin: 10px 0 10px;
+  font-size: clamp(30px, 3.6vw, 52px);
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+.nws-subrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.nws-subrow p {
+  margin: 0;
+  max-width: 640px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+.nws-ready {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--accent-color);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* pdf preview panel */
+.nws-pdfwrap {
+  border: 1px solid var(--border-color);
+  border-radius: 15px;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+.nws-pdfhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+}
+.nws-pdfhead strong { display: block; color: var(--text-primary); font-size: 0.88rem; font-weight: 650; }
+.nws-pdfhead span { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 0.72rem; }
+.nws-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-primary);
+  background: var(--bg-element);
+  flex: 0 0 auto;
+}
+.nws-open:hover { border-color: var(--border-highlight); }
+.nws-pdfbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  /* fixed decor: the prototype's dark viewer rail, both themes */
+  background: #1c1c22;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.68rem;
+}
+.nws-pdfbar-left { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.nws-frame {
+  width: 100%;
+  height: 720px;
+  border: 0;
+  background: #fff;
+  display: block;
+}
+
+/* embedded analysis */
+.nws-analysis { margin-top: 34px; scroll-margin-top: 84px; }
+.nws-analysis-viewer { margin-top: 14px; }
+.nws-analysis-empty {
+  margin: 12px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+/* ── responsive ── */
+@media (max-width: 1180px) {
+  .nws-grid { grid-template-columns: 272px minmax(0, 1fr); }
+}
+@media (max-width: 880px) {
+  .nws-grid { grid-template-columns: 1fr; }
+  .nws-side {
+    position: static;
+    order: 2;
+    max-height: none;
+  }
+  .nws-body { order: 1; padding: 30px 20px 24px; }
+  .nws-frame { height: 520px; }
+}
+
+/* ── phase-3: in-place chat view (Chatbot tool) ──
+   The Legal Opinion module swaps in for the DOCUMENT COLUMN on the SAME
+   path while the tools rail stays mounted: an app-like full-height view
+   (no page scroll; the view scrolls internally). Pressing the Chatbot
+   tool again returns to the document — the tool carries aria-pressed. */
+.nws-chatview {
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - 64px);
+  min-height: 520px;
+  overflow: hidden;
+}
+
+.nws-chatview .view-container {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.nws-chatload {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+
+/* The Chatbot tool while its view is open: pressed/active treatment. */
+.nws-tool[aria-pressed='true'] {
+  border-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-card));
+}
+
+.nws-tool[aria-pressed='true'] .nws-tool-copy strong {
+  color: var(--accent-color);
+}
+
+/* While the chat owns the main column, the body's own padding would push
+   the full-height view past the viewport — zero it for that mode. */
+.nws-body--chat {
+  padding: 0;
+}
+
+/* Phones: dock clearance + the in-place chat needs the body padding back
+   (the dock is hidden while the chat is open, so no clearance is needed). */
+@media (max-width: 680px) {
+  .nws-body { padding-bottom: 96px; }
+  .nws-side { padding-bottom: 96px; }
+  .nws-body--chat { padding-bottom: 0; }
+}
+

@@ -1,0 +1,345 @@
+﻿/* === PenggunaShell.css â€” FEAT phase-2 (2026-10-24) ==========================
+   Standalone glass chrome shared by pengguna pages (home, contracts),
+   extracted from phase-1's PenggunaHome.css so more than one page can
+   mount the same topbar (brand / path menu / optional search / theme
+   toggle / notification dock / avatar) and footer. Every color is a
+   production token from tokens.css; scoped .ph-* prefix. Page-content
+   styles stay in each page's own CSS file. */
+
+.ph-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--text-primary);
+  background:
+    radial-gradient(1100px 460px at 82% -12%, var(--accent-glow), transparent 65%),
+    var(--bg-base);
+}
+
+/* The home shell is standalone: guarantee border-box inside it so width:100%
+   columns with padding can never overflow the viewport. */
+.ph-shell,
+.ph-shell *,
+.ph-shell *::before,
+.ph-shell *::after {
+  box-sizing: border-box;
+}
+
+/* â”€â”€ topbar â”€â”€ */
+.ph-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 64px;
+  padding: 10px clamp(18px, 3vw, 36px);
+  background: var(--bg-card);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border-color);
+}
+.ph-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text-primary);
+  flex: 0 0 auto;
+}
+.ph-brand-logo { width: 30px; height: 30px; object-fit: contain; }
+.ph-brand-name { font-weight: 700; letter-spacing: -0.02em; font-size: 1.02rem; }
+.ph-topbar-divider {
+  width: 1px;
+  height: 26px;
+  background: var(--border-color);
+  flex: 0 0 auto;
+}
+.ph-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-left: auto;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+/* Path trail (user request 2026-10-25): clickable crumbs like
+   Beranda > notebook > document; the trail stays one line and clips with an
+   ellipsis when the names are long. */
+.ph-crumbs {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  padding-left: 12px;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.ph-crumb-seg {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.ph-crumb-sep {
+  flex: 0 0 auto;
+  margin: 0 6px;
+  color: var(--text-secondary);
+  opacity: 0.55;
+}
+
+.ph-crumb-link,
+.ph-crumb-here {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ph-crumb-link {
+  color: var(--text-secondary);
+  font-weight: 550;
+  text-decoration: none;
+  max-width: clamp(90px, 22vw, 280px);
+  transition: color 0.15s ease;
+}
+
+.ph-crumb-link:hover {
+  color: var(--accent-color);
+  /* Glow only, no underline (user request 2026-10-25). */
+  text-shadow: 0 0 12px var(--accent-glow);
+}
+
+.ph-crumb-here {
+  color: var(--text-primary);
+  font-weight: 650;
+  /* Font-proof cap (2026-10-26): a fallback serif is ~30% wider; without a
+     cap a long final node could push the actions off-screen. Same clipping
+     grammar as the link nodes. */
+  max-width: clamp(140px, 36vw, 300px);
+}
+
+/* search + icon buttons */
+.ph-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: clamp(180px, 22vw, 280px);
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  background: var(--bg-element);
+  color: var(--text-secondary);
+  transition: border-color 0.2s ease;
+}
+.ph-search:focus-within { border-color: var(--border-highlight); }
+.ph-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.86rem;
+  outline: none;
+}
+.ph-search input::placeholder { color: var(--text-secondary); opacity: 0.8; }
+.ph-clear {
+  display: inline-flex;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 6px;
+}
+.ph-clear:hover { color: var(--text-primary); }
+.ph-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  background: var(--bg-element);
+  color: var(--text-primary);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.ph-icon-btn:hover { border-color: var(--border-highlight); }
+
+/* Notification dock reuse: turn the sidebar-row bell into a topbar icon. */
+.ph-dock-slot { flex: 0 0 auto; display: inline-flex; }
+.ph-dock-slot .notif-trigger {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  background: var(--bg-element);
+  color: var(--text-primary);
+}
+.ph-dock-slot .notif-trigger:hover { border-color: var(--border-highlight); }
+.ph-dock-slot .notif-trigger .sb-label { display: none; }
+.ph-dock-slot .notif-trigger .notif-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  margin: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  line-height: 16px;
+}
+
+/* avatar pill */
+.ph-avatar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 5px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-element);
+  text-decoration: none;
+  color: var(--text-primary);
+  flex: 0 0 auto;
+}
+.ph-avatar:hover { border-color: var(--border-highlight); }
+.ph-avatar-initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--gradient-brand);
+  color: #fff;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.ph-avatar-name {
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.82rem;
+  font-weight: 550;
+}
+
+/* â”€â”€ footer â”€â”€ */
+.ph-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 0 clamp(18px, 3.4vw, 40px) 26px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+/* mobile-only back control (2026-10-26, user request): desktop keeps the
+   clickable trail; phones drop the trail and get a back arrow inside the
+   page content, next to the section kicker (pages render PenggunaBackButton).
+   Sized for the kicker line, not the topbar. */
+.ph-back { display: none; }
+
+/* responsive: topbar/footer chrome only.
+   Phone policy (2026-10-26, user request): the trail is REPLACED by a back
+   button (history-aware, falls back to /home) — space is reclaimed from
+   the path display, and the previous ellipsized-trail approach is retired.
+   Redundancy stays trimmed: avatar collapses to initials, account gear
+   dropped (the avatar pill links the same /account). */
+@media (max-width: 680px) {
+  .ph-topbar { gap: 8px; padding: 8px 12px; }
+  .ph-topbar-divider, .ph-search, .ph-crumbs { display: none; }
+  .ph-back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--bg-element);
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .ph-back:hover { border-color: var(--border-highlight); }
+  .ph-back:active { transform: scale(0.95); }
+  .ph-brand-name { font-size: 0.95rem; }
+  .ph-account-gear { display: none; }
+  .ph-icon-btn, .ph-dock-slot .notif-trigger { width: 40px; height: 40px; }
+  .ph-avatar { padding: 5px; }
+  .ph-avatar-name { display: none; }
+  .ph-avatar-initials { width: 30px; height: 30px; font-size: 0.7rem; }
+  .ph-footer { flex-direction: column; gap: 4px; padding-bottom: 22px; }
+}
+/* Very narrow phones: logo-only brand frees the trail to breathe. */
+@media (max-width: 430px) {
+  .ph-brand-name { display: none; }
+}
+
+/* ── bottom action dock (mobile only) ──
+   NotebookLM-inspired thumb-reachable pill(s) for the page's primary
+   action. Pages render it once and hide their inline CTA on phones, so no
+   action is duplicated. display:none ≥681px; per-page clearance padding
+   lives in each page's own CSS. */
+.ph-dock {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  z-index: 45;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+}
+@media (max-width: 680px) {
+  .ph-dock { display: flex; }
+}
+.ph-dock-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  /* Shrinkable (min-width 0): with a nowrap label inside, min-content would
+     otherwise pin the pill's width and push past narrow viewports. */
+  min-width: 0;
+  max-width: 100%;
+  min-height: 48px;
+  padding: 12px 24px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  box-shadow: 0 12px 32px -10px rgba(15, 23, 42, 0.5);
+}
+/* One line always: a squeezed pill (UI-scale + wide font overrides) previously
+   reflowed its label into a 3-line blob overlapping the page behind it. */
+.ph-dock-pill-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ph-dock-pill:active { transform: scale(0.97); }
+.ph-dock-pill--primary {
+  border: none;
+  background: var(--gradient-brand);
+  color: #fff;
+}

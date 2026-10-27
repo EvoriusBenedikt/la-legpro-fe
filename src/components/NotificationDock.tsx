@@ -29,16 +29,27 @@ export default function NotificationDock() {
   const [open, setOpen] = useState(false);
   const btnRef  = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const [panelPos, setPanelPos] = useState<{ bottom: number; left: number }>({ bottom: 0, left: 0 });
+  const [panelPos, setPanelPos] = useState<{ top?: number; bottom?: number; left: number }>({ bottom: 0, left: 0 });
 
-  /* Position the panel above/beside the trigger button */
+  /* Position the panel above/beside the trigger button. The panel anchors
+     with `bottom` (above the bell) when the button sits in the lower half of
+     the viewport — the classic sidebar footer. When the trigger is in the
+     upper half (the pengguna topbar, FEAT phase-2c fix 2026-10-24: pressing
+     the bell there rendered the panel off-screen above the window) it
+     anchors with `top` and drops below the button. */
   const reposition = () => {
     if (!btnRef.current) return;
     const r = btnRef.current.getBoundingClientRect();
-    setPanelPos({
-      bottom: window.innerHeight - r.top + 6,
-      left: r.right + 8,
-    });
+    /* Clamp left so the 300px panel stays on screen (FEAT phase-1, 2026-10-23:
+       the dock also renders inside the pengguna home topbar where the bell
+       sits near the right viewport edge; in the sidebar footer the clamp
+       never engages because the bell is at x≈44). */
+    const left = Math.min(r.right + 8, Math.max(8, window.innerWidth - 308));
+    setPanelPos(
+      r.top < window.innerHeight / 2
+        ? { top: r.bottom + 6, left }
+        : { bottom: window.innerHeight - r.top + 6, left },
+    );
   };
 
   /* Open: measure + mark read */
@@ -84,7 +95,7 @@ export default function NotificationDock() {
     <div
       ref={panelRef}
       className="notif-panel"
-      style={{ bottom: panelPos.bottom, left: panelPos.left }}
+      style={{ top: panelPos.top, bottom: panelPos.bottom, left: panelPos.left }}
       role="dialog"
       aria-label={t.notifications}
     >

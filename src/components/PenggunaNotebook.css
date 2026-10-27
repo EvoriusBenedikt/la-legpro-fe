@@ -152,6 +152,16 @@
   color: var(--text-secondary);
   font-size: 0.78rem;
 }
+/* Reference base shows internal uploads only; this is its zero state. */
+.nb-repo-empty {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-color);
+  border-radius: 11px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
 
 .nb-cats { display: flex; flex-direction: column; margin-top: 2px; }
 .nb-cats-head {

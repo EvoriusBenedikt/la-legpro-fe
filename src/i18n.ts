@@ -945,8 +945,15 @@ const id = {
   nbCaptionFile: 'Pratinjau berkas sumber asli dari penyimpanan.',
   nbLoadErrorTitle: 'Analisis tidak ditemukan',
   nbLoadErrorBody: 'Laporan ini mungkin telah dihapus atau bukan milik akun Anda.',
+  /* FEAT (2026-10-27): clean-workspace empty state — the workspace was
+     created without documents, so the page shows a create-first panel
+     instead of the error panel. */
+  nbEmptyWsTitle: 'Ruang kerja masih kosong',
+  nbEmptyWsBody: 'Analisis dokumen pertama di ruang kerja ini untuk memulai.',
+  nbEmptyWsCta: 'Analisis Dokumen Pertama',
   nbBackHome: 'Kembali ke Beranda',
   nbRepoFail: 'Repositori tidak dapat dimuat.',
+  nbRepoInternalEmpty: 'Belum ada referensi internal di ruang kerja ini — tambahkan lewat tombol Tambah referensi.',
 /* FEAT phase-2c (2026-10-26): document workspace page (double-click from
    the notebook), real PDF viewer panel + embedded analysis. */
   wsBack: 'Semua dokumen terunggah',
@@ -1018,7 +1025,14 @@ const id = {
   homeHeroTitle1: 'Tinjau perjanjian dengan',
   homeHeroTitleEm: 'lebih jernih.',
   homeHeroBody: 'Tempat yang tenang untuk kontrak, klausul, pertanyaan, dan keterkaitan di antara mereka.',
-  homeCtaContractTitle: 'Analisis Kontrak',
+  /* FEAT (2026-10-27, user: the add button "should just function as adding
+     a clean workspace instead of uploading documents"): the hero CTA +
+     mobile dock + empty-state now mint an EMPTY workspace (POST
+     /compliance-history/notebooks) and navigate into it. */
+  homeCtaNewWorkspace: 'Workspace Baru',
+  homeNewWsName: 'Workspace baru',
+  homeCreating: 'Membuat...',
+  homeCreateErr: 'Gagal membuat ruang kerja.',
   homeRecentKicker: 'Baru dibuka',
   homeRecentTitle: 'Ruang kerja terbaru',
   homeViewAll: 'Lihat semua',
@@ -1041,11 +1055,20 @@ const id = {
   homeLoading: 'Memuat ringkasan...',
   homeLoadFailTitle: 'Gagal memuat ringkasan',
   homeRetry: 'Coba lagi',
-  homeEmptyTitle: 'Belum ada kontrak terpantau',
-  homeEmptyBody: 'Unggah dokumen PKS untuk memulai analisis kepatuhan dan pemantauan kedaluwarsa otomatis.',
-  homeEmptyCta: 'Upload Dokumen',
+  homeEmptyTitle: 'Belum ada ruang kerja',
+  homeEmptyBody: 'Buat ruang kerja pertama Anda untuk mengorganisir dokumen, analisis, dan percakapan.',
   homeFooterLeft: 'Ruang kerja Legal Analyzer',
   homeFooterRight: 'Privat secara bawaan â€¢ Dibangun untuk kerja mendalam',
+  /* FEAT (2026-10-27): NotebookLM-style card tiles — kebab menu per card
+     (portaled, fixed) whose delete flows through the same cascade DELETE
+     /compliance-history/{root_id} the Contracts page uses. */
+  homeCardMenuAria: 'Menu ruang kerja',
+  homeCardOpen: 'Buka ruang kerja',
+  homeCardDelete: 'Hapus ruang kerja',
+  homeDelTitle: 'Hapus ruang kerja?',
+  homeDelBody: 'Hapus "{name}" beserta seluruh dokumen di dalamnya? Ruang kerja ini tidak dapat dipulihkan.',
+  homeDelErr: 'Gagal menghapus ruang kerja.',
+  homeDelToast: '"{name}" dihapus.',
   /* FEAT-003: AdminDashboard + TaxonomyManager */
   admCancel: 'Batal',
   admRetry: 'Coba lagi',
@@ -2625,8 +2648,13 @@ const en: Record<StringKey, string> = {
   nbCaptionFile: 'Live preview of the stored source file.',
   nbLoadErrorTitle: 'Analysis not found',
   nbLoadErrorBody: 'This report may have been deleted or belongs to another account.',
+  /* English mirror of the clean-workspace empty state above. */
+  nbEmptyWsTitle: 'This workspace is empty',
+  nbEmptyWsBody: 'Analyze your first document in this workspace to get started.',
+  nbEmptyWsCta: 'Analyze first document',
   nbBackHome: 'Back to home',
   nbRepoFail: 'Repository could not be loaded.',
+  nbRepoInternalEmpty: 'No internal references in this workspace yet — add them with "Add reference".',
 /* FEAT phase-2c (2026-10-26): document workspace page (double-click from
    the notebook), real PDF viewer panel + embedded analysis. */
   wsBack: 'All uploaded workspaces',
@@ -2698,7 +2726,14 @@ const en: Record<StringKey, string> = {
   homeHeroTitle1: 'Review agreements with',
   homeHeroTitleEm: 'more clarity.',
   homeHeroBody: 'A calm place for your contracts, clauses, questions, and the connections between them.',
-  homeCtaContractTitle: 'Analyze Contract',
+  /* FEAT (2026-10-27, user: the add button "should just function as adding
+     a clean workspace instead of uploading documents"): English mirror of
+     the keys above — the hero CTA + mobile dock + empty-state mint an EMPTY
+     workspace and navigate into it. */
+  homeCtaNewWorkspace: 'New workspace',
+  homeNewWsName: 'Untitled workspace',
+  homeCreating: 'Creating...',
+  homeCreateErr: 'Failed to create the workspace.',
   homeRecentKicker: 'Recently opened',
   homeRecentTitle: 'Recent workspaces',
   homeViewAll: 'View all',
@@ -2721,11 +2756,18 @@ const en: Record<StringKey, string> = {
   homeLoading: 'Loading the summary...',
   homeLoadFailTitle: 'Failed to load the summary',
   homeRetry: 'Try again',
-  homeEmptyTitle: 'No monitored contracts yet',
-  homeEmptyBody: 'Upload a PKS document to start compliance analysis and automatic expiration monitoring.',
-  homeEmptyCta: 'Upload Document',
+  homeEmptyTitle: 'No workspaces yet',
+  homeEmptyBody: 'Create your first workspace to organize documents, analyses, and conversations.',
   homeFooterLeft: 'Legal Analyzer workspace',
   homeFooterRight: 'Private by default â€¢ Built for deep work',
+  /* FEAT (2026-10-27): English mirror of the home card-menu keys above. */
+  homeCardMenuAria: 'Workspace menu',
+  homeCardOpen: 'Open workspace',
+  homeCardDelete: 'Delete workspace',
+  homeDelTitle: 'Delete workspace?',
+  homeDelBody: 'Delete "{name}" and every document inside it? This workspace cannot be recovered.',
+  homeDelErr: 'Failed to delete the workspace.',
+  homeDelToast: '"{name}" deleted.',
   /* FEAT-003: AdminDashboard + TaxonomyManager */
   admCancel: 'Cancel',
   admRetry: 'Try again',

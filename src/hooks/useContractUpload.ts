@@ -23,12 +23,17 @@ export interface UploadJob {
       active language; records persisted before 2026-10-14 hold a plain
       string, which msg() shows as-is. */
   error?: Msg | string;
+  /** Backend report id of a finished job (FEAT phase-2c fix 2026-10-24:
+      lets open pages react to the NEW analysis — the pengguna notebook
+      navigates to the new document instead of re-fetching the old one;
+      persisted records before this field simply lack it). */
+  reportId?: string;
 }
 
 export interface ContractUploadContextType {
   jobs: UploadJob[];
   /** Queue an analyze → save-to-history job that keeps running across route changes */
-  startUpload: (file: File, useOCR: boolean) => void;
+  startUpload: (file: File, useOCR: boolean, notebookId?: string) => void;
   /** Re-run a failed job whose File is still held in memory (same session).
       Jobs restored from storage have no file left — the provider says so
       via toast instead of failing silently. */

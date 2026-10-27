@@ -1,0 +1,24 @@
+/* === PenggunaOpinion.css — FEAT phase-3 (2026-10-25) =========================
+   Scoped fit overrides for LegalOpinion inside PenggunaShell (.po-* prefix).
+   The chat view is app-like (.view-container.no-scroll with internal
+   scrolling list), so the page owns the viewport remainder: flex column,
+   overflow hidden, zero padding — no page-level scrollbar. All colors stay
+   production tokens; only geometry is touched here. */
+
+.po-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* The classic view sized itself against the dashboard's height:100vh grid;
+   here the shell's flex column provides that height directly. Let the
+   reached view-container breathe edge-to-edge like the classic desktop. */
+.po-main .view-container {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+}

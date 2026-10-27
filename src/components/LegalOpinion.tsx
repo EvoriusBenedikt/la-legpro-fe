@@ -91,23 +91,42 @@ type DrawerDoc = {
   filename?: string;
 };
 
-/* Chat history is per-account data: both keys carry the logged-in username as
-   a suffix, so a second account on the same browser can never see the first
-   one's conversations (2026-10-02 auth bug: the old origin-wide key leaked
-   history across accounts on every register/login). The unsuffixed names are
-   kept as LEGACY_* and migrated once, into whichever account opens Legal
-   Opinion first after the upgrade. */
+/* Chat history is per-account AND per-scope data: both keys carry the
+   logged-in username as a suffix, so a second account on the same browser
+   can never see the first one's conversations (2026-10-02 auth bug: the old
+   origin-wide key leaked history across accounts on every register/login).
+   The unsuffixed names are kept as LEGACY_* and migrated once, into whichever
+   account opens the DEFAULT scope first after the upgrade.
+
+   Scope split (2026-10-27, user: "every workspace must have its own chat
+   history"): every uploaded document's workspace mounts this component with
+   scope `doc:{reportId}`, so its storage keys get an additional `::{scope}`
+   segment and each workspace owns an isolated conversation list. The default
+   scope (/opinion) keeps the exact per-account keys that existed before the
+   split — no migration needed, the old shared history simply lives there. */
 const STORAGE_KEY_BASE = 'legal_analyzer_conversations';
 const ACTIVE_STORAGE_KEY_BASE = 'legal_analyzer_active_conversation';
 const LEGACY_STORAGE_KEY = 'legal_analyzer_conversations';
 const LEGACY_ACTIVE_STORAGE_KEY = 'legal_analyzer_active_conversation';
 const SORT_STORAGE_KEY_BASE = 'legal_analyzer_conversation_sort';
-function storageKeysFor(username?: string): { list: string; active: string; sort: string } {
+const DEFAULT_SCOPE = 'global';
+function storageKeysFor(username?: string, scope?: string): { list: string; active: string; sort: string } {
   const suffix = username || 'anon';
+  /* Default mount: same keys as before the split, so the pre-split history
+     keeps showing on /opinion with zero migration. */
+  if (!scope || scope === DEFAULT_SCOPE) {
+    return {
+      list: `${STORAGE_KEY_BASE}:${suffix}`,
+      active: `${ACTIVE_STORAGE_KEY_BASE}:${suffix}`,
+      sort: `${SORT_STORAGE_KEY_BASE}:${suffix}`,
+    };
+  }
+  /* Scoped mount: the scope rides inside the key. '::' keeps the segment
+     unambiguous against usernames (report ids are uuids, no colons). */
   return {
-    list: `${STORAGE_KEY_BASE}:${suffix}`,
-    active: `${ACTIVE_STORAGE_KEY_BASE}:${suffix}`,
-    sort: `${SORT_STORAGE_KEY_BASE}:${suffix}`,
+    list: `${STORAGE_KEY_BASE}:${suffix}::${scope}`,
+    active: `${ACTIVE_STORAGE_KEY_BASE}:${suffix}::${scope}`,
+    sort: `${SORT_STORAGE_KEY_BASE}:${suffix}::${scope}`,
   };
 }
 /* Desktop-only history-panel collapse (handle on the panel seam,
@@ -308,17 +327,19 @@ function createConversation(autoTitleN?: number): Conversation {
   };
 }
 
-export default function LegalOpinion() {
+export default function LegalOpinion({ scope }: { scope?: string }) {
   const t = useStrings();
   const locale = useLocale();
   const { user } = useAuth();
   const { addJob, updateJob, clearJob } = useJobStatus();
   const { notify } = useContractUpload();
-  const storageKeys = useMemo(() => storageKeysFor(user?.username), [user?.username]);
+  const storageKeys = useMemo(() => storageKeysFor(user?.username, scope), [user?.username, scope]);
   const [conversations, setConversations] = useState<Conversation[]>(() => {
     // One-time migration: adopt the pre-fix origin-wide history for the
     // account that opens the view first, then retire the legacy key.
-    if (!localStorage.getItem(storageKeys.list)) {
+    // Default scope only — a workspace mount starts with an empty list and
+    // must never adopt the old shared history as its own.
+    if (!scope && !localStorage.getItem(storageKeys.list)) {
       const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
       if (legacy) {
         localStorage.setItem(storageKeys.list, legacy);

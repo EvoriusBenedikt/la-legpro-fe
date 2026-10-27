@@ -97,9 +97,16 @@ export default function PenggunaNotebook() {
   /* Grouped notebooks (migration 014): every uploaded document of THIS
      notebook, oldest first — plus the row selected for the right preview. */
   const [docs, setDocs] = useState<NotebookDocItem[]>([]);
+  /* Migration 017 empty workspaces: there is no root document to derive the
+     workspace name from, so the documents response carries notebook_name.
+     Null on legacy (document-rooted) responses — the old derivation stays. */
+  const [nbName, setNbName] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [repo, setRepo] = useState<RepoRow[]>([]);
   const [repoFailed, setRepoFailed] = useState(false);
+  /* True until the first rag-sources fetch settles — gates the "no internal
+     references yet" empty note so it doesn't flash during load. */
+  const [repoPending, setRepoPending] = useState(true);
   const [repoQuery, setRepoQuery] = useState('');
   const [docQuery, setDocQuery] = useState('');
   const [pickedCats, setPickedCats] = useState<string[] | null>(null);
@@ -131,17 +138,30 @@ export default function PenggunaNotebook() {
       setFirstLoadDone(false);
       setDetail(null);
       setLoadError(null);
+      setNbName(null);
       try {
         const res = await api.get(`/api/compliance-history/${reportId}/documents`);
         if (!cancelled) {
           const list: NotebookDocItem[] = res.data.documents ?? [];
           setDocs(list);
+          setNbName(res.data.notebook_name ?? null);
           // Bootstrap the selection on the notebook's first document; once
           // set it survives refetches (an upload selects its own row).
           setSelectedId((prev) => (prev && list.some((d) => d.id === prev) ? prev : (list[0]?.id ?? null)));
+          /* EMPTY workspace (migration 017): there is no document to detail,
+             so the detail fetch below can never run and would leave the
+             page loading forever. Open the gate here; the render branches
+             to the clean-workspace empty panel. */
+          if (list.length === 0) setFirstLoadDone(true);
         }
-      } catch {
-        if (!cancelled) { /* the detail fetch below reports the failure */ }
+      } catch (err) {
+        if (!cancelled) {
+          // Was silently swallowed (the detail fetch reported failures) —
+          // but an empty workspace never reaches the detail fetch, so a 404
+          // workspace id would dead-end into the empty panel. Fail honestly.
+          setLoadError(apiErrorMsg(err, 'nbLoadErrorBody'));
+          setFirstLoadDone(true);
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -185,6 +205,8 @@ export default function PenggunaNotebook() {
       setRepoFailed(false);
     } catch {
       setRepoFailed(true);
+    } finally {
+      setRepoPending(false);
     }
   }, [reportId]);
 
@@ -257,11 +279,14 @@ export default function PenggunaNotebook() {
     if (srcPreview.url) URL.revokeObjectURL(srcPreview.url);
   }, [srcPreview.url]);
 
-  /* Notebook identity for the crumb: the FIRST document's company (the row
-     the notebook was named after), not the transiently selected one. */
-  const notebookName = docs[0]
-    ? (docs[0].company_name ?? titleOf(docs[0].filename))
-    : (detail?.company_name ?? titleOf(detail?.filename ?? ''));
+  /* Workspace name: migration 017 empty workspaces get theirs from the
+      documents response; legacy groups derive it from the first document
+      (the row the notebook was named after), not the transiently selected
+      one. */
+  const notebookName = nbName
+    ?? (docs[0]
+      ? (docs[0].company_name ?? titleOf(docs[0].filename))
+      : (detail?.company_name ?? titleOf(detail?.filename ?? '')));
   const fromExt = detail ? extOf(detail.filename) : '';
   const categories = useMemo(
     () => Array.from(new Set(repo.map((r) => r.jenis ?? '—').filter(Boolean))),
@@ -276,13 +301,21 @@ export default function PenggunaNotebook() {
     return counts;
   }, [repo]);
 
+  /* Reference base, 2026-10-26 user request: only the user's UPLOADED
+     internal references are listed; the public law repository stays the
+     default included base for matching (backend RAG uses it unless
+     explicitly excluded) but is not shown in the sidebar. */
+  const internalRepo = useMemo(
+    () => repo.filter((row) => row.source_ref.startsWith('internal:')),
+    [repo]
+  );
   const visibleRepo = useMemo(() => {
     const normalized = repoQuery.trim().toLowerCase();
-    return repo
+    return internalRepo
       .filter((row) => !pickedCats || pickedCats.includes(row.jenis ?? '—'))
       .filter((row) => !normalized ||
         `${row.judul} ${row.nomor ?? ''} ${row.jenis ?? ''}`.toLowerCase().includes(normalized));
-  }, [repo, pickedCats, repoQuery]);
+  }, [internalRepo, pickedCats, repoQuery]);
 
   /* Middle-column list filter across every uploaded document of the
      notebook. */
@@ -352,15 +385,34 @@ export default function PenggunaNotebook() {
       <main className="nb-main">
         {!firstLoadDone ? (
           <div className="nb-loading"><LoadingOrb className="loading-orb--padded" label={t.homeLoading} /></div>
-        ) : loadError || !detail ? (
+        ) : workspaceEmpty ? (
+          /* Clean workspace (migration 017): it was created empty and holds
+              no document yet — a create-first panel instead of the three
+              columns (which all hang off a selected document). The upload
+              modal already passes this workspace's id, so the first
+              analysis becomes the workspace's document list seed. */
+          <div className="nb-panel">
+            <Inbox size={36} aria-hidden="true" />
+            <h3>{t.nbEmptyWsTitle}</h3>
+            <p>{t.nbEmptyWsBody}</p>
+            <button className="nb-btn nb-btn--primary" type="button" onClick={() => setUploadOpen(true)}>
+              <Plus size={15} aria-hidden="true" /> {t.nbEmptyWsCta}
+            </button>
+          </div>
+        ) : loadError ? (
           <div className="nb-panel">
             <AlertTriangle size={36} aria-hidden="true" />
             <h3>{t.nbLoadErrorTitle}</h3>
-            <p>{loadError ? msg(t, loadError) : t.nbLoadErrorBody}</p>
+            <p>{msg(t, loadError)}</p>
             <Link className="nb-btn nb-btn--primary" to="/home">
               <RefreshCw size={15} aria-hidden="true" /> {t.nbBackHome}
             </Link>
           </div>
+        ) : !detail ? (
+          /* Transient: the first document just landed in a previously empty
+              workspace — its detail is on its way (the old branches never
+              saw this because detail was always available by firstLoadDone). */
+          <div className="nb-loading"><LoadingOrb className="loading-orb--padded" label={t.homeLoading} /></div>
         ) : (
           <div className="nb-layout">
             {/* ── left: real document repository as the reference base ── */}
@@ -370,7 +422,9 @@ export default function PenggunaNotebook() {
                   <span className="nb-kicker">{t.navRepository}</span>
                   <h1>{t.nbRefTitle}</h1>
                 </div>
-              <span className="nb-total">{t ? formatNumber(repo.length) : ''}</span>
+              {/* Count badge counts the VISIBLE (internal) references — the
+                  public repository stays default-on behind the scenes. */}
+              <span className="nb-total">{t ? formatNumber(internalRepo.length) : ''}</span>
               </div>
               <p className="nb-sidebar-sub">{t.nbRefSub}</p>
               <button className="nb-btn nb-btn--primary nb-upload-btn" type="button" onClick={() => setRefUploadOpen(true)}>
@@ -423,6 +477,9 @@ export default function PenggunaNotebook() {
                     </label>
                   )}
                   <div className="nb-repo-list">
+                    {!repoPending && internalRepo.length === 0 && (
+                      <p className="nb-repo-empty">{t.nbRepoInternalEmpty}</p>
+                    )}
                     {visibleRepo.map((row) => (
                       <label className="nb-repo-item" key={row.source_ref}>
                         <input

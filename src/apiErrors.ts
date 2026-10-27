@@ -28,6 +28,8 @@ const RULES: Rule[] = [
   { match: 'User already has this role', key: 'errAdmSameRole' },
   { match: 'Account already in this state', key: 'errAdmSameState' },
   { match: 'Dates must use the YYYY-MM-DD format', key: 'errAdmDateFormat' },
+  { match: 'Scraping sedang berjalan', key: 'scrRunning' },
+  { match: 'Tidak ada sumber aktif', key: 'scrRunNoActive' },
   // taxonomy.py
   { match: 'Nama jenis dokumen tidak boleh kosong', key: 'errTaxEmpty' },
   { match: /^Nama jenis dokumen maksimal (\d+) karakter$/, key: 'errTaxMax', param: 'n' },

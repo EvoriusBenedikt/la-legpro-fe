@@ -348,16 +348,21 @@ export default function ContractMonitor() {
 
   return (
     <div className="view-container cm-view">
-      {/* Header */}
-      <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+      {/* Header — phase-2: pengguna's contracts page mounts inside the
+          standalone PenggunaShell (PenggunaContracts.tsx), so the old
+          inline-styled header is dressed in the phase-1 visual language
+          (.pcm-hero styles live in PenggunaContracts.css). Classic-shell
+          (non-pengguna) views share these lines but only the class names
+          change there — no structural or behavioral difference. */}
+      <div className="pcm-hero">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
-            <CalendarClock size={24} color="var(--accent-color)" aria-hidden="true" />
-            <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 700 }}>{t.cmTitle}</h2>
-          </div>
-          <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{t.cmSubtitle}</p>
+          <span className="pcm-kicker">
+            <CalendarClock size={14} className="pcm-kicker-icon" aria-hidden="true" /> {t.cmHeroKicker}
+          </span>
+          <h1>{t.cmTitle}</h1>
+          <p className="pcm-hero-sub">{t.cmSubtitle}</p>
         </div>
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+        <div className="pcm-hero-actions">
           <button
             className="btn btn-secondary"
             onClick={handleExportCsv}
@@ -561,8 +566,12 @@ export default function ContractMonitor() {
                           </div>
                         </div>
 
-                        {/* Expiry badge + actions */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, flexWrap: 'wrap' }}>
+                        {/* Expiry badge + actions. Shrinkable (default 1, min
+                            auto): `flexShrink: 0` kept the whole cluster at
+                            max-content (~397px) and overflowed narrow mobile
+                            viewports; on unsqueezed desktops the value never
+                            engages. Its own flexWrap lets items drop lines. */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                           <span style={{
                             padding: '4px 12px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 600,
                             color: expiry.badgeColor, background: expiry.badgeBg, border: `1px solid ${expiry.badgeBorder}`,

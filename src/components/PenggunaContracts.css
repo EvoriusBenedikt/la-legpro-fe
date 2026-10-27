@@ -1,0 +1,87 @@
+/* === PenggunaContracts.css — FEAT phase-2 (2026-10-24) ======================
+   Page styles for the pengguna Contracts view inside the standalone
+   PenggunaShell (phase-1 visual language from PenggunaHome). The grid+list
+   chrome of ContractMonitor keeps its global classes; everything here is
+   scoped under .pcm-* so the classic (non-pengguna) /contracts is
+   untouched. Production tokens only. */
+
+.pcm-main {
+  width: 100%;
+  padding: 44px clamp(24px, 2.6vw, 56px) 30px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* The global .view-container is a flex column with its own overflow; under
+   the shell the page scrolls the document, so the strip must not clip and
+   must drop the leftover dashboard padding. */
+.pcm-main .cm-view {
+  overflow: visible;
+  flex: 0 0 auto;
+}
+
+/* ── hero header (replaces the old inline-styled header block) ── */
+.pcm-hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 30px;
+}
+.pcm-hero .pcm-kicker-icon { margin-right: 7px; margin-bottom: -2px; }
+.pcm-kicker {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent-color);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.15em;
+}
+.pcm-hero h1 {
+  margin: 10px 0 8px;
+  font-size: clamp(28px, 3vw, 40px);
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.pcm-hero h1 em {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--accent-color);
+  letter-spacing: -0.03em;
+}
+.pcm-hero-sub {
+  margin: 0;
+  max-width: 560px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.pcm-hero-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ── surface harmonization (phase-1 grammar on the monitor's cards) ──── */
+.pcm-main .stats-row .stat-card {
+  border-radius: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+}
+.pcm-main .stat-card--active {
+  border-color: var(--border-highlight);
+}
+
+/* ── responsive ── */
+@media (max-width: 680px) {
+  .pcm-main { padding: 30px 16px 24px; }
+  .pcm-hero { display: block; }
+  .pcm-hero-actions { margin-top: 20px; }
+}

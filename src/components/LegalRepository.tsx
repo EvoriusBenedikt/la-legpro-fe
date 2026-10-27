@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, Database, File, Upload, CheckCircle2, BookOpen, FolderOpen, Zap, FileCheck, X, Trash2, Clock, Bot, Scale, AlertCircle, AlertTriangle, Loader2, History } from 'lucide-react';
+import { Search, Database, File, Upload, RefreshCw, CheckCircle2, BookOpen, FolderOpen, Zap, FileCheck, X, Trash2, Clock, Bot, Scale, AlertCircle, AlertTriangle, Loader2, History } from 'lucide-react';
 import DocumentDrawer from './DocumentDrawer';
 import LoadingOrb from './LoadingOrb';
 import WorkBeam from './WorkBeam';
@@ -16,6 +16,7 @@ import api from '../services/api';
 import { useDateFormatters } from '../format';
 import { useStrings, msg, fill, statusLabel, STRINGS, getLocale, LocalizedError, type Msg, type StringKey } from '../i18n';
 import { apiErrorMsg } from '../apiErrors';
+import { useScraperRun } from '../hooks/useScraperRun';
 
 interface OJKDocument {
   id: string;
@@ -217,6 +218,7 @@ export default function LegalRepository() {
   const t = useStrings();
   const { user, token } = useAuth();
   const { addJob, updateJob } = useJobStatus();
+  const scraperRun = useScraperRun();
   const { formatDate, formatDateTime } = useDateFormatters();
   // URL state (critique re-score P1): search/filters/sort/page restore from the
   // query string on mount and mirror back (debounced, replace) on change, so a
@@ -252,6 +254,7 @@ export default function LegalRepository() {
   >(null);
   const [taxonomyList, setTaxonomyList] = useState<{id: number, name: string}[]>([]);
   const [selectedTaxonomy] = useState<string>('');
+  const scrapeJobId = useRef<string | null>(null);
 
   // --- House dialog + feedback grammar (critique 2026-10-12 P1·1) ---
   // Destructive actions route through the module-level ConfirmDialog; result
@@ -479,6 +482,13 @@ export default function LegalRepository() {
     }
   };
 
+  const handleScraperRun = () => {
+    const jobId = `scrape-${Date.now()}`;
+    scrapeJobId.current = jobId;
+    addJob(jobId, 'uploading', t.repoScrapeJobLabel, 'repository');
+    void scraperRun.run();
+  };
+
   const handleViewHistoryDoc = async (doc: AnalyzedDocument) => {
     setLoadingReportId(doc.id);
     try {
@@ -624,7 +634,24 @@ export default function LegalRepository() {
     })();
   }, [user]);
 
-  // Pending-first queue (2026-09-30): poll while the queue tab is open so new
+  useEffect(() => {
+    if (!scrapeJobId.current || !['completed', 'failed'].includes(scraperRun.state)) return;
+    const timer = window.setTimeout(() => {
+      const jobId = scrapeJobId.current;
+      if (!jobId) return;
+      updateJob(jobId, scraperRun.state === 'completed' ? 'completed' : 'failed');
+      if (scraperRun.state === 'completed') {
+        showFeedback('success', { key: 'scrRunDone' });
+        fetchDocs();
+        if (['sekretaris perusahaan', 'dewa'].includes(roleLower)) fetchPendingDocs();
+      } else if (scraperRun.error) {
+        showFeedback('error', scraperRun.error);
+      }
+      scrapeJobId.current = null;
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [scraperRun.state, scraperRun.error, updateJob, roleLower, showFeedback, fetchDocs, fetchPendingDocs]);
+
   // uploads appear without a manual refresh and scanning cards transition in
   // place (scanning → approval card, or out to the designated tab when the AI
   // auto-approves). The endpoint is cheap (few rows, no joins beyond history).
@@ -1312,6 +1339,17 @@ export default function LegalRepository() {
             <button className="upload-btn" onClick={() => fileInputRef.current?.click()}>
               <Upload size={18} /> {t.repoAddPdf}
             </button>
+            {['sekretaris perusahaan', 'dewa'].includes(roleLower) && (
+              <button
+                type="button"
+                className="btn btn-secondary"
+                disabled={scraperRun.starting || scraperRun.state === 'running'}
+                onClick={handleScraperRun}
+              >
+                <RefreshCw size={18} className={scraperRun.state === 'running' ? 'admin-spin' : undefined} />
+                {scraperRun.state === 'running' ? t.scrRunning : t.scrRun}
+              </button>
+            )}
           </div>
           <input
             type="file"
