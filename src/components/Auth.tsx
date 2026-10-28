@@ -32,6 +32,7 @@ const SERVER_FIELD_ERRORS: Record<string, AuthField[]> = {
   'USERNAME_TAKEN': ['username'],
   'EMAIL_TAKEN': ['email'],
   'EMAIL_WHITESPACE': ['email'],
+  'PASSWORD_TOO_SHORT': ['password'],
   'PASSWORD_NEEDS_UPPERCASE': ['password'],
   'PASSWORD_NEEDS_NUMBER': ['password'],
   'PASSWORD_NEEDS_SYMBOL': ['password'],
@@ -50,6 +51,7 @@ const MESSAGE_CODE_MAP: Record<string, string> = {
   'Username already registered': 'USERNAME_TAKEN',
   'Email already registered': 'EMAIL_TAKEN',
   'Email must not contain whitespace': 'EMAIL_WHITESPACE',
+  'Password must be at least 10 characters': 'PASSWORD_TOO_SHORT',
   'Password must contain at least one uppercase letter': 'PASSWORD_NEEDS_UPPERCASE',
   'Password must contain at least one number': 'PASSWORD_NEEDS_NUMBER',
   'Password must contain at least one symbol': 'PASSWORD_NEEDS_SYMBOL',
@@ -69,6 +71,7 @@ const SERVER_MESSAGE_KEYS: Record<string, StringKey> = {
   USERNAME_TAKEN: 'authErrUsernameTaken',
   EMAIL_TAKEN: 'authErrEmailTaken',
   EMAIL_WHITESPACE: 'authErrEmailSpace',
+  PASSWORD_TOO_SHORT: 'authErrPasswordTooShort',
   PASSWORD_NEEDS_UPPERCASE: 'authErrNeedUppercase',
   PASSWORD_NEEDS_NUMBER: 'authErrNeedNumber',
   PASSWORD_NEEDS_SYMBOL: 'authErrNeedSymbol',
@@ -110,6 +113,7 @@ export default function Auth() {
   // Live password requirements (the register checklist and the submit gate
   // share these definitions). A symbol is any non-alphanumeric, non-whitespace
   // character — spaces deliberately don't count (user decision 2026-10-05).
+  const ruleLength = password.length >= 10;
   const ruleUpper = /[A-Z]/.test(password);
   const ruleNumber = /\d/.test(password);
   const ruleSymbol = /[^A-Za-z0-9\s]/.test(password);
@@ -227,6 +231,10 @@ export default function Auth() {
     }
 
     if (!isLogin) {
+      if (!ruleLength) {
+        raiseError('authErrPasswordTooShort', ['password']);
+        return;
+      }
       if (!ruleUpper) {
         raiseError('authErrNeedUppercase', ['password']);
         return;
@@ -489,6 +497,10 @@ export default function Auth() {
             )}
             {!isLogin && (
               <ul className="auth-rules" aria-live="polite">
+                <li className={ruleLength ? 'auth-rule auth-rule--met' : 'auth-rule'}>
+                  {ruleLength ? <Check size={12} aria-hidden="true" /> : <Circle size={12} aria-hidden="true" />}
+                  <span>{t.authRuleLength}</span>
+                </li>
                 <li className={ruleUpper ? 'auth-rule auth-rule--met' : 'auth-rule'}>
                   {ruleUpper ? <Check size={12} aria-hidden="true" /> : <Circle size={12} aria-hidden="true" />}
                   <span>{t.authRuleUpper}</span>

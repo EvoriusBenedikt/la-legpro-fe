@@ -375,6 +375,7 @@ const id = {
   authPasswordPh: 'Masukkan kata sandi Anda',
   authConfirm: 'Konfirmasi kata sandi',
   authConfirmPh: 'Ulangi kata sandi Anda',
+  authRuleLength: 'minimal 10 karakter',
   authRuleUpper: '1 huruf besar',
   authRuleNumber: '1 angka',
   authRuleSymbol: '1 simbol',
@@ -432,6 +433,8 @@ const id = {
     'Kata sandi harus memuat setidaknya satu angka. Tambahkan angka lalu coba lagi.',
   authErrNeedSymbol:
     'Kata sandi harus memuat setidaknya satu simbol. Tambahkan simbol lalu coba lagi.',
+  authErrPasswordTooShort:
+    'Kata sandi harus memiliki minimal 10 karakter. Tambahkan karakter lalu coba lagi.',
   authErrEmailSpace:
     'Email tidak boleh mengandung spasi. Hapus spasinya lalu ketik ulang alamat email.',
   authErrEmailFormat:
@@ -2119,6 +2122,7 @@ const en: Record<StringKey, string> = {
   authPasswordPh: 'Enter your password',
   authConfirm: 'Confirm password',
   authConfirmPh: 'Repeat your password',
+  authRuleLength: 'at least 10 characters',
   authRuleUpper: '1 uppercase letter',
   authRuleNumber: '1 number',
   authRuleSymbol: '1 symbol',
@@ -2155,6 +2159,8 @@ const en: Record<StringKey, string> = {
     'Password must contain at least one number. Add a number and try again.',
   authErrNeedSymbol:
     'Password must contain at least one symbol. Add a symbol and try again.',
+  authErrPasswordTooShort:
+    'Password must be at least 10 characters. Add more characters and try again.',
   authErrEmailSpace:
     'Email must not contain whitespace. Remove the spaces and retype the email address.',
   authErrEmailFormat:
